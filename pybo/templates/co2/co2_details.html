@@ -1,0 +1,413 @@
+
+  {% extends 'base.html'%}
+  {% block content %}
+
+
+  <div class="container">
+    <div class="row  align-items-center">
+        <div class="col ">
+            <img src="{{ url_for('static', filename='images/icetech.png') }}" alt="Your Image" class="img-fluid" width="150" height="50">
+        </div>
+        <div class="col-9">
+            <h3 class="display-6 fw-normal mb-0">CO<small>2</small>배출 관련 세부 소비 리스트</h3>
+        </div>
+    </div>
+  </div>
+
+  <div class="container my-3">
+
+     <!-- 기존 검색 기능 및 정렬 -->
+  <!-- <div class="col-6">
+      <div class="row">
+          <div class="col-4">
+              <select class="form-control so">
+                  <option value="recent" {% if so == 'recent' %}selected{% endif %}>최신순</option>
+                  <option value="recommend" {% if so == 'recommend' %}selected{% endif %}>추천순</option>
+                  <option value="popular" {% if so == 'popular' %}selected{% endif %}>인기순</option>
+              </select>
+          </div>
+
+          <div class="col-8">
+              <div class="input-group">
+                  <input type="text" class="form-control kw" value="{{ kw or ''}}">
+                  <div class="input-group-append">
+                      <button class="btn btn-outline-secondary" type="button" id="btn_search">찾기</button>
+                  </div>
+              </div>
+          </div>
+      </div>
+  </div>  -->
+
+
+     <h4>CO2 사용량</h4>
+    <table class="table">
+      <thead>
+        <tr class="text-center table-info">
+            <th>번호</th>
+            <th>월</th>
+            <th>전기사용량</th>
+            <th>CO2 발생량</th>
+            <th>수도사용량</th>
+            <th>CO2 발생량</th>
+            <th>폐기물사용량</th>
+            <th>CO2 발생량</th>
+            <th>차량이동거리</th>
+            <th>CO2 발생량</th>
+            <th>제조가스사용량</th>
+            <th>CO2 발생량</th>
+            <th>CO2 총 사용량<th>
+            
+        </tr>
+      </thead>
+      <tbody>
+        {% if co2_list %}
+        {% for co2 in co2_list.items %}
+        <tr class="text-center">
+            <!-- <td>{{loop.index}}</td> -->
+            <td>{{co2.no}}</td>
+            <td>{{co2.use_date}}</td>
+            <td>{{co2.use_elec}}</td> 
+            <td>{{co2.co2_elec}}</td>  
+            <td>{{co2.use_water}}</td> 
+            <td>{{co2.co2_water}}</td>  
+            <td>{{co2.use_waste}}</td> 
+            <td>{{co2.co2_waste}}</td>  
+            <td>{{co2.use_vehicle}}</td> 
+            <td>{{co2.co2_vehicle}}</td>  
+            <td>{{co2.use_gas}}</td> 
+            <td>{{co2.co2_gas}}</td>  
+            <td>{{co2.use_total}}</td>  
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr>
+            <td colspan="3">질문이 없습니다.</td>
+        </tr>
+        {% endif %}
+      </tbody>
+
+    </table>
+
+     <!-- CO2 페이징 -->
+    <ul class="pagination justify-content-center">
+      {% if co2_list.has_prev %}
+      <li class="page-item">
+        <a class="page-link" href="{{ url_for('co2._details', page_co2=co2_list.prev_num, page_elec=page_elec, page_vehicle=page_vehicle, page_water=page_water, kw=kw) }}">이전</a>
+      </li>
+      {% endif %}
+      {% for page_num in co2_list.iter_pages() %}
+      <li class="page-item {% if page_num == co2_list.page %}active{% endif %}">
+        <a class="page-link" href="{{ url_for('co2._details', page_co2=page_num, page_elec=page_elec, page_vehicle=page_vehicle, page_water=page_water, kw=kw) }}">{{ page_num }}</a>
+      </li>
+      {% endfor %}
+      {% if co2_list.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="{{ url_for('co2._details', page_co2=co2_list.next_num, page_elec=page_elec, page_vehicle=page_vehicle, page_water=page_water, kw=kw) }}">다음</a>
+      </li>
+      {% endif %}
+    </ul>
+
+    <!-- ############# 전기 사용량 ######################-->
+    <h4>전기 사용량</h4>
+      <table class="table">
+        <thead>
+          <tr class="text-center table-info">
+              <th></th>
+              <th></th>
+              <th></th>
+              <th colspan="13">사용량</th>
+
+          </tr>
+          <tr class="text-center table-info">
+            <th>번호</th>
+            <th>사무실 번호</th>
+            <th>사용년도</th>
+            <th>1월</th>
+            <th>2월 </th>
+            <th>3월</th>
+            <th>4월 </th>
+            <th>5월 </th>
+            <th>6월 </th>
+            <th>7월 </th>
+            <th>8월 </th>
+            <th>9월 </th>
+            <th>10월 </th>
+            <th>11월 </th>
+            <th>12월 </th>
+            <th>총합계</th>
+        </tr>
+        </thead>
+        <tbody>
+          {% if elec_use %}
+          {% for elec in elec_use.items %}
+          <tr class="text-center">
+              <td>{{ elec.no }}</td>
+              <td>{{ elec.room_no }}</td>
+              <td>{{ elec.use_year }}</td> 
+              <td>{{ elec.use_jan }}</td>
+              <td>{{ elec.use_feb }}</td>
+              <td>{{ elec.use_mar }}</td>
+              <td>{{ elec.use_apr }}</td>
+              <td>{{ elec.use_may }}</td>
+              <td>{{ elec.use_jun }}</td>
+              <td>{{ elec.use_jul }}</td>
+              <td>{{ elec.use_aug }}</td>
+              <td>{{ elec.use_sep }}</td>
+              <td>{{ elec.use_oct }}</td>
+              <td>{{ elec.use_nov }}</td>
+              <td>{{ elec.use_dec }}</td>  
+              <td>{{ elec.total }}</td>  
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr>
+              <td colspan="30">데이터가 없습니다.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+
+      <!-- 전기 사용량 페이징 -->
+      <ul class="pagination justify-content-center">
+        {% if elec_use.has_prev %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('co2._details', page_elec=elec_use.prev_num, page_vehicle=page_vehicle, page_water=page_water, page_co2=page_co2, kw=kw) }}">이전</a>
+        </li>
+        {% endif %}
+        {% for page_num in elec_use.iter_pages() %}
+        <li class="page-item {% if page_num == elec_use.page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for('co2._details', page_elec=page_num, page_vehicle=page_vehicle, page_water=page_water, page_co2=page_co2, kw=kw) }}">{{ page_num }}</a>
+        </li>
+        {% endfor %}
+        {% if elec_use.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('co2._details', page_elec=elec_use.next_num, page_vehicle=page_vehicle, page_water=page_water, page_co2=page_co2, kw=kw) }}">다음</a>
+        </li>
+        {% endif %}
+      </ul>
+
+
+
+<!-- ############# 수도 사용량 ######################-->
+<h4>수도 사용량</h4>
+<table class="table">
+  <thead>
+    <tr class="text-center table-info">
+        <th></th>
+        <th></th>
+        <th></th>
+        <th colspan="13">사용량</th>
+
+    </tr>
+    <tr class="text-center table-info">
+      <th>번호</th>
+      <th>사무실 번호</th>
+      <th>사용년도</th>
+      <th>1월</th>
+      <th>2월 </th>
+      <th>3월</th>
+      <th>4월 </th>
+      <th>5월 </th>
+      <th>6월 </th>
+      <th>7월 </th>
+      <th>8월 </th>
+      <th>9월 </th>
+      <th>10월 </th>
+      <th>11월 </th>
+      <th>12월 </th>
+      <th>총합계</th>
+  </tr>
+  </thead>
+  <tbody>
+    {% if water_use %}
+    {% for water in water_use.items %}
+    <tr class="text-center">
+        <td>{{ water.no }}</td>
+        <td>{{ water.room_no }}</td>
+        <td>{{ water.use_year }}</td> 
+        <td>{{ water.use_jan }}</td>
+        <td>{{ water.use_feb }}</td>
+        <td>{{ water.use_mar }}</td>
+        <td>{{ water.use_apr }}</td>
+        <td>{{ water.use_may }}</td>
+        <td>{{ water.use_jun }}</td>
+        <td>{{ water.use_jul }}</td>
+        <td>{{ water.use_aug }}</td>
+        <td>{{ water.use_sep }}</td>
+        <td>{{ water.use_oct }}</td>
+        <td>{{ water.use_nov }}</td>
+        <td>{{ water.use_dec }}</td>  
+        <td>{{ water.total }}</td>  
+    </tr>
+    {% endfor %}
+    {% else %}
+    <tr>
+        <td colspan="30">데이터가 없습니다.</td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+
+<!-- 수도 사용량 페이징 -->
+<ul class="pagination justify-content-center">
+  {% if water_use.has_prev %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_water=water_use.prev_num, page_vehicle=page_vehicle, page_elec=page_elec, page_co2=page_co2, kw=kw) }}">이전</a>
+  </li>
+  {% endif %}
+  {% for page_num in water_use.iter_pages() %}
+  <li class="page-item {% if page_num == water_use.page %}active{% endif %}">
+    <a class="page-link" href="{{ url_for('co2._details', page_water=page_num, page_vehicle=page_vehicle, page_elec=page_elec, page_co2=page_co2, kw=kw) }}">{{ page_num }}</a>
+  </li>
+  {% endfor %}
+  {% if water_use.has_next %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_water=water_use.next_num, page_vehicle=page_vehicle, page_elec=page_elec, page_co2=page_co2, kw=kw) }}">다음</a>
+  </li>
+  {% endif %}
+</ul>
+
+<!-- ############# 차량 이동거리 ######################-->
+<h4>차량 이동거리</h4>
+<table class="table">
+  <thead>
+    <tr class="text-center table-info">
+        <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
+        <th colspan="13">이동거리</th>
+
+    </tr>
+    <tr class="text-center table-info">
+      <th>번호</th>
+      <th>차량번호</th>
+      <th>차량명</th>
+      <th>유종</th>
+      <th>사용년도</th>
+      <th>1월</th>
+      <th>2월 </th>
+      <th>3월</th>
+      <th>4월 </th>
+      <th>5월 </th>
+      <th>6월 </th>
+      <th>7월 </th>
+      <th>8월 </th>
+      <th>9월 </th>
+      <th>10월 </th>
+      <th>11월 </th>
+      <th>12월 </th>
+      <th>총합계</th>
+  </tr>
+  </thead>
+  <tbody>
+    {% if vehicle_use %}
+    {% for car in vehicle_use.items %}
+    <tr class="text-center">
+        <td>{{ car.no }}</td>
+        <td>{{ car.car_no }}</td>
+        <td>{{ car.car_name }}</td>
+        <td>{{ car.car_fuel }}</td>
+        <td>{{ car.use_year }}</td> 
+        <td>{{ car.use_jan }}</td>
+        <td>{{ car.use_feb }}</td>
+        <td>{{ car.use_mar }}</td>
+        <td>{{ car.use_apr }}</td>
+        <td>{{ car.use_may }}</td>
+        <td>{{ car.use_jun }}</td>
+        <td>{{ car.use_jul }}</td>
+        <td>{{ car.use_aug }}</td>
+        <td>{{ car.use_sep }}</td>
+        <td>{{ car.use_oct }}</td>
+        <td>{{ car.use_nov }}</td>
+        <td>{{ car.use_dec }}</td>  
+        <td>{{ car.total }}</td>  
+    </tr>
+    {% endfor %}
+    {% else %}
+    <tr>
+        <td colspan="30">데이터가 없습니다.</td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+
+<!-- 차량 이동 거리 페이징 -->
+<ul class="pagination justify-content-center">
+  {% if vehicle_use.has_prev %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_vehicle=vehicle_use.prev_num, page_elec=page_elec, page_water=page_water, page_co2=page_co2, kw=kw) }}">이전</a>
+  </li>
+  {% endif %}
+  {% for page_num in vehicle_use.iter_pages() %}
+  <li class="page-item {% if page_num == vehicle_use.page %}active{% endif %}">
+    <a class="page-link" href="{{ url_for('co2._details', page_vehicle=page_num, page_elec=page_elec, page_water=page_water, page_co2=page_co2, kw=kw) }}">{{ page_num }}</a>
+  </li>
+  {% endfor %}
+  {% if vehicle_use.has_next %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_vehicle=vehicle_use.next_num, page_elec=page_elec, page_water=page_water, page_co2=page_co2, kw=kw) }}">다음</a>
+  </li>
+  {% endif %}
+</ul>
+
+
+
+
+  </div>
+
+  <form id="searchForm" method="get" action="{{ url_for('co2._details') }}">
+    <input type="hidden" id="kw" name="kw" value="{{ kw or '' }}">
+    <input type="hidden" id="page" name="page_co2" value="{{ page_co2 }}">
+    <input type="hidden" id="page_elec" name="page_elec" value="{{ page_elec }}">
+    <input type="hidden" id="page_water" name="page_water" value="{{ page_water }}">
+    <input type="hidden" id="page_vehicle" name="page_vehicle" value="{{ page_vehicle }}">
+    <input type="hidden" id="so" name="so" value="{{ so }}">
+  </form>
+
+  {% endblock %}
+
+
+
+{% block script %}
+<script type="text/javascript">
+    $(document).ready(function(){
+        $("#co2").on('click', function(event){
+            event.preventDefault(); // 링크의 기본 동작을 막습니다.
+            var pageNum = $(this).data("page");
+            if(pageNum) {
+                $("#page").val(pageNum);
+                $("#searchForm").submit();
+            }
+        });
+
+        $("#elec").on('click', function(event){
+            event.preventDefault(); // 링크의 기본 동작을 막습니다.
+            var pageNum = $(this).data("page");
+            if(pageNum) {
+                $("#page_elec").val(pageNum);
+                $("#searchForm").submit();
+            }
+        });
+
+
+
+        $("#btn_search").on('click', function(){
+            $("#kw").val($(".kw").val());
+            $("#page").val(1); // 검색 버튼을 클릭할 경우 1페이지로 리셋
+            $("#searchForm").submit();
+        });
+
+        $(".so").on('change', function(){
+            $("#so").val($(this).val());
+            $("#page").val(1); // 정렬 변경 시 1페이지로 리셋
+            $("#searchForm").submit();
+        });
+    });
+</script>
+{% endblock %}
+

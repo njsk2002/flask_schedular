@@ -1,0 +1,470 @@
+{% extends 'base.html'%}
+{% block content %}
+<div class="container my-3">
+    <!-- chart-->
+    <div class="container">
+      <div class="row">
+        <div class="col-3">
+         {% if sel1 %} {{sel1}}  {% endif %}
+         {% if sel2 %} {{sel2}}  {% endif %}
+         {% if sdate %} {{sdate}}  {% endif %}
+         {% if selectdate%} {{selectdate}}  {% endif %}
+        </div>
+        <div class="col-3" id="num" >
+         {{num}}
+        </div>
+
+        <div class="col-3">
+          <button class="btn btn-outline-secondary" type="button" id="btn_previous">이전</button>
+          <button class="btn btn-outline-secondary" type="button" id="btn_next">다음</button>
+      </div>
+
+        <div class="col-3">
+          {% if selected1 == '1' %}
+          <button type="button" class="btn btn-primary">
+              SELECTED <span class="badge bg-secondary">1</span>
+          </button>
+          <input class="form-check-input select1" type="checkbox" value="" id="select1" checked>
+          <label class="form-check-label" for="selected1">선택1</label>
+          {% else %}
+          <input class="form-check-input select1" type="checkbox" value="" id="select1">
+          <label class="form-check-label" for="selected1">선택1</label>
+          {% endif %}
+
+          {% if selected2 == '1' %}
+          <button type="button" class="btn btn-primary">
+              SELECTED <span class="badge bg-secondary">2</span>
+          </button>
+          <input class="form-check-input select2" type="checkbox" value="" id="select2" checked>
+          <label class="form-check-label" for="selected2">선택2</label>
+          
+          {% else %}
+          <input class="form-check-input select1" type="checkbox" value="" id="select2">
+          <label class="form-check-label" for="selected2">선택2</label>
+          {% endif %}
+      
+      </div>
+      
+      </div>
+    </div>
+
+
+
+    <div id="chart_div">
+        <img src="{{ image_url }}" alt="Stock Chart">
+    </div>
+    <div id="chart_div">
+        <img src="{{ image_min_url }}" alt="Stock Chart">
+    </div>
+     
+
+  <div class="col-4">
+      {{ stockcode }}
+      <h3>테마</h3>
+  </div>
+ 
+   <table class="table">
+ 
+    <tr class="text-center">
+      
+        {% for theme in theme_dics %}
+            <td>
+                <a href="#" class="theme-link" data-themecode="{{ theme.themecode }}">{{ theme.themename }}</a>
+            </td>
+            {% if loop.index % 8 == 0 and not loop.last %}
+                </tr><tr class="text-center">
+            {% endif %}
+        {% endfor %}
+    </tr>
+  
+      <thead class="text-center" id="table-header" style="display: none;">
+       <tr >
+        <th>종목코드</th>
+        <th>종목명</th>
+        <th>현재가</th>
+        <th>시작가</th>
+        <th>고가</th>
+        <th>저가</th>
+        <th>대비</th>
+        <th>등락률</th>
+       </tr>
+       </thead>
+       <tbody class="text-center themedata" id="themedata">
+        <!-- 여기에 테마 종목 데이터가 동적으로 추가됩니다 -->
+      </tbody>
+    <table class="table">
+
+      <tbody>
+
+      {% if stock_info %}
+      <tr class="text-center">
+          <th>종목코드</th>
+          <th>종목명</th>
+          <th>현재가</th>
+          <th>시작가</th>
+          <th>고가</th>
+          <th>저가</th>
+          <th>대비</th>
+          <th>등락률</th>
+      </tr>
+      <tr class="text-center">
+          <td>{{ stock_info.stockcode }}</td>
+          <td>{{ stock_info.stockname }}</td>
+          <td>{{ stock_info.currentvalue }}</td>
+          <td>{{ stock_info.beginvalue }}</td>
+          <td>{{ stock_info.highvalue }}</td>
+          <td>{{ stock_info.lowvalue }}</td>
+          <td>{{ stock_info.diffval }}</td>
+          <td>{{ stock_info.diffrate }}</td>
+       </tr>
+       <tr class="text-center">
+        <th>거래량</th>
+        <th>전일거래량</th>
+        <th>전일대비거래량</th>
+       </tr>
+       <tr class="text-center">
+          <td>{{ stock_info.tradeval }}</td>
+          <td>{{ stock_info.pre_tradeval }}</td>
+          <td>{{ stock_info.tvol_vsprevious }}</td>
+
+      </tr>
+      <tr class="text-center">
+        <th>액면가</th>
+        <th>상장주식수</th>
+        <th>자본금</th>
+        <th>시가총액</th>
+        <th>PER</th>
+        <th>EPS</th>
+        <th>PBR</th>
+        <th>융자비율</th>
+       </tr>
+       <tr class="text-center">
+          <td>{{ stock_info.faceval }}</td>
+          <td>{{ stock_info.stockvol }}</td>
+          <td>{{ stock_info.capital }}</td>
+          <td>{{ stock_info.stocksum }}억</td>
+          <td>{{ stock_info.per }}</td>
+          <td>{{ stock_info.eps }}</td>
+          <td>{{ stock_info.pbr }}</td>
+          <td>{{ stock_info.debtrate }}</td>
+      </tr>
+
+        {% else %}
+        <tr>
+            <td colspan="11">검색종목이 없습니다.</td>
+        </tr>
+        {% endif %}
+    </tbody>
+
+
+
+
+
+
+
+
+
+</table>
+  
+    <table class="table">
+        <thead>
+            <tr class="text-center table-dark">
+                <th>번호</th>
+                <th>날짜</th>
+                <th>시가</th>
+                <th>고가</th>
+                <th>저가</th>
+                <th>종가</th>
+                <th>변동가격</th>
+                <th>거래량</th>
+                <th>거래액</th>
+                <th>변동사인</th>
+                <th>변동폭</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if chart_list %}
+            {% for chart in chart_list %}
+            <tr class="text-center">
+                <td>{{ loop.index }}</td>
+                <td>{{ chart.date }}</td>
+                <td>{{ chart.beginval }}</td>
+                <td>{{ chart.highval }}</td>
+                <td>{{ chart.lowval }}</td>
+                <td>{{ chart.endval }}</td>
+                <td>{{ chart.changeval }}</td>
+                <td>{{ chart.tradeval }}</td>
+                <td>{{ chart.tradevol}}</td>
+                <td>{{ chart.changesign}}</td>
+                <td>{{ chart.changevol}}</td>
+            </tr>
+            {% endfor %}
+            {% else %}
+            <tr>
+                <td colspan="11">검색종목이 없습니다.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+        <!-- page 처리 시작-->
+        <ul class="pagination justify-content-center">
+            <!-- 이전페이지-->
+            {% if chart_list.has_prev %}
+            <li class="page-item">
+              <!-- <a class="page-link" href="?page={{ chart_list.prev_num}}">이전</a> -->
+              <a class="page-link" data-page="{{ chart_list.prev_num}}" href="#">이전</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled">
+              <a class="page-link" tabindex="-1" aria-disabled="true" href="#">이전</a>
+            </li>
+            {% endif %}
+      
+            {% for page_num in chart_list.iter_pages() %}
+             {% if page_num %}
+                {% if page_num != chart_list.page %}
+                <li class="page-item">
+                  <!-- <a class="page-link" href="?page={{ page_num}}">{{page_num}}</a> -->
+                  <a class="page-link" href="#" data-page="{{ page_num}}">{{page_num}}</a>
+                </li>
+                {% else %}
+                <li class="page-item active" aria-current="page">
+                  <a class="page-link" href="#">{{page_num}}</a>
+                </li>
+                {% endif %}
+             {% else %} 
+                <li class="disabled">
+                  <a href="#" class="page-link">...</a>
+                </li>
+             {% endif %}
+            {% endfor %} 
+              <!--다음 페이지-->
+              {% if chart_list.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="#" data-page="{{ chart_list.next_num}}">다음</a>
+              </li>
+             {% else %}
+              <li class="page-item disabled">
+                <a class="page-link" tabindex="-1" aria-disabled="true" href="#">다음</a>
+              </li>
+             {% endif %}
+          </ul>
+            <!-- 페이징 처리 끝-->
+
+
+
+
+
+</div>
+<form id="searchForm" method="get" action="{{ url_for('kinvestor.daily_detail') }}">
+  <input type="hidden" id="stockcode" name="stockcode" value="{{ stockcode}}">
+  <input type="hidden" id="no" name="no" value="">
+  <input type="hidden" id="selected1" name="selected1" value="">
+  <input type="hidden" id="selected2" name="selected2" value="">
+  <input type="hidden" id="sel1" name="sel1" value="">
+  <input type="hidden" id="sel2" name="sel2" value="">
+  <input type="hidden" id="sdate" name="sdate" value="">
+  <input type="hidden" id="selectdate" name="selectdate" value="">
+
+</form>
+{% endblock %}
+
+{% block script %}
+<script type="text/javascript">
+    $(document).ready(function(){
+        $(".page-link").on('click', function(){
+        $("#page").val($(this).data("page"));
+        $("#searchForm").submit();
+      });
+
+        // $("#btn_search").on('click',function(){
+        //     $("#kw").val($(".kw").val());
+        //     $("#page").val(1); // 검색 버튼을 클릭할 경우 1페이지 부터 조회한다.
+        //     $("#searchForm").submit();
+        // });
+
+        // $(".so").on('change', function(){
+        //     $("#so").val($(this).val());
+        //     $("#page").val(1);
+        //     $("#searchForm").submit();
+        // });
+
+        $('#select_so').on('change', function(){
+            var selectedOption = $(this).val();
+            if(selectedOption == 'tradedate') {
+                $('.date-input').hide();
+                $('.kw-input').show();
+            } else if(selectedOption == 'datefromto') {
+                $('.kw-input').hide();
+                $('.date-input').show();
+            } else {
+                $('.date-input').hide();
+                $('.kw-input').show();
+            }
+        });
+
+        $('#btn_search').on('click', function(){
+            var selectedOption = $('#select_so').val();
+            if(selectedOption == 'tradedate') {
+                $('#start_date').val('');
+                $('#end_date').val('');
+            } else if(selectedOption == 'datefromto') {
+                var startDate = $('.start-date').val();
+                var endDate = $('.end-date').val();
+                $('#start_date').val(startDate);
+                $('#end_date').val(endDate);
+            }
+             $("#kw").val($(".kw").val());
+             $("#page").val(1); 
+             $('#searchForm').submit();
+        });
+      // 매수 버튼
+       function tradeRun(stockcode, stockname) {
+          var url = "{{ url_for('kinvestor.trade_run') }}" + "?stockcode=" + stockcode + "&stockname=" + stockname;
+          window.location.href = url;
+      
+       }
+
+      // 다음 페이지
+      $("#btn_next").on('click', function() {
+          var num = parseInt($("#num").text().trim()); // Convert to integer
+          var numValue = num + 1;
+          console.log(numValue)
+          $("#no").val(numValue);
+          $("#sel1").val('{{ sel1 }}'); // Update selected1 value
+          $("#sel2").val('{{ sel2 }}'); // Update selected2 value
+          $("#sdate").val('{{ sdate }}'); // Update sdate value
+          $("#selectdate").val('{{ selectdate }}'); // Update selectdate value
+          $("#searchForm").submit();
+      });
+
+      // 이전 페이지
+      $("#btn_previous").on('click', function() {
+          var num = parseInt($("#num").text().trim()); // Convert to integer
+          var numValue;
+          if (num != 1) {
+              numValue = num - 1;
+          } else {
+              numValue = num;
+          }
+          console.log(numValue)
+          $("#no").val(numValue);
+          $("#sel1").val('{{ sel1 }}'); // Update selected1 value
+          $("#sel2").val('{{ sel2 }}'); // Update selected2 value
+          $("#sdate").val('{{ sdate }}'); // Update sdate value
+          $("#selectdate").val('{{ selectdate }}'); // Update selectdate value
+          $("#searchForm").submit();
+      });
+
+
+      $("#select1").change(function() {
+        // Check if the checkbox is checked
+        var num = parseInt($("#num").text().trim()); // Convert to integer         
+        $("#no").val(num);
+
+        // Set the value of selected1 based on the state of the checkbox
+        var selected1Value = $('#select1').is(':checked') ? 1 : 0;
+        $('#selected1').val(selected1Value);
+
+        // Submit the form
+        $("#searchForm").submit();
+    });
+
+    $("#select2").change(function() {
+        // Check if the checkbox is checked
+        var num = parseInt($("#num").text().trim()); // Convert to integer         
+        $("#no").val(num);
+
+        // Set the value of selected1 based on the state of the checkbox
+        var selected1Value = $('#select2').is(':checked') ? 1 : 0;
+        $('#selected2').val(selected1Value);
+
+        // Submit the form
+        $("#searchForm").submit();
+    });
+
+
+    });
+
+
+    $(".theme-link").click(function(event) {
+    event.preventDefault(); // 기본 링크 동작 방지
+    // 클릭한 주제의 코드와 이름 가져오기
+    var themeCode = $(this).data("themecode");
+    var themeName = $(this).text();
+    console.log(themeCode,themeName);
+    $.ajax({
+        url: "{{ url_for('kinvestor.theme_data') }}",
+        type: 'POST', 
+        contentType: 'application/json',
+        data: JSON.stringify({ themeCode: themeCode, themeName: themeName }),
+        success: function(response) {
+            console.log(response); // 받은 데이터 처리
+            if (response.stock_dics.length > 0) {
+               $("#table-header").css("display", "block"); // 테이블 헤더 표시
+                // 받은 데이터를 기반으로 HTML에 동적으로 추가
+                var themedata = $("#themedata");
+                themedata.empty(); // 기존 데이터 삭제
+                response.stock_dics.forEach(function(stock) {
+                    themedata.append(`
+                    <tr>
+                        <td>${stock.stockcode}</td>
+                        <td>${stock.stockname}</td>
+                        <td>${stock.currentvalue}</td>
+                        <td>${stock.highvalue}</td>
+                        <td>${stock.lowvalue}</td>
+                        <td>${stock.beginvalue}</td>
+                        <td>${stock.diffrate}</td>
+                        <td>${stock.diffval}</td>
+                        <td>${stock.tradeval}</td>
+                        <td>${stock.pre_tradeval}</td>
+                        <td>${stock.tvol_vsprevious}</td>
+                    </tr>
+                    `);
+                });
+            } else {
+                $("#themedata").empty(); // 데이터가 없으면 테이블 초기화
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error(error); // 오류 메시지 기록
+        }
+    });
+});
+
+
+
+</script>
+
+<!-- <script>
+    // JavaScript to update the chart image
+    document.addEventListener("DOMContentLoaded", function() {
+        var img = new Image();
+        img.src = "/detail_chart";  // Route to fetch the chart image
+        img.onload = function() {
+            document.getElementById("chart_div").appendChild(img);
+        };
+    });
+</script> -->
+
+    <!-- <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript">
+      google.charts.load('current', {'packages':['corechart']});
+      google.charts.setOnLoadCallback(drawChart);
+
+      function drawChart() {
+        var data = google.visualization.arrayToDataTable({{gragh_list|safe}}, true);
+
+        var options = {
+          title: 'Company Performance',
+          curveType: 'function',
+          legend: { position: 'bottom' }
+        };
+
+        var chart = new google.visualization.CandlestickChart(document.getElementById('chart_div'));
+
+        chart.draw(data, options);
+      }
+    </script>
+</script> -->
+{% endblock %}

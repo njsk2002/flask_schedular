@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="C:/projects/daram/pybo.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="150"/><column_width id="3" width="8948"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><current_table name="4,15:mainalembic_version"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1">SELECT * from daily_data_from_vb where stockcode = '006620';
+select * from rank_tradeore
+SELECT * from daily_data_from_vb where stockname = '휴림로봇'
+
+SELECT * from daily_data_from_vb where selecteddate = &quot;20240527&quot; and selected1 = '1';
+
+SELECT * from observe_stock_from_vb
+
+UPDATE observe_stock_from_vb SET selected1 ='0', selected2 ='0', selected = '0', selected4 ='0', selecteddate ='0', buydate ='0';
+
+
+</sql><current_tab id="0"/></tab_sql></sqlb_project>
