@@ -180,7 +180,8 @@ def validate_token():
         return  # Refresh 토큰 경로는 스킵
 
     # Authorization 헤더 확인
-    auth_header = request.headers.get('Authorization')
+    auth_header = request.headers.get('authorization')
+    print('현재토큰: ', auth_header)
     if not auth_header or not auth_header.startswith('Bearer '):
         return jsonify({'status': 'error', 'message': 'Authorization header missing or invalid'}), 401
 
