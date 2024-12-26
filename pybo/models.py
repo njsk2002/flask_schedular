@@ -620,7 +620,9 @@ class WaterUsage(db.Model):
 
 
 class CalendarSchedule(db.Model):
+    __tablename__ = 'calendar_schedule'  # 테이블 이름 명시
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 명시적으로 autoincrement 추가
+    user_id = db.Column(db.Integer, db.ForeignKey('user_authorization.id', ondelete='CASCADE'), nullable=False)
     content = db.Column(db.String(300), nullable=False)
     start_time = db.Column(db.String(150), nullable=True)
     end_time = db.Column(db.String(150), nullable=True)
@@ -628,12 +630,27 @@ class CalendarSchedule(db.Model):
     create_date = db.Column(db.DateTime(), nullable=False)
     modify_date = db.Column(db.DateTime(), nullable=True)
 
+# 사용자와의 관계
+    user = db.relationship('UserAuthorization', backref=db.backref('calendar_schedule', lazy=True, passive_deletes=True))
+
 class UserAuthorization(db.Model):
+    __tablename__ = 'user_authorization'  # 테이블 이름 명시
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 명시적으로 autoincrement 추가
-    email = db.Column(db.String(300), nullable=False)
-    password = db.Column(db.String(150), nullable=True)
+    email = db.Column(db.String(300), nullable=False, unique=True)
+    password = db.Column(db.String(150), nullable=False)
     create_date = db.Column(db.DateTime(), nullable=False)
     modify_date = db.Column(db.DateTime(), nullable=True)
+
+class RefreshToken(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user_authorization.id', ondelete='CASCADE'), nullable=False)
+    token = db.Column(db.String(500), nullable=False, unique=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    # 사용자와의 관계
+    user = db.relationship('UserAuthorization', backref=db.backref('refresh_tokens', lazy=True, passive_deletes=True))
+
+
    
 
     

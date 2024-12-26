@@ -10,10 +10,12 @@ import config
 # Import the StockVO module
 from .vo.stock_code_vo import StockInfoVO
 
+from flask_jwt_extended import JWTManager
+
 
 
 # =========== SQLight에만 해당 다른 DB 상관없음 ===============================
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, text
 
 naming_convention = {
     "ix": 'ix_%(column_0_label)s',
@@ -35,6 +37,8 @@ def create_app():
     app = Flask(__name__)
     #app.config['DEBUG'] = True
     app.config.from_object(config)
+
+    JWTManager(app)
 
     # @app.route('/')
     # def hello_pybo():
@@ -80,5 +84,13 @@ def create_app():
 
     # 마크다운 (글자 정렬 및 ul처러 표시)
     # Markdown(app, extensions=['nl2br','fenced_code'])
+
+     # SQLite 외래키 활성화
+   
+    @app.before_request
+    def enforce_foreign_keys():
+        if db.engine.name == "sqlite":
+            with db.engine.connect() as connection:
+                connection.execute(text("PRAGMA foreign_keys=ON"))
     
     return app
