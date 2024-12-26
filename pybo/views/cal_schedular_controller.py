@@ -10,6 +10,8 @@ bp = Blueprint('schedule', __name__, url_prefix='/schedule')
 def calendar_data():
     # 요청에서 JSON 데이터 가져오기
     data = request.json
+
+    print(data)
     if not data:
         return jsonify({'status': 'error', 'message': 'No data provided'}), 400
 
@@ -40,7 +42,14 @@ def calendar_data():
     try:
         db.session.add(calendar_schedular)
         db.session.commit()
-        return jsonify({'status': 'success', 'message': 'Data saved successfully'}), 201
+
+        ## refresh
+        return jsonify({
+            'status': 'success', 
+            'message': 'Data saved successfully'
+            'content': 
+          
+            }), 201
     except Exception as e:
         db.session.rollback()
         print(f"Error: {e}")
