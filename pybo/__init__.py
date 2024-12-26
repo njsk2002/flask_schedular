@@ -38,7 +38,8 @@ def create_app():
     #app.config['DEBUG'] = True
     app.config.from_object(config)
 
-    JWTManager(app)
+    # Initialize JWT
+    jwt = JWTManager(app)
 
     # @app.route('/')
     # def hello_pybo():
@@ -46,6 +47,12 @@ def create_app():
 
     #ORM
     db.init_app(app)
+
+    with app.app_context():
+        if db.engine.name == "sqlite":
+            with db.engine.connect() as connection:
+                connection.execute(text("PRAGMA foreign_keys=ON"))
+
     # =========== SQLight에만 해당 다른 DB 상관없음 ===============================
     if app.config['SQLALCHEMY_DATABASE_URI'].startswith("sqlite"):
         migrate.init_app(app, db, render_as_batch=True)
@@ -84,13 +91,4 @@ def create_app():
 
     # 마크다운 (글자 정렬 및 ul처러 표시)
     # Markdown(app, extensions=['nl2br','fenced_code'])
-
-     # SQLite 외래키 활성화
-   
-    @app.before_request
-    def enforce_foreign_keys():
-        if db.engine.name == "sqlite":
-            with db.engine.connect() as connection:
-                connection.execute(text("PRAGMA foreign_keys=ON"))
-    
     return app
