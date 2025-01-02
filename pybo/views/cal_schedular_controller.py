@@ -17,6 +17,7 @@ def calendar_data():
         return jsonify({'status': 'error', 'message': 'Invalid or missing access token'}), 401
 
     # 요청에서 JSON 데이터 가져오기
+    
     data = request.json
 
     print(data)
