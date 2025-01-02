@@ -1,10 +1,13 @@
 from datetime import datetime, timedelta
-from pybo import db
-from ..models import CalendarSchedule, UserAuthorization, RefreshToken
 from flask import Flask, Blueprint, request, jsonify
-from flask_jwt_extended import (JWTManager, create_access_token, create_refresh_token,jwt_required, get_jwt_identity, get_jwt)
+from pybo import db
+from ..models import UserAuthorization, RefreshToken
+
+from flask_jwt_extended import (JWTManager, create_access_token, create_refresh_token,jwt_required, get_jwt_identity, get_jwt, decode_token)
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
+
+
 
 #비밀번호 해시화
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -85,6 +88,7 @@ def register():
             'message': 'An error occurred while saving data'
             }), 500
     
+    
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     #Authorization 헤더에서 값 추출
@@ -145,20 +149,57 @@ def login():
         'refreshToken': refresh_token
     }), 200    
 
-######### Refresh Token -- 언제 사용할지 미정(로그인시 및 정보 요청 시 지속적으로 확인) -- ##############################3
+# ######### Refresh Token -- 언제 사용할지 미정(로그인시 및 정보 요청 시 지속적으로 확인) -- ##############################3
 @bp.route('/refresh', methods=['POST'])
 def refresh_token():
     token = request.json.get('refresh_token')
+    if not token:
+            return jsonify({'status': 'error', 'message': 'Missing refresh token'}), 400
+
     token_entry = RefreshToken.query.filter_by(token=token).first()
 
     if not token_entry:
-        return jsonify({'error': 'Invalid token'}), 401
+       return jsonify({'status': 'error', 'message': 'Invalid refresh token'}), 401
 
     if token_entry.expires_at < datetime.utcnow():
         db.session.delete(token_entry)
         db.session.commit()
-        return jsonify({'error': 'Token expired'}), 401
+        return jsonify({'status': 'error', 'message': 'Refresh token expired'}), 401
 
-    # 갱신 로직 실행
+    # 갱신 로직 실행 # Create new access token
+    new_access_token = create_access_token(identity=token_entry.user.email)
+    
+    return jsonify({'status': 'success', 'accessToken': new_access_token}), 200
 
 
+# 요청 처리 전 검증
+@bp.before_app_request
+def validate_token():
+    # 특정 엔드포인트에서 검증 건너뛰기
+    if request.endpoint == 'cal_user.refresh_access_token':
+        return  # Refresh 토큰 경로는 스킵
+
+    # Authorization 헤더 확인
+    auth_header = request.headers.get('authorization')
+    print('현재토큰: ', auth_header)
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({'status': 'error', 'message': 'Authorization header missing or invalid'}), 401
+
+    # 토큰 추출
+    access_token = auth_header.split(' ')[1]
+    try:
+        # 토큰 디코딩
+        decoded_token = decode_token(access_token)
+        identity = decoded_token.get('sub')  # 'sub'은 기본적으로 사용자 ID를 의미
+
+        if not identity:
+            raise ValueError('Invalid token')
+
+        # 데이터베이스에서 사용자 확인
+        user = UserAuthorization.query.filter_by(email=identity).first()
+        if not user:
+            raise ValueError('User not found')
+
+    except Exception as e:
+        print(f"Access token validation error: {e}")
+        return jsonify({'status': 'error', 'message': 'Invalid access token'}), 401
