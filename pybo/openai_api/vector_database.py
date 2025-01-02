@@ -1,4 +1,4 @@
-import os
+import os, re
 import urllib.request
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -8,15 +8,22 @@ from langchain_community.vectorstores import Weaviate
 from langchain_community.vectorstores import Milvus
 from langchain_community.vectorstores import Chroma
 from langchain_community.vectorstores import FAISS
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-# .env 파일 로드
-load_dotenv()
+# # .env 파일 로드
+# load_dotenv()
 
-# 환경 변수 가져오기
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# # 환경 변수 가져오기
+# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-os.environ['OPENAI_API_KEY'] = OPENAI_API_KEY
+with open("C:/projects/api_keys/api_keys.txt") as f:
+    file = f.read()
+
+match = re.search(r"OPENAI_API_KEY = '(.*?)'", file)
+
+
+if match:
+    os.environ['OPENAI_API_KEY'] = match.group(1)
 
 #urllib.request.urlretrieve("https://github.com/chatgpt-kr/openai-api-tutorial/raw/main/ch06/2023_%EB%B6%81%ED%95%9C%EC%9D%B8%EA%B6%8C%EB%B3%B4%EA%B3%A0%EC%84%9C.pdf", filename="2023_북한인권보고서.pdf")
 
