@@ -16,6 +16,7 @@ store = {} # 아래와 같이 session_id는 고유한 사용자와 연결되어 
 def get_llm(session_id: str):
     global store # store를 전역변수로 사용함을 명시
 
+
     model = ChatOpenAI(
         temperature= 0.99,
         max_tokens = 2048,
