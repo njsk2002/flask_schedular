@@ -23,13 +23,12 @@ Flask-SQLAlchemy==3.1.1
 Flask-WTF==1.2.1
 fonttools==4.51.0
 greenlet==3.0.3
-greenletio==0.11.0
 h11==0.14.0
 idna==3.7
 itsdangerous==2.2.0
 Jinja2==3.1.5
 joblib==1.4.2
-JPype1 @ file:///C:/venvs/co2/files/JPype1-1.5.0-cp312-cp312-win_amd64.whl#sha256=9aafc00b00bf8c1b624081e5d4ab87f7752e6c7ee6a141cfc332250b05c6d42f
+JPype1==1.5.0
 kiwisolver==1.4.5
 konlpy==0.6.0
 lxml==5.2.2
