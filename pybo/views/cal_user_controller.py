@@ -173,7 +173,7 @@ def refresh_token():
 
 
 # 요청 처리 전 검증
-@bp.before_app_request
+# @bp.before_app_request
 def validate_token():
     # 특정 엔드포인트에서 검증 건너뛰기
     if request.endpoint == 'cal_user.refresh_access_token':
