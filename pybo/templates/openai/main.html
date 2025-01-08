@@ -58,13 +58,16 @@ $(document).ready(function () {
 
     // Continue 버튼 클릭 이벤트
     $(document).on('click', '#continueBtn', function () {
-        const selectedChoice = $('input[name="choices"]:checked').val();
+        const oid = $(this).closest('.card').attr('id').split('-')[1]; // Extract oid from card ID
+        const selectedChoice = $(`input[name="choices-${oid}"]:checked`).val(); // Get the selected choice
+
         if (!selectedChoice) {
             alert('Please select an option.');
             return;
         }
-        const lastStory = storyList[storyList.length - 1];
-        sendRequest(lastStory.story, selectedChoice);
+
+        const lastStory = storyList.find(story => story.oid === oid); // Find the story object
+        sendRequest(lastStory.story, selectedChoice); // Send request with the selected choice
     });
 
 
@@ -137,46 +140,45 @@ $(document).ready(function () {
         const isLast = storyList.length === 0 || storyList[storyList.length - 1].oid === oid;
 
         const storyHtml = `
-    <div class="card mb-4" id="story-${oid}">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <button class="btn btn-link collapse-btn" data-bs-toggle="collapse" data-bs-target="#collapse-${oid}">
-                <i class="fa fa-chevron-down"></i>
-            </button>
-        </div>
-        <div class="collapse show" id="collapse-${oid}">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <!-- 그림 섹션 -->
-                    <div class="col-12 col-md-4 text-center">
-                        <img src="${dalle_img}" alt="Generated Image" class="img-fluid mb-3">
-                    </div>
+        <div class="card mb-4" id="story-${oid}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <button class="btn btn-link collapse-btn" data-bs-toggle="collapse" data-bs-target="#collapse-${oid}">
+                    <i class="fa fa-chevron-down"></i>
+                </button>
+            </div>
+            <div class="collapse show" id="collapse-${oid}">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <!-- Image Section -->
+                        <div class="col-12 col-md-4 text-center">
+                            <img src="${dalle_img}" alt="Generated Image" class="img-fluid mb-3">
+                        </div>
 
-                    <!-- 글 섹션 -->
-                    <div class="col-12 col-md-8">
-                        <p>${story}</p>
-                        <hr>
-                        <p><strong>${decisionQuestion}</strong></p>
-                        ${choices.map((choice, index) => `
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="choices-${oid}" id="choice${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
-                                <label class="form-check-label" for="choice${index}-${oid}">
-                                    ${choice}
-                                </label>
+                        <!-- Text Section -->
+                        <div class="col-12 col-md-8">
+                            <p>${story}</p>
+                            <hr>
+                            <p><strong>${decisionQuestion}</strong></p>
+                            ${choices.map((choice, index) => `
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="choices-${oid}" id="choice${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
+                                    <label class="form-check-label" for="choice${index}-${oid}">
+                                        ${choice}
+                                    </label>
+                                </div>
+                            `).join('')}
+                            <div class="d-flex justify-content-between mt-3">
+                                <button class="btn btn-success" id="continueBtn" ${!isLast ? 'disabled' : ''}>진행</button>
+                                <button class="btn btn-danger delete-btn" data-oid="${oid}">삭제</button>
                             </div>
-                        `).join('')}
-                        <div class="d-flex justify-content-between mt-3">
-                            <button class="btn btn-success" id="continueBtn" ${!isLast ? 'disabled' : ''}>진행</button>
-                            <button class="btn btn-danger delete-btn" data-oid="${oid}">삭제</button>
-                           
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
         `;
         $('#storyContainer').append(storyHtml);
-    };
+};
 
     // 서버에서 저장된 모든 스토리를 가져오기
     const loadStories = () => {
