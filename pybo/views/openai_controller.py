@@ -47,13 +47,17 @@ def generate_story():
     with open(os.path.join(DATA_DIR, f"{oid}.json"), 'w') as file:
         json.dump({
             'oid': oid,
-            'story': result.get('story', ''),
-            'decisionQuestion': result.get('decisionQuestion', ''),
-            'choices': result.get('choices', []),
+            'story_en': result.get('story_en', ''),
+            'story_kr': result.get('story_kr', ''),
+            'decisionQuestion_kr': result.get('decisionQuestion_kr', ''),
+            'decisionQuestion_en': result.get('decisionQuestion_en', ''),
+            'choices_en': result.get('choices_en', []),
+            'choices_kr': result.get('choices_kr', []),
             'dalle_img': result.get('dalle_img', '')
         }, file)
-
+    print("oid: ", oid)
     # 응답에 UUID 추가
+
     return jsonify({'oid': oid, **result})
 
 

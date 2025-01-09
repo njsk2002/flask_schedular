@@ -53,65 +53,189 @@ class GenerateStory:
             os.environ['OPENAI_API_KEY'] = match.group(1)
             print("API Key Loaded.")
 
+   
+
+    @staticmethod
+    def is_korean(text):
+        # 한글 문자가 포함되어 있으면 True 반환
+        return bool(re.search(r'[\uac00-\ud7af]', text))
+
     @staticmethod
     def get_story_and_image(genre, user_choice, client):
-        # client = OpenAI() 
-        # # API Key
-        # GenerateStory.auth()
         llm_model = GPTDalle.get_llm('test')
 
-        # 사용자의 선택지인 user_choice로부터 LLM이 작성한 다음 스토리, 다음 선택지 4개, Dalle 프롬프트를 전달받습니다.
+        # LLM으로부터 응답받기
         llm_generation_result = llm_model.invoke(
-            {"input" : user_choice },
+            {"input": user_choice},
             config={
-                "configurable" : {"session_id": "test"}
+                "configurable": {"session_id": "test"}
             }
         ).content
 
-        # 줄바꿈 기준으로 위의 llm_generation_result를 문자열 리스트로 변환. 이렇게 되면 마지막 줄은 Dalle Prompt이다.
-        # ex) [스토리 문장1, 스토리 문장2, -- -- --, A선택지, B선택지, C선택지, D선택지, -- -- --, 달리 프롬프트]
         response_list = llm_generation_result.split('\n')
 
-        if len(response_list) !=1:
-            #문자열 리스트에서 마지막 원소를 추출하면 달리 프롬프트
+        # 이미지 프롬프트 추출
+        if len(response_list) > 1:
             img_prompt = response_list[-1]
             dalle_img = GPTDalle.get_image_by_dalle(client, genre, img_prompt)
-        
         else:
+            img_prompt = ""
             dalle_img = None
-        
-        choices = []
-        story =''
 
-        #메인스토리(story), 질문(decisionQuestion), 선택지(choices)만 responses의 원소로 남김
-        responses = list(filter(lambda x: x != '' and x != '-- -- --',response_list))
+        # 필터링하여 응답 리스트 정리
+        responses = list(filter(lambda x: x != '' and x != '-- -- --', response_list))
         responses = list(filter(lambda x: 'Dalle Prompt' not in x and 'Image prompt' not in x, responses))
-        responses = [s for s in responses if s.strip()]
+        responses = [s.strip() for s in responses if s.strip()]
 
-        #메인스토리(story), 질물(decisionQuestion), 선택지(chices)를 파싱하여 각각 저장
+        print("response: ", responses)
+
+        # 초기화
+        story_en = []
+        story_kr = []
+        choices_en = []
+        choices_kr = []
+        decision_question_en = ""
+        decision_question_kr = ""
+
+        is_choice_section = False
+
+        # 응답 처리
         for response in responses:
-            # 화면에 출력할 선택지 질문에 양 옆에 **를 붙여서 decisionQuestion에 저장.
-            # ex) **선택지: 아기 펭귄 보물이는 어떻게 해야할까요?'**
+            if response.startswith("선택지:"):
+                decision_question_kr = '**' + response + '**'
+            elif response.lower().startswith(("a.", "b.", "c.", "d.")):
+                # 선택지 부분인 경우
+                if GenerateStory.is_korean(response):  # 한국어 선택지
+                    choices_kr.append(response)
+                else:  # 영어 선택지
+                    choices_en.append(response)
+                    is_choice_section = True
+            elif GenerateStory.is_korean(response):  # 한국어 문장으로 판단
+                story_kr.append(response)
+            else:  # 영어 문장으로 간주
+                story_en.append(response)
 
-            if response.startswith('선택지:'):
-                decisionQuestion = '**' + response + '**'
-            
-            elif response[1] == '.':
-                # 4개의 선택지를 choices라는 문자열 리스트에 저장
-                choices.append(response)
-            # 질문(decisionQuestion)과 선택지(choices)를 제외하면 메인 스토리이므로, story에 저장
-            else:
-                story += response +'\n'
-            
-        #스토리에 dalle prompt가 여전히 남아있을 경우 제거
-        story = story.replace(img_prompt, '')
+        # 이미지 프롬프트가 포함된 경우 제거
+        story_en = [line.replace(img_prompt, '').strip() for line in story_en]
+        story_kr = [line.replace(img_prompt, '').strip() for line in story_kr]
+
+        print('choices_en : ', choices_en, '\n', 'choices_kr: ', choices_kr)
 
         return {
-            'story' : story, # 화면에 출력한 스토리
-            'decisionQuestion' : decisionQuestion, # 화면에 출력할 질문. ' 다음은 어떻게 할까요?'
-            'choices' : choices, # 화면에 출력할 실제 4개의 선택지
-            'dalle_img' : dalle_img # 화면에 출력할 dalle이미지
+            'story_en': "\n".join(story_en),
+            'story_kr': "\n".join(story_kr),
+            'choices_en': choices_en,
+            'choices_kr': choices_kr,
+            'decisionQuestion_en': decision_question_en,
+            'decisionQuestion_kr': decision_question_kr,
+            'dalle_img': dalle_img
         }
+
+
+    # def get_story_and_image(genre, user_choice, client):
+    #     # client = OpenAI() 
+    #     # # API Key
+    #     # GenerateStory.auth()
+    #     llm_model = GPTDalle.get_llm('test')
+
+    #     # 사용자의 선택지인 user_choice로부터 LLM이 작성한 다음 스토리, 다음 선택지 4개, Dalle 프롬프트를 전달받습니다.
+    #     llm_generation_result = llm_model.invoke(
+    #         {"input" : user_choice },
+    #         config={
+    #             "configurable" : {"session_id": "test"}
+    #         }
+    #     ).content
+
+    #     # 줄바꿈 기준으로 위의 llm_generation_result를 문자열 리스트로 변환. 이렇게 되면 마지막 줄은 Dalle Prompt이다.
+    #     # ex) [스토리 문장1, 스토리 문장2, -- -- --, A선택지, B선택지, C선택지, D선택지, -- -- --, 달리 프롬프트]
+    #     response_list = llm_generation_result.split('\n')
+
+    #     if len(response_list) !=1:
+    #         #문자열 리스트에서 마지막 원소를 추출하면 달리 프롬프트
+    #         img_prompt = response_list[-1]
+    #         dalle_img = GPTDalle.get_image_by_dalle(client, genre, img_prompt)
+        
+    #     else:
+    #         dalle_img = None
+        
+    #     # choices = []
+    #     # story =''
+    #     # decisionQuestion = ''  # 기본값으로 초기화
+
+    #     #메인스토리(story), 질문(decisionQuestion), 선택지(choices)만 responses의 원소로 남김
+    #     responses = list(filter(lambda x: x != '' and x != '-- -- --',response_list))
+    #     responses = list(filter(lambda x: 'Dalle Prompt' not in x and 'Image prompt' not in x, responses))
+    #     responses = [s for s in responses if s.strip()]
+
+    #     print("response: " ,responses)
+
+    #     story_en = []
+    #     story_kr = []
+    #     choices_en = []
+    #     choices_kr = []
+    #     decision_question_en = ""
+    #     decision_question_kr = ""
+
+    #     # Process responses to separate English and Korean parts
+    #     is_choice_section = False
+
+
+    #     # #메인스토리(story), 질물(decisionQuestion), 선택지(chices)를 파싱하여 각각 저장
+    #     # for response in responses:
+    #     #     # 화면에 출력할 선택지 질문에 양 옆에 **를 붙여서 decisionQuestion에 저장.
+    #     #     # ex) **선택지: 아기 펭귄 보물이는 어떻게 해야할까요?'**
+
+    #     #     if response.startswith('선택지:'):
+    #     #         decisionQuestion = '**' + response + '**'
+            
+    #     #     elif response[1] == '.':
+    #     #         # 4개의 선택지를 choices라는 문자열 리스트에 저장
+    #     #         choices.append(response)
+    #     #     # 질문(decisionQuestion)과 선택지(choices)를 제외하면 메인 스토리이므로, story에 저장
+    #     #     else:
+    #     #         story += response +'\n'
+
+    #     for response in responses:
+    #         if response.startswith("선택지:"):
+    #             decision_question_kr = '**' + response + '**'
+    #         elif response.lower().startswith("a.") or response.lower().startswith("b.") or \
+    #             response.lower().startswith("c.") or response.lower().startswith("d."):
+    #             if is_choice_section:  # If choice section for Korean
+    #                 choices_kr.append(response)
+    #             else:  # If choice section for English
+    #                 choices_en.append(response)
+    #                 is_choice_section = True
+    #         elif any(c.isalpha() and c.islower() for c in response):  # Simple heuristic for English
+    #             story_en.append(response)
+    #         else:  # Assume the rest is Korean
+    #             story_kr.append(response)
+            
+    #     # #스토리에 dalle prompt가 여전히 남아있을 경우 제거
+    #     # story_en = story_en.replace(img_prompt, '')
+    #     # story_kr = story_kr.replace(img_prompt, '')
+
+    #     #  # 만약 decisionQuestion이 여전히 빈 값이라면 기본값을 설정
+    #     # if not decisionQuestion:
+    #     #     decisionQuestion = '**다음 선택지는 무엇일까요?**'
+
+    #     print('choices_en : ' ,choices_en, '\n',
+    #             'choices_kr: ', choices_kr)
+    #     return {
+    #             'story_en': "\n".join(story_en),
+    #             'story_kr': "\n".join(story_kr),
+    #             'choices_en': choices_en,
+    #             'choices_kr': choices_kr,
+    #             'decisionQuestion_en': decision_question_en,
+    #             'decisionQuestion_kr': decision_question_kr,
+    #             'dalle_img': dalle_img
+    #         }
+
+        # return {
+        #     'story' : story, # 화면에 출력한 스토리
+        #     'decisionQuestion' : decisionQuestion, # 화면에 출력할 질문. ' 다음은 어떻게 할까요?'
+        #     'choices' : choices, # 화면에 출력할 실제 4개의 선택지
+        #     'dalle_img' : dalle_img # 화면에 출력할 dalle이미지
+        # }
 
     #스토리, 질문, 선택지, 이미지를 저장하는 함수
     @staticmethod

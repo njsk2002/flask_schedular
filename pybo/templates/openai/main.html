@@ -16,7 +16,6 @@
         <!-- Input Section -->
         <div class="card my-4">
             <div class="card-body">
-                <!-- <label for="themeInput" class="form-label">Enter the theme or genre of your story:</label> -->
                 <input type="text" id="themeInput" class="form-control" placeholder="만들고 싶은 자신만의 스토리의 제목을 입력해주세요...">
                 <div class="d-flex justify-content-end mt-3">
                     <button id="clearBtn" class="btn btn-outline-secondary me-2">초기화</button>
@@ -56,29 +55,72 @@ $(document).ready(function () {
         sendRequest(theme, '');
     });
 
+    // input 내용 활성화
+    $(document).on('change', 'input[name^="choices-"]', function () {
+        // Extract oid dynamically from the input's name attribute
+        //const oid = $(this).attr('name').split('-')[1]; // Assumes 'choices-oid' format
+        const oid = $(this).attr('name').split('-').slice(1).join('-');
+        const customRadio = $(`#custom-choice-${oid}`);
+        const customInputContainer = $(`#custom-input-container-${oid}`);
+        const customInput = $(`#custom-input-${oid}`);
+
+        if (customRadio.is(':checked')) {
+            // Show input field if custom radio is selected
+            customInputContainer.show();
+        } else {
+            // Hide input field and clear value if custom radio is deselected
+            customInputContainer.hide();
+            customInput.val('');
+        }
+});
+
+
+    // // Continue 버튼 클릭 이벤트
+    // $(document).on('click', '#continueBtn', function () {
+    //     const oid = $(this).closest('.card').attr('id').split('-').slice(1).join('-');
+    //     const selectedChoice = $(`input[name="choices-${oid}"]:checked`).val();
+    //     const customInput = $(`#custom-input-${oid}`).val().trim();
+
+    //     if (!selectedChoice && !customInput) {
+    //         alert('Please select a choice or write your own answer.');
+    //         return;
+    //     }
+
+    //     const lastStory = storyList.find(story_en => story_en.oid === oid); // Find the story object
+    //     sendRequest(lastStory.story_en, selectedChoice); // Send request with the selected choice
+    // });
+
     // Continue 버튼 클릭 이벤트
     $(document).on('click', '#continueBtn', function () {
-        const oid = $(this).closest('.card').attr('id').split('-')[1]; // Extract oid from card ID
-        const selectedChoice = $(`input[name="choices-${oid}"]:checked`).val(); // Get the selected choice
+        const oid = $(this).closest('.card').attr('id').split('-').slice(1).join('-');
+        const selectedChoice = $(`input[name="choices-${oid}"]:checked`).val();
+        const customInput = $(`#custom-input-${oid}`).val().trim();
 
-        if (!selectedChoice) {
-            alert('Please select an option.');
+        // 선택지와 사용자 입력이 모두 비어 있는 경우 알림
+        if (!selectedChoice && !customInput ) {
+            alert('Please select a choice or write your own answer.');
+            return;
+        } else if (selectedChoice == "custom-input" && !customInput ) {
+            alert('Please select a choice or write your own answer.');
+            return;
+        }
+        // 우선 순위: 사용자 입력이 있으면 이를 사용, 없으면 선택지 사용
+        const userAnswer = customInput || selectedChoice;
+
+        // 선택된 스토리를 찾음
+        const lastStory = storyList.find(story => story.oid === oid);
+
+        if (!lastStory) {
+            alert('Story not found. Please refresh the page.');
             return;
         }
 
-        const lastStory = storyList.find(story => story.oid === oid); // Find the story object
-        sendRequest(lastStory.story, selectedChoice); // Send request with the selected choice
+        console.log(userAnswer);
+
+        // 서버 요청 함수 호출
+        sendRequest(lastStory.story_en, userAnswer); // 사용자 입력 또는 선택된 값을 전달
     });
 
-
-    
-    // Collapse 버튼 클릭 이벤트
-    $(document).on('click', '.collapse-btn', function () {
-        const target = $(this).data('target');
-        $(target).collapse('toggle'); // Bootstrap Collapse
-        const icon = $(this).find('i');
-        icon.toggleClass('fa-chevron-down fa-chevron-up'); // 화살표 토글
-    });
 
     // 삭제 버튼 클릭 이벤트
     $(document).on('click', '.delete-btn', function () {
@@ -102,11 +144,20 @@ $(document).ready(function () {
                     // 모든 스토리가 삭제된 경우 입력 활성화
                     $('#themeInput').prop('disabled', false);
                 }
+
+                // 이전 스토리의 Choice 비활성화
+                if (storyList.length > 0) {
+                    const prevStory = storyList[storyList.length - 1];
+                    $(`#story-${prevStory.oid} #continueBtn`).prop('disabled', false);
+                    $(`#story-${prevStory.oid} input[name="choices"]`).prop('disabled', false);
+                }
             },
             error: function (response) {
                 alert(response.responseJSON.message); // 오류 메시지 표시
             }
         });
+
+        loadStories();
     });
 
     // 서버에 요청을 전송하는 함수
@@ -135,7 +186,7 @@ $(document).ready(function () {
 
     // 스토리를 렌더링하는 함수
     const renderStory = (data) => {
-        const { oid, story, decisionQuestion, choices, dalle_img } = data;
+        const { oid, story_en, story_kr, decisionQuestion_en, decisionQuestion_kr, choices_en, choices_kr, dalle_img } = data;
 
         const isLast = storyList.length === 0 || storyList[storyList.length - 1].oid === oid;
 
@@ -156,29 +207,67 @@ $(document).ready(function () {
 
                         <!-- Text Section -->
                         <div class="col-12 col-md-8">
-                            <p>${story}</p>
+                            <p><strong>Story (English):</strong></p>
+                            <p>${story_en}</p>
+                            <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#story-kr-${oid}">Show Korean Translation</button>
+                            <div class="collapse" id="story-kr-${oid}">
+                                <p><strong>Story (Korean):</strong></p>
+                                <p>${story_kr}</p>
+                            </div>
                             <hr>
-                            <p><strong>${decisionQuestion}</strong></p>
-                            ${choices.map((choice, index) => `
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="choices-${oid}" id="choice${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
-                                    <label class="form-check-label" for="choice${index}-${oid}">
-                                        ${choice}
+                            
+                            <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#question-${oid}">Show Question & Choice</button>
+                            <div class="collapse" id="question-${oid}">
+                                <p><strong>Question (English):</strong> ${decisionQuestion_en}</p>
+                                <div id="choices-en-${oid}">
+                                    ${choices_en.map((choice, index) => `
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="choices-${oid}" id="choice-en-${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="choice-en-${index}-${oid}">
+                                                ${choice}
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+    
+                               <div class="form-check mt-3">
+                                    <label for="custom-input-${oid}" class="form-label">
+                                        <input type="radio" class="form-check-input custom-radio" name="choices-${oid}" id="custom-choice-${oid}" value="custom-input" ${!isLast ? 'disabled' : ''}>
+                                        <strong>Or write your own answer:</strong>
                                     </label>
                                 </div>
-                            `).join('')}
+                                <div class="mt-2" id="custom-input-container-${oid}" style="display: none;">
+                                    <input type="text" class="form-control" id="custom-input-${oid}" placeholder="Write your answer here..." ${!isLast ? 'disabled' : ''}>
+                                </div>
+
+
+                                <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#choices-kr-${oid}">Show Korean Question and Choices</button>
+                                <div class="collapse" id="choices-kr-${oid}">
+                                    <p><strong>Question (Korean):</strong> ${decisionQuestion_kr}</p>
+                                    ${choices_kr.map((choice, index) => `
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="choices-${oid}" id="choice-kr-${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="choice-kr-${index}-${oid}">
+                                                ${choice}
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                           
+
                             <div class="d-flex justify-content-between mt-3">
                                 <button class="btn btn-success" id="continueBtn" ${!isLast ? 'disabled' : ''}>진행</button>
                                 <button class="btn btn-danger delete-btn" data-oid="${oid}">삭제</button>
                             </div>
-                        </div>
+                        </div>                       
+                      </div>
                     </div>
                 </div>
             </div>
         </div>
         `;
         $('#storyContainer').append(storyHtml);
-};
+    };
 
     // 서버에서 저장된 모든 스토리를 가져오기
     const loadStories = () => {
@@ -199,6 +288,8 @@ $(document).ready(function () {
     // 페이지 로드 시 기존 스토리 불러오기
     loadStories();
 });
+
+   
     </script>
 </body>
 </html>
