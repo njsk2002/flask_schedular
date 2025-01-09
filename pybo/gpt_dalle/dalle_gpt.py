@@ -42,8 +42,8 @@ class GPTDalle:
         model = ChatOpenAI(
             temperature= 0.99,
             max_tokens = 2048,
-           # model_name = 'gpt-4-1106-preview'
-            model_name = 'gpt-3.5-turbo'
+            model_name = 'gpt-4-1106-preview'
+            #model_name = 'gpt-3.5-turbo'
         )
 
         # {history}: 대화 기록이 들어갈 자리.

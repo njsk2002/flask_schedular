@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify, render_template, Blueprint, session, json
+from flask import Flask, request, jsonify, render_template, Blueprint, session, json, send_file
 from openai import OpenAI
 import uuid
 from ..gpt_dalle.gen_story import GenerateStory
 import base64
 from io import BytesIO
 import os 
+from gtts import gTTS
 
 
 bp = Blueprint('openai',__name__,url_prefix='/openai')
@@ -13,6 +14,11 @@ bp = Blueprint('openai',__name__,url_prefix='/openai')
 DATA_DIR = './story_data'
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
+
+# TTS 디렉토리 생성
+TTS_DIR = 'C:/DavidProject/flask_project/flask_schedular/tts'
+if not os.path.exists(TTS_DIR):
+    os.makedirs(TTS_DIR)
 
 
 @bp.route("/generate_story", methods=["POST"])
@@ -26,9 +32,11 @@ def generate_story():
     # OpenAI 클라이언트 초기화 및 인증
     GenerateStory.auth()
     client = OpenAI()
+      # 새로운 UUID 생성
+    oid = str(uuid.uuid4())
 
     # GenerateStory로부터 결과 가져오기
-    result = GenerateStory.get_story_and_image(genre, user_choice, client)
+    result = GenerateStory.get_story_and_image(genre, user_choice, client,oid)
 
     # PIL 이미지 객체를 Base64로 변환
     if "dalle_img" in result:
@@ -38,8 +46,7 @@ def generate_story():
         img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
         result["dalle_img"] = f"data:image/png;base64,{img_base64}"  # Base64로 변환된 이미지 데이터
 
-    # 새로운 UUID 생성
-    oid = str(uuid.uuid4())
+  
     session.setdefault('oid_list', []).append(oid)
     session.modified = True
 
@@ -84,6 +91,42 @@ def delete_story(oid):
         return jsonify({"status": "success", "message": f"{oid}.json 파일이 삭제되었습니다."}), 200
     else:
         return jsonify({"status": "error", "message": "파일이 존재하지 않습니다."}), 404
+
+
+@bp.route('/story_tts/<oid>', methods=['GET'])
+def story_tts(oid):
+    try:
+        # JSON 파일에서 oid에 해당하는 story_en 읽기
+        story_file = os.path.join("./story_data", f"{oid}.json")
+        if not os.path.exists(story_file):
+            return jsonify({"error": "Story not found"}), 404
+
+        with open(story_file, "r") as file:
+            story_data = json.load(file)
+            story_en = story_data.get("story_en", "No story available")
+
+        # gTTS로 TTS 파일 생성
+        tts = gTTS(text=story_en, lang="en")
+        tts_path = os.path.join(TTS_DIR, f"{oid}.mp3")
+        tts.save(tts_path)
+
+        # 생성된 TTS 파일 URL 반환
+        return jsonify({"audio_url": f"openai/tts/{oid}.mp3"})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Static 파일 제공
+@bp.route('/tts/<filename>')
+def serve_tts(filename):
+    print('TTS:', filename)
+    try:
+        filepath = os.path.join(TTS_DIR, filename)
+        if not os.path.exists(filepath):
+            return jsonify({"error": "File not found"}), 404
+        return send_file(filepath, as_attachment=False)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 

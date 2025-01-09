@@ -61,14 +61,14 @@ class GenerateStory:
         return bool(re.search(r'[\uac00-\ud7af]', text))
 
     @staticmethod
-    def get_story_and_image(genre, user_choice, client):
+    def get_story_and_image(genre, user_choice, client, oid):
         llm_model = GPTDalle.get_llm('test')
 
         # LLM으로부터 응답받기
         llm_generation_result = llm_model.invoke(
             {"input": user_choice},
             config={
-                "configurable": {"session_id": "test"}
+                "configurable": {"session_id": oid}
             }
         ).content
 
