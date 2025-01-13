@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome ICETECH</title>
+
+    <link rel="stylesheet" href="{{url_for('static', filename='bootstrap.min.css')}}">
+    <link rel="stylesheet" href="{{url_for('static', filename='style.css')}}">
+    <link rel="stylesheet" href="{{url_for('static', filename='dashboard.css')}}">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <link rel="canonical" href="https://getbootstrap.com/docs/5.0/examples/dashboard/">
+   
+
+    <style>
+        .text-blue {
+            color: blue;
+        }
+        .text-red {
+            color: red;
+        }
+
+        /* Sidebar 스타일 추가 */
+        .sidebar {
+            height: 100vh;
+            width: 150px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: #f8f9fa;
+          
+           
+        }
+
+        .content {
+            margin-left: 0px; /* 사이드바의 너비 + 약간의 여유 공간 */
+            padding: 5px;
+        }
+    </style>
+
+    <script src="{{url_for('static', filename='dashboard.js')}}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- 왼쪽 측면에 사이드바 삽입 -->
+    <div class="sidebar">
+        {% include "navbar.html" %}
+    </div>
+
+    <!-- 메인 콘텐츠 영역 -->
+    <div class="content">
+        <!-- 기본 템플릿에 삽입할 내용 Start-->
+        {% block content %}
+        {% endblock %}
+        <!-- 기본 템플릿에 삽입할 내용 End-->
+    </div>
+
+    <!--jQuery JS-->
+    <script src="{{url_for('static', filename='jquery-3.7.1.min.js')}}"></script>
+
+
+    <!--bootstrap-->
+    <script src="{{url_for('static', filename='bootstrap.min.js')}}"></script>
+    <script src="{{url_for('static', filename='bootstrap.bundle.min.js')}}"></script>
+    <script src="{{url_for('static', filename='dashboard.js')}}"></script>
+
+
+    
+   
+    <!-- jQuery UI 라이브러리 로드 -->
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.28.0/dist/feather.min.js" integrity="sha384-uO3SXW5IuS1ZpFPKugNNWqTZRRglnUJK6UAZ/gxOX80nxEkN9NcGZTftn6RzhGWE" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js" integrity="sha384-zNy6FEbO50N+Cg5wap8IKA4M/ZnLJgzc6w2NqACZaK0u0FXfOWRRJOnQtpZun8ha" crossorigin="anonymous"></script>
+  
+  
+
+    <!-- 자바스크립트 Start-->
+    {% block script %} 
+    {% endblock %} 
+    <!-- 자바스크립트 End-->
+    
+</body>
+</html>

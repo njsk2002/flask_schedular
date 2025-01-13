@@ -1,0 +1,506 @@
+
+  {% extends 'base.html'%}
+  {% block content %}
+  <div class="container my-3">
+
+     <!-- 검색기능 추가-->
+     <div class="row justify-content-between my-3">
+
+          <div class="row">
+            <div class="col-2">
+              <select class="form-control so">
+                <option value="recent" {% if so == 'recent' %}selected{% endif %}>최신순</option>
+                <option value="recommend" {% if so == 'recommend' %}selected{% endif %}>추천순</option>
+              <option value="popular" {% if so == 'popular' %}selected{% endif %}>인기순</option>
+              </select>
+            </div>
+
+            <div class="col-2">
+              <button class="btn btn-danger" type="button" id="btn_sell">일괄매도</button>
+            </div>
+            <div class="col-3">
+              <input type="text" class="form-control kw" value="{{ kw or ''}}">
+            </div>
+            <div class="col-3">
+                <button class="btn btn-outline-secondary" type="button" id="btn_search">찾기</button>
+                <button class="btn btn-outline-secondary" type="button" id="btn_reload">새로고침</button>
+                <button class="btn btn-primary" type="button" id="btn_buy">일괄매수</button>
+
+            </div>
+            <div class="col-2 totalamount">
+              <h3>현 수익 : {{ total_evalpriceamount }} 원 </h3>
+            </div>
+          </div>
+
+    </div>
+  </div>
+
+
+    <table class="table" id="stock_table">
+      <thead>
+        <tr class="text-center table-dark">
+            <th>번호</th>
+            <th>종목코드</th>
+            <th>종목명</th>
+            <th>보유수량</th>
+            <th>매도</th>
+            <th>매수단가</th>
+            <th>매수금액</th>
+            <th>수익률</th>
+            <th>수익금액</th>
+            <th>현재가</th>
+            <th>시가</th>
+            <th>고가</th>
+            <th>저가</th>
+            <th>거래량</th>
+            <th>대비</th>
+            <th>변동률</th>
+            <th>매수</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if  stock_list %}
+        {% for stock in stock_list %}
+        <tr class="text-center" data-stockcode="{{ stock.stockcode }}">
+                <td>{{ loop.index }}</td> <!-- 번호 -->
+                <td class="stockcode">{{stock.stockcode}}</td>   <!-- 종목코드-->
+                <td class="text-left stock-name">{{ stock.stockname }}</td>
+                <td>{{stock.stockdate}}</td> 
+                <td>{{stock.currentvalue}}</td>  
+                <td>{{stock.beginvalue}}</td> 
+                <td>{{stock.highvalue}}</td> 
+                <td>{{stock.lowvalue}}</td> 
+                <td>{{stock.tradeval}}</td> 
+                <td>{{stock.diffval}}</td> 
+                <td>{{stock.diffrate}}</td> 
+
+        </tr>
+        {% endfor %}
+        {% else %}
+        <tr>
+            <td colspan="9">검색종목이 없습니다.</td>
+        </tr>
+         {% endif %}
+    
+
+      </tbody>
+
+    </table>
+<!-- page 처리 시작-->
+<ul class="pagination justify-content-center">
+  <!-- 이전페이지-->
+  {% if stock_list.has_prev %}
+  <li class="page-item">
+    <!-- <a class="page-link" href="?page={{ stock_list.prev_num}}">이전</a> -->
+    <a class="page-link" data-page="{{ stock_list.prev_num}}" href="#">이전</a>
+  </li>
+  {% else %}
+  <li class="page-item disabled">
+    <a class="page-link" tabindex="-1" aria-disabled="true" href="#">이전</a>
+  </li>
+  {% endif %}
+
+  {% for page_num in stock_list.iter_pages() %}
+   {% if page_num %}
+      {% if page_num != stock_list.page %}
+      <li class="page-item">
+        <!-- <a class="page-link" href="?page={{ page_num}}">{{page_num}}</a> -->
+        <a class="page-link" href="#" data-page="{{ page_num}}">{{page_num}}</a>
+      </li>
+      {% else %}
+      <li class="page-item active" aria-current="page">
+        <a class="page-link" href="#">{{page_num}}</a>
+      </li>
+      {% endif %}
+   {% else %} 
+      <li class="disabled">
+        <a href="#" class="page-link">...</a>
+      </li>
+   {% endif %}
+  {% endfor %} 
+    <!--다음 페이지-->
+    {% if stock_list.has_next %}
+    <li class="page-item">
+      <a class="page-link" href="#" data-page="{{ stock_list.next_num}}">다음</a>
+    </li>
+   {% else %}
+    <li class="page-item disabled">
+      <a class="page-link" tabindex="-1" aria-disabled="true" href="#">다음</a>
+    </li>
+   {% endif %}
+</ul>
+  <!-- 페이징 처리 끝-->
+
+       
+  </div>
+
+  <form id="searchForm" method="get" action="{{url_for('kinvestor.stock_remainders')}}">
+    <input type="hidden" id="kw" name="kw" value="{{kw or ''}}">
+    <input type="hidden" id="page" name="page" value="{{page}}">
+    <input type="hidden" id="so" name="so" value="{{so}}">"
+  </form>
+
+  {% endblock %}
+
+  {% block script %}
+  <script type="text/javascript">
+
+    // 전체 매수
+    document.getElementById('btn_buy').addEventListener('click', function() {
+        window.location.href = "{{ url_for('ktrade.buy_run', type='remain') }}";
+    });
+
+    // 매수 : 개별 항목
+    function buyStock(stockNum) {
+        const url = "{{ url_for('ktrade.buy_run') }}";
+        window.location.href = url + "?no=" + stockNum + "&type=remain";
+    }
+
+    // 전체 매도
+    document.getElementById('btn_sell').addEventListener('click', function() {
+        window.location.href = "{{ url_for('ktrade.sell_run', type='remain') }}";
+    });
+
+    // 매도 : 개별 항목
+    function sellStock(stockNum) {
+        const url = "{{ url_for('ktrade.sell_run') }}";
+        window.location.href = url + "?no=" + stockNum + "&type=remain";
+    }
+
+
+
+    // ############ 비동기식으로 사용하기 위해 form 사용안함
+    // $(document).ready(function(){
+    //   $(".page-link").on('click', function(){
+    //     $("#page").val($(this).data("page"));
+    //     $("#searchForm").submit();
+    //   });
+
+    $(document).ready(function() {
+    // 페이지 링크 클릭 이벤트 핸들러
+    // $(".page-link").on('click', function(event){
+    //     //console.log('입장')
+    //     event.preventDefault(); // 기본 링크 동작 방지
+    //     var page = $(this).data("page"); // 페이지 번호 가져오기
+    //     var kw = $("#kw").val(); // 검색어 가져오기
+    //     var so = $("#so").val(); // 정렬 옵션 가져오기
+    //     var formData = {page: page, kw: kw, so: so, r_method :'exit'}; // 폼 데이터
+    //     console.log(formData)
+    //     //submitFormAjax(formData); // AJAX 함수 호출하여 폼 제출
+    //     executeAjaxRequest(formData);
+    // });
+
+    // 검색 버튼 클릭 이벤트 핸들러
+    $("#btn_search").on('click', function(){
+      //  $("#kw").val($(".kw").val()); // 검색어 입력란 값 설정
+      //  $("#page").val(1); // 페이지를 1페이지로 설정하여 조회
+      //  $("#searchForm").submit(); // 검색 폼 제출
+
+       event.preventDefault(); // 기본 링크 동작 방지
+       var page = 1; // 페이지 번호 가져오기
+       var kw = $(".kw").val(); // 검색어 가져오기
+       var so = $(".so").val(); // 정렬 옵션 가져오기
+       var formData = {page: page, kw: kw, so: so}; // 폼 데이터
+       submitFormAjax(formData); // AJAX 함수 호출하여 폼 제출
+
+    });
+
+    // 정렬 옵션 변경 이벤트 핸들러
+    $(".so").on('change', function(){
+      // $("#so").val($(this).val()); // 선택된 정렬 옵션 값을 설정
+      // $("#page").val(1); // 페이지를 1페이지로 설정하여 조회
+      // $("#searchForm").submit(); // 검색 폼 제출
+
+      event.preventDefault(); // 기본 링크 동작 방지
+       var page = 1; // 페이지 번호 가져오기
+       var kw = $(".kw").val(); // 검색어 가져오기
+       var so = $(".so").val(); // 정렬 옵션 가져오기
+       var formData = {page: page, kw: kw, so: so}; // 폼 데이터
+       submitFormAjax(formData); // AJAX 함수 호출하여 폼 제출
+    });
+});
+
+
+function submitFormAjax(formData) {
+   console.log("폼데이터" + formData)
+    $.ajax({
+        url: "{{url_for('kinvestor.stock_remainders')}}", // Flask 엔드포인트 주소
+        // observe_fromvb에 socket close후 open이 되지 않아 부득이 observe_fromdb로 40개만 사용
+        type: 'POST', // 요청 방식 (GET 또는 POST)
+        data: formData, // 전송할 데이터
+        success: function(response) {
+            console.log(response); // 받은 데이터 처리
+            // 여기에서 받은 데이터를 사용하여 테이블을 업데이트하거나 다른 작업을 수행할 수 있습니다.
+            updateTable(response); // 받은 데이터를 테이블에 업데이트하는 함수 호출
+        },
+        error: function(xhr, status, error) {
+            console.error(xhr.responseText); // 에러 로그 출력
+        }
+    });
+}
+
+
+
+    // 새로 고침 버튼 눌렸을때
+    $(document).ready(function() {
+    $('#btn_reload').click(function() {
+        // Execute AJAX request
+        $.ajax({
+            url: "{{url_for('kinvestor.stock_remainders')}}", 
+            type: 'POST', 
+            data: {  
+                 page: 1
+                //  kw: 'search_keyword',
+                //  so: 'sorting_option'
+            },
+            success: function(response) {
+                console.log(response); // Handle received data
+                updateTable(response); // 받은 데이터를 테이블에 업데이트하는 함수 호출
+
+                // // 받은 JSON 데이터를 파싱하여 JavaScript 객체로 변환합니다.
+                // var stock_list = response.stock_list;
+
+                // // 테이블을 업데이트합니다.
+                // var tbody = $('#stock_table tbody');
+                // tbody.empty(); // 테이블 내용 비우기
+
+                // // 받은 데이터가 비어있지 않으면 테이블에 데이터를 추가합니다.
+                // if (stock_list.length > 0) {
+                //     $.each(stock_list, function(index, stock) {
+                //         var row = '<tr class="text-center">' +
+                //             '<td>' + (index + 1) + '</td>' +
+                //             '<td>' + stock.stockcode + '</td>' +
+                //             '<td class="text-left"><a href="' + stock.stocklink + '">' + stock.stockname + '</a></td>' +
+                //             '<td>' + stock.stockdate + '</td>' +
+                //             '<td>' + stock.currentvalue + '</td>' +
+                //             '<td>' + stock.beginvalue + '</td>' +
+                //             '<td>' + stock.highvalue + '</td>' +
+                //             '<td>' + stock.lowvalue + '</td>' +
+                //             '<td>' + stock.tradeval + '</td>' +
+                //             '<td>' + stock.diffval + '</td>' +
+                //             '<td>' + stock.diffrate + '</td>' +
+                //             '</tr>';
+                //         tbody.append(row);
+                //     });
+                // } else {
+                //     // 데이터가 없는 경우 메시지를 표시합니다.
+                //     tbody.append('<tr><td colspan="11">검색종목이 없습니다.</td></tr>');
+                // }
+            }
+        });
+    });
+});
+
+
+// // 1초에 한번씩 새로고침되도록 
+// $(document).ready(function() {
+//     // AJAX 요청을 실행하는 함수 정의
+//     function executeAjaxRequest() {
+//         $.ajax({
+//             url: "{{url_for('kinvestor.observe_fromdb')}}", 
+//             type: 'POST', 
+//             success: function(response) {
+//                 console.log(response); // 받은 데이터 처리
+//                 updateTable(response); // 받은 데이터로 테이블 업데이트 함수 호출
+                
+//                 // 현재 페이지 번호 설정
+//                 $("#page").val(response.page);
+//             },
+//             error: function(xhr, status, error) {
+//                 console.error(error); // 오류 메시지 기록
+//             }
+//         });
+//     }
+
+//     // 1초마다 AJAX 요청 실행
+//     setInterval(executeAjaxRequest, 1000);
+// });
+
+$(document).ready(function() {
+    var currentPage = 1; // 초기 페이지 번호는 1로 설정하거나 원하는 페이지 번호로 설정
+
+    // 페이지 링크 클릭 이벤트 핸들러
+    $(".page-link").on('click', function(event){
+        event.preventDefault(); // 기본 링크 동작 방지
+        var requestedPage = $(this).data("page"); // 페이지 번호 가져오기
+        var kw = $("#kw").val(); // 검색어 가져오기
+        var so = $("#so").val(); // 정렬 옵션 가져오기
+        var formData = {page: requestedPage, kw: kw, so: so, r_method: 'exit'}; // 폼 데이터
+        console.log(formData);
+       
+        // AJAX 함수 호출하여 폼 제출
+        executeAjaxRequest(requestedPage);
+    });
+
+    // AJAX 요청을 실행하는 함수 정의
+    function executeAjaxRequest(requestedPage) {
+        console.log("페이지정보 : " + requestedPage);
+        
+        $.ajax({
+            url: "{{url_for('kinvestor.stock_remainders')}}", 
+            type: 'POST', 
+            data: { page: requestedPage },
+            success: function(response) {
+                console.log(response); // 받은 데이터 처리
+                updateTable(response); // 받은 데이터로 테이블 업데이트 함수 호출
+                
+                // 페이지 번호를 외부에 알려주기 위해 전역 변수나 다른 방법을 사용
+                currentPage = requestedPage; // 예시로 전역 변수를 사용
+
+                // 다음 요청을 실행
+                executeAjaxRequest(currentPage);
+            },
+            error: function(xhr, status, error) {
+                console.error(error); // 오류 메시지 기록
+            }
+        });
+    }
+
+    // 초기 페이지 로딩 시 AJAX 요청 실행
+    executeAjaxRequest(currentPage);
+});
+
+
+
+
+// function updateTable(data) {
+//     // 테이블 엘리먼트 찾기
+//     var tableBody = $('#stock_table tbody');
+
+//     // 테이블 내용 비우기
+//     tableBody.empty();
+
+//     if (data.stock_list.length > 0) {
+//     // 주식 리스트 순회하며 테이블에 추가
+//     $.each(data.stock_list, function(index, stock) {
+//          // 각 주식 정보로부터 테이블 행(row) 생성
+//         var row = "<tr class='text-center' data-stockcode='" + stock.stockcode + "'>" +
+//             "<td>" + (index + 1) + "</td>" +
+//             "<td class='stockcode'>" + stock.stockcode + "</td>" +
+//             "<td class='text-left stock-name'>" + stock.stockname + "</td>" +
+//             "<td>" + stock.stockdate + "</td>" +
+//             "<td>" + stock.currentvalue + "</td>" +
+//             "<td>" + stock.beginvalue + "</td>" +
+//             "<td>" + stock.highvalue + "</td>" +
+//             "<td>" + stock.lowvalue + "</td>" +
+//             "<td>" + stock.tradeval + "</td>" +
+//             "<td>" + stock.diffval + "</td>" +
+//             "<td>" + stock.diffrate + "</td>" +
+//             "</tr>";
+//         // 테이블에 행 추가
+//         tableBody.append(row);
+//     });
+
+//     // 각 테이블 행에 대해 링크를 설정
+//     $(".stock-name").each(function() {
+//         var stockCode = $(this).closest("tr").data("stockcode");
+//         console.log("스탁코드 = " + stockCode);
+//         var url = "{{ url_for('kinvestor.stock_detail', stockcode='') }}" + stockCode;
+//         $(this).html("<a href='" + url + "'>" + $(this).html() + "</a>");
+//     });
+
+//     } else {
+//         // 검색종목이 없을 때 메시지 추가
+//         var noResultRow = '<tr><td colspan="11">검색종목이 없습니다.</td></tr>';
+//         tableBody.append(noResultRow);
+//     }
+// }
+
+
+function updateTable(data) {
+    // 테이블 엘리먼트 찾기
+    var tableBody = $('#stock_table tbody');
+    var totalamount = $('.totalamount');
+
+    // 테이블 내용 비우기
+    tableBody.empty();
+    totalamount.empty();
+   
+
+    if (data.stock_list.length > 0) {
+        // 주식 리스트 순회하며 테이블에 추가
+        $.each(data.stock_list, function(index, stock) {
+            // 각 주식 정보로부터 테이블 행(row) 생성
+
+            var evalRateClass = stock.evalrate < 0 ? 'text-blue' : 'text-red';
+            var evalAmountClass = stock.evalamount < 0 ? 'text-blue' : 'text-red';
+            var diffval = stock.diffval < 0 ? 'text-blue' : 'text-red';
+            var diffrate = stock.diffrate < 0 ? 'text-blue' : 'text-red';
+
+            var row = "<tr class='text-center' data-stockcode='" + stock.stockcode + "'>" +
+              "<td>" + (index + 1) + "</td>" +
+                "<td class='stockcode'>" + stock.stockcode + "</td>" +
+                "<td class='text-left stock-name'>" + stock.stockname + "</td>" +
+                "<td>" + stock.remainderqty + "</td>" + // 이 부분이 누락되어 추가함
+                "<td><button class='btn btn-outline-danger' onclick='sellStock(" + stock.stocknum + ")'>매도</button></td>" +
+                "<td>" + stock.buyprice + "</td>" +    // 이 부분이 누락되어 추가함
+                "<td>" + stock.buyamount + "</td>" +   // 이 부분이 누락되어 추가함
+                "<td class='" + evalRateClass + "'>" + stock.evalrate + "</td>" +    // 조건부 스타일링 적용
+                "<td class='" + evalAmountClass + "'>" + stock.evalamount + "</td>" +  // 조건부 스타일링 적용
+                "<td>" + stock.currentvalue + "</td>" +
+                "<td>" + stock.beginvalue + "</td>" +
+                "<td>" + stock.highvalue + "</td>" +
+                "<td>" + stock.lowvalue + "</td>" +
+                "<td>" + stock.tradeval + "</td>" +
+                "<td class='" + diffval + "'>" + stock.diffval + "</td>" + // 조건부 스타일링 적용
+                "<td class='" +  diffrate + "'>" + stock.diffrate + "</td>" + // 조건부 스타일링 적용
+                "<td><button class='btn btn-outline-primary' onclick='buyStock(" + stock.stocknum + ")'>매수</button></td>" +
+                "</tr>";
+            // 테이블에 행 추가
+            tableBody.append(row);
+
+
+        });
+
+        // 현재 페이지 번호 설정
+        var currentPage = data.page;
+        console.log("현재페이지는" +currentPage)
+        var page = currentPage;
+        //페이지 링크 요소를 찾아서 반복적으로 처리
+        // $('.page-link').each(function() {
+        //     // 해당 페이지 링크의 data-page 속성에 currentPage 값을 설정
+        //     $(this).attr('data-page', currentPage);
+        // });
+
+ 
+
+        // total_evalpriceamount를 totalamount에 추가
+        var totalEval = data.total_evalpriceamount < 0 ? 'text-blue' : 'text-red';
+        var row2 = "<h6 class='" + totalEval + "'>" + "현재 수익"+"<span>" +" : " +"</span>" + data.total_evalpriceamount + "원" + "</h6>";
+        totalamount.append(row2);
+
+        // 이전 페이지 및 다음 페이지로 이동하는 링크 설정
+        $(".prev-page").attr("data-page", currentPage - 1);
+        $(".next-page").attr("data-page", currentPage + 1);
+
+        if (currentPage === 1) {
+            $(".prev-page").addClass("disabled");
+        } else {
+            $(".prev-page").removeClass("disabled");
+        }
+
+        if (currentPage === data.pagination.total_pages) {
+            $(".next-page").addClass("disabled");
+        } else {
+            $(".next-page").removeClass("disabled");
+        }
+
+        // 각 테이블 행에 대해 링크를 설정
+        $(".stock-name").each(function() {
+            var stockCode = $(this).closest("tr").data("stockcode");
+            console.log("스탁코드 = " + stockCode);
+            var url = "{{ url_for('kinvestor.stock_detail', stockcode='') }}" + stockCode;
+            $(this).html("<a href='" + url + "'>" + $(this).html() + "</a>");
+        });
+
+    } else {
+        // 검색종목이 없을 때 메시지 추가
+        var noResultRow = '<tr><td colspan="11">검색종목이 없습니다.</td></tr>';
+        tableBody.append(noResultRow);
+    }
+
+    return page;
+}
+
+  </script>
+  {% endblock %}

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Audio & Transcript Extractor</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        .btn {
+            border-radius: 25px;
+        }
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+            .btn {
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <div class="header">
+            <h1 class="text-primary">🎥 YouTube Audio & Transcript Extractor</h1>
+            <p class="text-muted">Extract audio and subtitles from YouTube videos in seconds!</p>
+        </div>
+
+        <!-- Input Form Section -->
+        <div class="card p-4">
+            <form id="youtubeForm">
+                <div class="mb-3">
+                    <label for="youtubeUrl" class="form-label">YouTube Video URL</label>
+                    <input type="text" class="form-control" id="youtubeUrl" placeholder="Enter YouTube video URL" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Extract</button>
+            </form>
+        </div>
+
+        <!-- Response Section -->
+        <div id="responseSection" class="card p-4 mt-4" style="display: none;">
+            <h5 class="text-success">Processing Result:</h5>
+            <p id="responseMessage"></p>
+            <a id="audioFileLink" href="#" class="btn btn-success btn-sm mt-2" target="_blank">Download Audio</a>
+            <a id="transcriptFileLink" href="#" class="btn btn-info btn-sm mt-2" target="_blank">Download Transcript</a>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        document.getElementById("youtubeForm").addEventListener("submit", async function (e) {
+            e.preventDefault(); // 기본 폼 제출 방지
+
+            const youtubeUrl = document.getElementById("youtubeUrl").value;
+            const responseSection = document.getElementById("responseSection");
+            const responseMessage = document.getElementById("responseMessage");
+            const audioFileLink = document.getElementById("audioFileLink");
+            const transcriptFileLink = document.getElementById("transcriptFileLink");
+
+            // 요청 초기화
+            responseSection.style.display = "none";
+            responseMessage.innerText = "Processing... Please wait.";
+
+            try {
+                const response = await fetch("/process", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ youtube_url: youtubeUrl }),
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    responseMessage.innerText = "Extraction successful! Files are ready for download.";
+                    audioFileLink.href = result.audio_file;
+                    transcriptFileLink.href = result.transcript_file;
+                    responseSection.style.display = "block";
+                } else {
+                    responseMessage.innerText = `Error: ${result.error}`;
+                    responseSection.style.display = "block";
+                }
+            } catch (error) {
+                responseMessage.innerText = `Unexpected error: ${error.message}`;
+                responseSection.style.display = "block";
+            }
+        });
+    </script>
+</body>
+</html>

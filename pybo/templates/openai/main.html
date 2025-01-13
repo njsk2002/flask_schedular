@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NovelGPT</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="text-center">📚 스토리 제작소</h1>
+
+        <!-- Input Section -->
+        <div class="card my-4">
+            <div class="card-body">
+                <input type="text" id="themeInput" class="form-control" placeholder="만들고 싶은 자신만의 스토리의 제목을 입력해주세요...">
+                <div class="d-flex justify-content-end mt-3">
+                    <button id="clearBtn" class="btn btn-outline-secondary me-2">초기화</button>
+                    <button id="startBtn" class="btn btn-primary">시작</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Story Section -->
+        <div id="storyContainer">
+            <!-- Dynamically loaded content -->
+        </div>
+    </div>
+
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">스토리 구성중...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+$(document).ready(function () {
+    let storyList = []; // 클라이언트에서 스토리 데이터 관리
+
+    // Clear 버튼 클릭 이벤트
+    $('#clearBtn').on('click', function () {
+        $('#themeInput').val('').prop('disabled', false);
+        storyList = [];
+        $('#storyContainer').html('');
+    });
+
+    // Start 버튼 클릭 이벤트
+    $('#startBtn').on('click', function () {
+        const theme = $('#themeInput').val();
+        if (!theme) {
+            alert('Please enter a theme or genre.');
+            return;
+        }
+        $('#themeInput').prop('disabled', true);
+        sendRequest(theme, '');
+    });
+
+    // input 내용 활성화
+    $(document).on('change', 'input[name^="choices-"]', function () {
+        // Extract oid dynamically from the input's name attribute
+        //const oid = $(this).attr('name').split('-')[1]; // Assumes 'choices-oid' format
+        const oid = $(this).attr('name').split('-').slice(1).join('-');
+        const customRadio = $(`#custom-choice-${oid}`);
+        const customInputContainer = $(`#custom-input-container-${oid}`);
+        const customInput = $(`#custom-input-${oid}`);
+
+        if (customRadio.is(':checked')) {
+            // Show input field if custom radio is selected
+            customInputContainer.show();
+        } else {
+            // Hide input field and clear value if custom radio is deselected
+            customInputContainer.hide();
+            customInput.val('');
+        }
+});
+
+
+    // // Continue 버튼 클릭 이벤트
+    // $(document).on('click', '#continueBtn', function () {
+    //     const oid = $(this).closest('.card').attr('id').split('-').slice(1).join('-');
+    //     const selectedChoice = $(`input[name="choices-${oid}"]:checked`).val();
+    //     const customInput = $(`#custom-input-${oid}`).val().trim();
+
+    //     if (!selectedChoice && !customInput) {
+    //         alert('Please select a choice or write your own answer.');
+    //         return;
+    //     }
+
+    //     const lastStory = storyList.find(story_en => story_en.oid === oid); // Find the story object
+    //     sendRequest(lastStory.story_en, selectedChoice); // Send request with the selected choice
+    // });
+
+    // Continue 버튼 클릭 이벤트
+    $(document).on('click', '#continueBtn', function () {
+        const oid = $(this).closest('.card').attr('id').split('-').slice(1).join('-');
+        const selectedChoice = $(`input[name="choices-${oid}"]:checked`).val();
+        const customInput = $(`#custom-input-${oid}`).val().trim();
+
+        // 선택지와 사용자 입력이 모두 비어 있는 경우 알림
+        if (!selectedChoice && !customInput ) {
+            alert('Please select a choice or write your own answer.');
+            return;
+        } else if (selectedChoice == "custom-input" && !customInput ) {
+            alert('Please select a choice or write your own answer.');
+            return;
+        }
+        // 우선 순위: 사용자 입력이 있으면 이를 사용, 없으면 선택지 사용
+        const userAnswer = customInput || selectedChoice;
+
+        // 선택된 스토리를 찾음
+        const lastStory = storyList.find(story => story.oid === oid);
+
+        if (!lastStory) {
+            alert('Story not found. Please refresh the page.');
+            return;
+        }
+
+        console.log(userAnswer);
+
+        // 서버 요청 함수 호출
+        sendRequest(lastStory.story_en, userAnswer); // 사용자 입력 또는 선택된 값을 전달
+    });
+
+    //TTS
+    $(document).on('click', '.tts', function () {
+        //const oid = $(this).data('oid');
+        const oid = $(this).attr('id').split('-').slice(1).join('-');
+        console.log('tts: ', oid)
+        // 서버로 TTS 요청
+        $.ajax({
+            url: `/openai/story_tts/${oid}`, // Flask 엔드포인트
+            method: 'GET',
+            success: function (response) {
+                if (response.audio_url) {
+                const audio = new Audio(response.audio_url);
+                audio.play();
+            } else {
+                alert('Error: TTS file not available.');
+            }
+        },
+        error: function () {
+            alert('Error generating TTS.');
+        }
+        });
+    });
+
+
+
+    // 삭제 버튼 클릭 이벤트
+    $(document).on('click', '.delete-btn', function () {
+        const oid = $(this).data('oid');
+
+        // 서버에 삭제 요청
+        $.ajax({
+            url: `/openai/delete_story/${oid}`, // Flask 엔드포인트
+            method: 'DELETE',
+            success: function (response) {
+                alert(response.message); // 성공 메시지 표시
+                storyList = storyList.filter(story => story.oid !== oid); // 리스트에서 제거
+                $(`#story-${oid}`).remove(); // UI에서 제거
+
+                // 마지막 스토리의 Choice 활성화
+                if (storyList.length > 0) {
+                    const lastStory = storyList[storyList.length - 1];
+                    $(`#story-${lastStory.oid} #continueBtn`).prop('disabled', false);
+                    $(`#story-${lastStory.oid} input[name="choices"]`).prop('disabled', false);
+                } else {
+                    // 모든 스토리가 삭제된 경우 입력 활성화
+                    $('#themeInput').prop('disabled', false);
+                }
+
+                // 이전 스토리의 Choice 비활성화
+                if (storyList.length > 0) {
+                    const prevStory = storyList[storyList.length - 1];
+                    $(`#story-${prevStory.oid} #continueBtn`).prop('disabled', false);
+                    $(`#story-${prevStory.oid} input[name="choices"]`).prop('disabled', false);
+                }
+            },
+            error: function (response) {
+                alert(response.responseJSON.message); // 오류 메시지 표시
+            }
+        });
+
+        loadStories();
+    });
+
+    // 서버에 요청을 전송하는 함수
+    const sendRequest = (genre, userChoice) => {
+        // 로딩 모달 표시
+        $('#loadingModal').modal('show');
+
+        $.ajax({
+            url: '/openai/generate_story',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ genre, user_choice: userChoice }),
+            success: function (response) {
+                storyList.push(response); // 클라이언트 상태에 추가
+                renderStory(response);
+
+                // 이전 스토리의 Choice 비활성화
+                if (storyList.length > 1) {
+                    const prevStory = storyList[storyList.length - 2];
+                    $(`#story-${prevStory.oid} #continueBtn`).prop('disabled', true);
+                    $(`#story-${prevStory.oid} input[name="choices"]`).prop('disabled', true);
+                }
+            },
+            error: function () {
+                alert('Error generating story.');
+            },
+            complete: function () {
+            // 로딩 모달 숨기기
+            $('#loadingModal').modal('hide');
+        }
+        });
+    };
+
+    // 스토리를 렌더링하는 함수
+    const renderStory = (data) => {
+        const { oid, story_en, story_kr, decisionQuestion_en, decisionQuestion_kr, choices_en, choices_kr, dalle_img } = data;
+
+        const isLast = storyList.length === 0 || storyList[storyList.length - 1].oid === oid;
+
+        const storyHtml = `
+        <div class="card mb-4" id="story-${oid}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <button class="btn btn-link collapse-btn" data-bs-toggle="collapse" data-bs-target="#collapse-${oid}">
+                    <i class="fa fa-chevron-down"></i>
+                </button>
+            </div>
+            <div class="collapse show" id="collapse-${oid}">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <!-- Image Section -->
+                        <div class="col-12 col-md-4 text-center">
+                            <img src="${dalle_img}" alt="Generated Image" class="img-fluid mb-3">
+                        </div>
+
+                        <!-- Text Section -->
+                        <div class="col-12 col-md-8">
+                       
+                        <p><strong>Story (English):</strong> </p>                    
+                        <p>${story_en}</p>
+                        <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#story-kr-${oid}">Show Korean Translation</button>
+                        <!-- TTS -->
+                        <button class="btn btn-link p-0 tts" id="tts-${oid}"><i class="bi bi-volume-up"></i> </button>
+                        
+                        <div class="collapse" id="story-kr-${oid}">
+                            <p><strong>Story (Korean):</strong></p>
+                            <p>${story_kr}</p>
+                        </div>
+                        <hr>
+                            
+                            <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#question-${oid}">Show Question & Choice</button>
+                            <div class="collapse" id="question-${oid}">
+                                <p><strong>Question (English):</strong> ${decisionQuestion_en}</p>
+                                <div id="choices-en-${oid}">
+                                    ${choices_en.map((choice, index) => `
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="choices-${oid}" id="choice-en-${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="choice-en-${index}-${oid}">
+                                                ${choice}
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+    
+                               <div class="form-check mt-3">
+                                    <label for="custom-input-${oid}" class="form-label">
+                                        <input type="radio" class="form-check-input custom-radio" name="choices-${oid}" id="custom-choice-${oid}" value="custom-input" ${!isLast ? 'disabled' : ''}>
+                                        <strong>Or write your own answer:</strong>
+                                    </label>
+                                </div>
+                                <div class="mt-2" id="custom-input-container-${oid}" style="display: none;">
+                                    <input type="text" class="form-control" id="custom-input-${oid}" placeholder="Write your answer here..." ${!isLast ? 'disabled' : ''}>
+                                </div>
+
+
+                                <button class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#choices-kr-${oid}">Show Korean Question and Choices</button>
+                                <div class="collapse" id="choices-kr-${oid}">
+                                    <p><strong>Question (Korean):</strong> ${decisionQuestion_kr}</p>
+                                    ${choices_kr.map((choice, index) => `
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="choices-${oid}" id="choice-kr-${index}-${oid}" value="${choice}" ${!isLast ? 'disabled' : ''}>
+                                            <label class="form-check-label" for="choice-kr-${index}-${oid}">
+                                                ${choice}
+                                            </label>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                           
+
+                            <div class="d-flex justify-content-between mt-3">
+                                <button class="btn btn-success" id="continueBtn" ${!isLast ? 'disabled' : ''}>진행</button>
+                                <button class="btn btn-danger delete-btn" data-oid="${oid}">삭제</button>
+                            </div>
+                        </div>                       
+                      </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+        $('#storyContainer').append(storyHtml);
+    };
+
+    // 서버에서 저장된 모든 스토리를 가져오기
+    const loadStories = () => {
+        $.ajax({
+            url: '/openai/get_stories',
+            method: 'GET',
+            success: function (response) {
+                storyList = response.stories;
+                $('#storyContainer').html(''); // 기존 렌더링 초기화
+                storyList.forEach(story => renderStory(story));
+            },
+            error: function () {
+                alert('Error loading stories.');
+            }
+        });
+    };
+
+    // 페이지 로드 시 기존 스토리 불러오기
+    loadStories();
+
+
+});
+
+   
+    </script>
+</body>
+</html>
