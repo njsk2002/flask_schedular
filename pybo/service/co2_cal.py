@@ -11,12 +11,6 @@ from ..models import Question, Answer, User, QuestionVoter, WaterUsage,ElecUsage
 from pybo.views.auth_views import login_required
 
 
-from ..service.k_trade import KTrade
-from ..service.k_analysis import KAnalysis
-from ..service.k_value import KValue
-from ..service.k_realdata import RealTimeData,RealData
-from ..service.k_db_trade import KDatabaseTrade
-from ..service.k_func import KFunction
 from collections import Counter 
 
 
@@ -24,9 +18,6 @@ import websockets
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64decode
-
-
-
 
 
 class Co2Cal:

@@ -46,12 +46,16 @@ class GenerateStory:
 
     @staticmethod
     def auth():
-        with open("C:/projects/api_keys/api_keys.txt") as f:
+        with open("C:/DavidProject/api_keys/api_keys.txt") as f:
             file = f.read()
-        match = re.search(r"OPENAI_API_KEY = '(.*?)'", file)
-        if match:
-            os.environ['OPENAI_API_KEY'] = match.group(1)
-            print("API Key Loaded.")
+        api_key = re.search(r"OPENAI_API_KEY = '(.*?)'", file)
+        utube_video = re.search(r"YOUTUBE_VIDEOS = '(.*?)'", file)
+        utube_shorts = re.search(r"YOUTUBE_SHORTS ='(.*?)'", file)
+        if api_key & utube_video & utube_shorts:
+            os.environ['OPENAI_API_KEY'] = api_key.group(1)
+            os.environ['YOUTUBE_VIDEOS'] = utube_video.group(1)
+            os.environ['YOUTUBE_SHORTS'] = utube_shorts.group(1)
+            print("Key Loaded.")
 
    
 

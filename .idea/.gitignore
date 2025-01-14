@@ -1,11 +1,22 @@
-# Default ignored files
+# IntelliJ IDEA 및 JetBrains 프로젝트 관련 설정 파일 무시
 /shelf/
+# 프로젝트 관련 작업 영역 파일 무시
 /workspace.xml
-# Editor-based HTTP Client requests
+
+# Editor-based HTTP Client 요청 파일 무시
 /httpRequests/
-# Datasource local storage ignored files
+
+# 데이터 소스 로컬 설정 파일 무시
 /dataSources/
+# 데이터 소스의 로컬 XML 설정 파일 무시
 /dataSources.local.xml
 
-.env
+# JSON 파일 무시
+*.json
 
+# 이미지 파일 무시
+*.jpg
+*.png
+
+# 환경 변수 파일 무시 (예: API 키, 비밀번호 등)
+.env

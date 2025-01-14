@@ -64,7 +64,7 @@ def create_app():
     from . import models
 
     #블루프린트
-    from .views import cal_user_controller,main_views,question_views, answer_views, auth_views,comment_views,vote_views,stock_controller,trade_controller,data_controller,analysis_controller,judge_controller,table_controller,co2_controller,cal_schedular_controller,openai_controller,ytube_voice_controller
+    from .views import cal_user_controller,main_views,question_views, answer_views, auth_views,comment_views,vote_views,co2_controller,cal_schedular_controller,openai_controller,ytube_voice_controller
     
     app.register_blueprint(main_views.bp)
     app.register_blueprint(question_views.bp)
@@ -72,12 +72,6 @@ def create_app():
     app.register_blueprint(auth_views.bp)
     app.register_blueprint(comment_views.bp)
     app.register_blueprint(vote_views.bp)
-    app.register_blueprint(stock_controller.bp)
-    app.register_blueprint(trade_controller.bp)
-    app.register_blueprint(data_controller.bp)
-    app.register_blueprint(analysis_controller.bp)
-    app.register_blueprint(judge_controller.bp)
-    app.register_blueprint(table_controller.bp)
     app.register_blueprint(co2_controller.bp)
     app.register_blueprint(cal_schedular_controller.bp)
     app.register_blueprint(cal_user_controller.bp)
