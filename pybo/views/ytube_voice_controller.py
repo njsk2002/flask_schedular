@@ -1,5 +1,5 @@
 import torch
-from flask import Flask, request, jsonify, Blueprint
+from flask import Flask, request, jsonify, Blueprint,render_template
 from yt_dlp import YoutubeDL
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 import os
@@ -8,6 +8,7 @@ import whisper
 import json
 from ..service.authorization_key import Authorization
 from ..service.youtube_trans import YoutubeAudio
+from ..repository.repositoty_youtube import RepositoryYoutube
 
 bp = Blueprint('utube', __name__, url_prefix='/utube')
 
@@ -23,18 +24,38 @@ model = whisper.load_model("base", device=DEVICE)  # 모델을 GPU/CPU에 로드
 
 Authorization.auth()
 
-@bp.route('/get_video', methods=['get', 'post'])
-def get_video():
+
+@bp.route('/admin_video', methods=['get', 'post'])
+def admin_video():
+    result = RepositoryYoutube.read_utube_url(star_name=None, type_video=None)
+    print(result)
+    return render_template("openai/admin_utube_list.html", data = result)
+
+
+
+# YOUTUBE 영상 요약 및 정보 저장
+@bp.route('/generate_video', methods=['get', 'post'])
+def generate_video():
     utube_video,utube_shorts = Authorization.utube_url()
     sort_by = "date" # 또는 "popular"
-    max_video = 100 # 검색 비디오수 
+    max_video = 5 # 검색 비디오수 
     print("utube_video:", utube_video, "\n", "utube_shorts: ", utube_shorts)
     if not utube_video:
         print(f'YOUTUBE URL을 읽지 못함!!!!')
     
     video_urls = YoutubeAudio.get_video_urls(utube_video, sort_by=sort_by, max_videos=max_video)
-    print(video_urls)
-    #YoutubeAudio.summarize_videos(video_urls)
+    
+    if video_urls is not None:
+        result = YoutubeAudio.summarize_videos(video_urls)
+    print(result)
+    return jsonify(result)
+
+# DB에 저장된 UTUBE 리스트 가져오기
+@bp.route('/get_video', methods=['get', 'post'])
+def get_video(): 
+    result = RepositoryYoutube.read_utube_url(star_name=None, type_video=None)
+    print(result)
+    return jsonify(result)
     
     
 

@@ -14,7 +14,9 @@ def index():
     # page = request.args.get('page', type=int, default=1)  # 페이지 번호를 URL에서 가져옴
     # question_list = Question.query.order_by(Question.create_date.desc()).paginate(page=page, per_page=10)
     #return redirect(url_for('co2.main_list'))
-    return render_template('openai/main.html')
+    #return render_template('openai/main.html')
+    #return redirect(url_for('utube.get_video'))
+    return render_template('openai/utube_list.html')
 
 
     #return redirect(url_for('kinvestor._list'))

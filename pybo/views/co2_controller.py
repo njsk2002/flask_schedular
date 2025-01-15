@@ -6,7 +6,7 @@ from werkzeug.utils import redirect
 from pybo import db  # .. import db로 되어있는데, pybo로 변경
 from ..forms import QuestionForm, AnswerForm
 from sqlalchemy import func
-from ..models import Question, Answer, User, QuestionVoter, WaterUsage,ElecUsage,VehicleUsage,Co2Management,Stockinfo, StockListFromVB
+from ..models import Question, Answer, User, QuestionVoter, WaterUsage,ElecUsage,VehicleUsage,Co2Management
 
 from pybo.views.auth_views import login_required
 from ..service.co2_cal import Co2Cal
