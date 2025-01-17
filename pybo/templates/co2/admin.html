@@ -1,0 +1,1132 @@
+
+  {% extends 'base.html'%}
+  {% block content %}
+
+
+  <div class="container">
+    <div class="row  align-items-center">
+        <div class="col">
+            <img src="{{ url_for('static', filename='images/icetech.png') }}" alt="Your Image" class="img-fluid" width="150" height="50">
+        </div>
+        <div class="col-4">
+            <h3 class="display-6 fw-normal mb-0">관리자 페이지</h3>
+        </div>
+  
+        <div class="col-7">
+          <button type="button" class="btn btn-outline-primary" data-toggle="modal" data-target="#elecModal">전기 사용량</button>
+          <button type="button" class="btn btn-outline-success" data-toggle="modal" data-target="#waterModal">수도 사용량</button>
+          <button type="button" class="btn btn-outline-primary" data-toggle="modal" data-target="#vehicleModal">차량 이동 거리</button>
+          <button type="button" class="btn btn-outline-success" data-toggle="modal" data-target="#wasteModal">폐기물 처리량</button>
+          <button type="button" class="btn btn-outline-primary" data-toggle="modal" data-target="#gasModal">제조 가스 사용량</button>
+      </div>
+  </div>
+  </div>
+
+
+  <div class="container my-3">
+
+<!-- 검색기능 추가 -->
+<!-- 검색기능과 전기 사용량 제목을 같은 행에 배치 -->
+
+
+<div class="row justify-content-between my-3">
+  <!-- 기존 검색 기능 및 정렬 -->
+  <!-- <div class="col-6">
+      <div class="row">
+          <div class="col-4">
+              <select class="form-control so">
+                  <option value="recent" {% if so == 'recent' %}selected{% endif %}>최신순</option>
+                  <option value="recommend" {% if so == 'recommend' %}selected{% endif %}>추천순</option>
+                  <option value="popular" {% if so == 'popular' %}selected{% endif %}>인기순</option>
+              </select>
+          </div>
+
+          <div class="col-8">
+              <div class="input-group">
+                  <input type="text" class="form-control kw" value="{{ kw or ''}}">
+                  <div class="input-group-append">
+                      <button class="btn btn-outline-secondary" type="button" id="btn_search">찾기</button>
+                  </div>
+              </div>
+          </div>
+      </div>
+  </div> -->
+
+  <!-- 테이블 모달 버튼들 -->
+
+</div>
+<!-- ############# 전기 사용량 ######################-->
+<h4>전기 사용량</h4>
+      <table class="table">
+        <thead>
+          <tr class="text-center table-info">
+              <th></th>
+              <th></th>
+              <th></th>
+              <th colspan="13">사용량</th>
+
+          </tr>
+          <tr class="text-center table-info">
+            <th>번호</th>
+            <th>사무실 번호</th>
+            <th>사용년도</th>
+            <th>1월</th>
+            <th>2월 </th>
+            <th>3월</th>
+            <th>4월 </th>
+            <th>5월 </th>
+            <th>6월 </th>
+            <th>7월 </th>
+            <th>8월 </th>
+            <th>9월 </th>
+            <th>10월 </th>
+            <th>11월 </th>
+            <th>12월 </th>
+            <th>총합계</th>
+        </tr>
+        </thead>
+        <tbody>
+          {% if elec_use %}
+          {% for elec in elec_use.items %}
+          <tr class="text-center">
+              <td>{{ elec.no }}</td>
+              <td>{{ elec.room_no }}</td>
+              <td>{{ elec.use_year }}</td> 
+              <td>{{ elec.use_jan }}</td>
+              <td>{{ elec.use_feb }}</td>
+              <td>{{ elec.use_mar }}</td>
+              <td>{{ elec.use_apr }}</td>
+              <td>{{ elec.use_may }}</td>
+              <td>{{ elec.use_jun }}</td>
+              <td>{{ elec.use_jul }}</td>
+              <td>{{ elec.use_aug }}</td>
+              <td>{{ elec.use_sep }}</td>
+              <td>{{ elec.use_oct }}</td>
+              <td>{{ elec.use_nov }}</td>
+              <td>{{ elec.use_dec }}</td>  
+              <td>{{ elec.total }}</td>  
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr>
+              <td colspan="30">데이터가 없습니다.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+
+      <!-- 전기 사용량 페이징 -->
+      <ul class="pagination justify-content-center">
+        {% if elec_use.has_prev %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('co2._details', page_elec=elec_use.prev_num, page_vehicle=page_vehicle, page_water=page_water, page_co2=page_co2, kw=kw) }}">이전</a>
+        </li>
+        {% endif %}
+        {% for page_num in elec_use.iter_pages() %}
+        <li class="page-item {% if page_num == elec_use.page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for('co2._details', page_elec=page_num, page_vehicle=page_vehicle, page_water=page_water, page_co2=page_co2, kw=kw) }}">{{ page_num }}</a>
+        </li>
+        {% endfor %}
+        {% if elec_use.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('co2._details', page_elec=elec_use.next_num, page_vehicle=page_vehicle, page_water=page_water, page_co2=page_co2, kw=kw) }}">다음</a>
+        </li>
+        {% endif %}
+      </ul>
+
+
+
+<!-- ############# 수도 사용량 ######################-->
+<h4>수도 사용량</h4>
+<table class="table">
+  <thead>
+    <tr class="text-center table-info">
+        <th></th>
+        <th></th>
+        <th></th>
+        <th colspan="13">사용량</th>
+
+    </tr>
+    <tr class="text-center table-info">
+      <th>번호</th>
+      <th>사무실 번호</th>
+      <th>사용년도</th>
+      <th>1월</th>
+      <th>2월 </th>
+      <th>3월</th>
+      <th>4월 </th>
+      <th>5월 </th>
+      <th>6월 </th>
+      <th>7월 </th>
+      <th>8월 </th>
+      <th>9월 </th>
+      <th>10월 </th>
+      <th>11월 </th>
+      <th>12월 </th>
+      <th>총합계</th>
+  </tr>
+  </thead>
+  <tbody>
+    {% if water_use %}
+    {% for water in water_use.items %}
+    <tr class="text-center">
+        <td>{{ water.no }}</td>
+        <td>{{ water.room_no }}</td>
+        <td>{{ water.use_year }}</td> 
+        <td>{{ water.use_jan }}</td>
+        <td>{{ water.use_feb }}</td>
+        <td>{{ water.use_mar }}</td>
+        <td>{{ water.use_apr }}</td>
+        <td>{{ water.use_may }}</td>
+        <td>{{ water.use_jun }}</td>
+        <td>{{ water.use_jul }}</td>
+        <td>{{ water.use_aug }}</td>
+        <td>{{ water.use_sep }}</td>
+        <td>{{ water.use_oct }}</td>
+        <td>{{ water.use_nov }}</td>
+        <td>{{ water.use_dec }}</td>  
+        <td>{{ water.total }}</td>  
+    </tr>
+    {% endfor %}
+    {% else %}
+    <tr>
+        <td colspan="30">데이터가 없습니다.</td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+
+<!-- 수도 사용량 페이징 -->
+<ul class="pagination justify-content-center">
+  {% if water_use.has_prev %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_water=water_use.prev_num, page_vehicle=page_vehicle, page_elec=page_elec, page_co2=page_co2, kw=kw) }}">이전</a>
+  </li>
+  {% endif %}
+  {% for page_num in water_use.iter_pages() %}
+  <li class="page-item {% if page_num == water_use.page %}active{% endif %}">
+    <a class="page-link" href="{{ url_for('co2._details', page_water=page_num, page_vehicle=page_vehicle, page_elec=page_elec, page_co2=page_co2, kw=kw) }}">{{ page_num }}</a>
+  </li>
+  {% endfor %}
+  {% if water_use.has_next %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_water=water_use.next_num, page_vehicle=page_vehicle, page_elec=page_elec, page_co2=page_co2, kw=kw) }}">다음</a>
+  </li>
+  {% endif %}
+</ul>
+
+<!-- ############# 차량 이동거리 ######################-->
+<h4>차량 이동거리</h4>
+<button type="button" class="btn btn-primary" data-toggle="modal" data-target="#regCarModal">차량등록</button>
+<table class="table">
+  <thead>
+    <tr class="text-center table-info">
+        <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
+        <th></th>
+        <th colspan="13">이동거리</th>
+
+    </tr>
+    <tr class="text-center table-info">
+      <th>번호</th>
+      <th>차량번호</th>
+      <th>차량명</th>
+      <th>유종</th>
+      <th>사용년도</th>
+      <th>1월</th>
+      <th>2월 </th>
+      <th>3월</th>
+      <th>4월 </th>
+      <th>5월 </th>
+      <th>6월 </th>
+      <th>7월 </th>
+      <th>8월 </th>
+      <th>9월 </th>
+      <th>10월 </th>
+      <th>11월 </th>
+      <th>12월 </th>
+      <th>총합계</th>
+  </tr>
+  </thead>
+  <tbody>
+    {% if vehicle_use %}
+    {% for car in vehicle_use.items %}
+    <tr class="text-center">
+        <td>{{ car.no }}</td>
+        <td>{{ car.car_no }}</td>
+        <td>{{ car.car_name }}</td>
+        <td>{{ car.car_fuel }}</td>
+        <td>{{ car.use_year }}</td> 
+        <td>{{ car.use_jan }}</td>
+        <td>{{ car.use_feb }}</td>
+        <td>{{ car.use_mar }}</td>
+        <td>{{ car.use_apr }}</td>
+        <td>{{ car.use_may }}</td>
+        <td>{{ car.use_jun }}</td>
+        <td>{{ car.use_jul }}</td>
+        <td>{{ car.use_aug }}</td>
+        <td>{{ car.use_sep }}</td>
+        <td>{{ car.use_oct }}</td>
+        <td>{{ car.use_nov }}</td>
+        <td>{{ car.use_dec }}</td>  
+        <td>{{ car.total }}</td>  
+    </tr>
+    {% endfor %}
+    {% else %}
+    <tr>
+        <td colspan="30">데이터가 없습니다.</td>
+    </tr>
+    {% endif %}
+  </tbody>
+</table>
+
+
+<!-- 차량 이동 거리 페이징 -->
+<ul class="pagination justify-content-center">
+  {% if vehicle_use.has_prev %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_vehicle=vehicle_use.prev_num, page_elec=page_elec, page_water=page_water, page_co2=page_co2, kw=kw) }}">이전</a>
+  </li>
+  {% endif %}
+  {% for page_num in vehicle_use.iter_pages() %}
+  <li class="page-item {% if page_num == vehicle_use.page %}active{% endif %}">
+    <a class="page-link" href="{{ url_for('co2._details', page_vehicle=page_num, page_elec=page_elec, page_water=page_water, page_co2=page_co2, kw=kw) }}">{{ page_num }}</a>
+  </li>
+  {% endfor %}
+  {% if vehicle_use.has_next %}
+  <li class="page-item">
+    <a class="page-link" href="{{ url_for('co2._details', page_vehicle=vehicle_use.next_num, page_elec=page_elec, page_water=page_water, page_co2=page_co2, kw=kw) }}">다음</a>
+  </li>
+  {% endif %}
+</ul>
+
+
+
+
+  </div>
+
+  <form id="searchForm" method="get" action="{{ url_for('co2.admin') }}">
+    <input type="hidden" id="kw" name="kw" value="{{ kw or '' }}">
+    <input type="hidden" id="page" name="page_co2" value="{{ page_co2 }}">
+    <input type="hidden" id="page_elec" name="page_elec" value="{{ page_elec }}">
+    <input type="hidden" id="page_water" name="page_water" value="{{ page_water }}">
+    <input type="hidden" id="page_vehicle" name="page_vehicle" value="{{ page_vehicle }}">
+    <input type="hidden" id="so" name="so" value="{{ so }}">
+  </form>
+
+
+  <!-- 전기 사용량 모달 -->
+<div class="modal fade" id="elecModal" tabindex="-1" role="dialog" aria-labelledby="elecModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="elecModalLabel">전기 사용량 입력</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 전기 사용량 테이블 -->
+        <!-- 여기에 전기 사용량 데이터를 포함합니다. -->
+        <table class="table table-striped">
+          <thead>
+              <tr class="text-center table-info">
+                  <th>년월선택</th>
+                  <th>201호</th>
+                  <th>202호</th>
+                  <th>203호</th>
+                  <th>204호</th>
+                  <th>205호</th>
+                  <th>206호</th>
+                  <th>207호</th>
+                  <th>208호</th>
+                  <th>209호</th>
+                  <th>210호</th>
+              </tr>
+          </thead>
+          <tbody>
+            <tr class="text-center">
+                <td>
+                    <select id="elecYearMonth" class="form-control" style="width: 120px;">
+                        <!-- 연월 선택 옵션 -->
+                        {% for offset in range(-12, 13) %}
+                            {% set target_date = current_date.replace(month=(current_date.month + offset - 1) % 12 + 1, year=current_date.year + (current_date.month + offset - 1) // 12) %}
+                            <option value="{{ target_date.year }}-{{ '%02d' % target_date.month }}" 
+                                    {% if target_date.year == selected_year and target_date.month == selected_month %}selected{% endif %}>
+                                {{ target_date.year }}년 {{ target_date.month }}월
+                            </option>
+                        {% endfor %}
+                    </select>
+                </td>
+                {% for room_no in range(201, 211) %}
+                <td>
+                    <input type="text" id="elec_prev_{{ room_no }}" class="form-control" readonly>
+                    <input type="text" id="elec_current_{{ room_no }}" class="form-control">
+                    <input type="text" id="elec_difference_{{ room_no }}" class="form-control" readonly>
+                </td>
+                {% endfor %}
+               
+            </tr>
+        </tbody>
+        
+      </table>
+      
+    
+    
+          
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+        <button type="button" class="btn btn-primary" id="elecSave">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+   <!-- 수도 사용량 모달 -->
+<div class="modal fade" id="waterModal" tabindex="-1" role="dialog" aria-labelledby="waterModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="waterModalLabel">수도 사용량 입력</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 수도사용량 테이블 -->
+        <table class="table table-striped">
+          <thead>
+              <tr class="text-center table-info">
+                  <th>년월선택</th>
+                  <th>201호</th>
+                  <th>202호</th>
+                  <th>203호</th>
+                  <th>204호</th>
+                  <th>205호</th>
+                  <th>206호</th>
+                  <th>207호</th>
+                  <th>208호</th>
+                  <th>209호</th>
+                  <th>210호</th>
+              </tr>
+          </thead>
+          <tbody>
+            <tr class="text-center">
+                <td>
+                    <select id="waterYearMonth" class="form-control" style="width: 120px;">
+                        <!-- 연월 선택 옵션 -->
+                        {% for offset in range(-12, 13) %}
+                            {% set target_date = current_date.replace(month=(current_date.month + offset - 1) % 12 + 1, year=current_date.year + (current_date.month + offset - 1) // 12) %}
+                            <option value="{{ target_date.year }}-{{ '%02d' % target_date.month }}" 
+                                    {% if target_date.year == selected_year and target_date.month == selected_month %}selected{% endif %}>
+                                {{ target_date.year }}년 {{ target_date.month }}월
+                            </option>
+                        {% endfor %}
+                    </select>
+                </td>
+                {% for room_no in range(201, 211) %}
+                <td>
+                    <input type="text" id="water_prev_{{ room_no }}" class="form-control" readonly>
+                    <input type="text" id="water_current_{{ room_no }}" class="form-control">
+                    <input type="text" id="water_difference_{{ room_no }}" class="form-control" readonly>
+                </td>
+                {% endfor %}
+               
+            </tr>
+        </tbody>
+        
+      </table>
+      
+    
+    
+          
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+        <button type="button" class="btn btn-primary" id="waterSave">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- 폐기물 처리량 모달 -->
+ <div class="modal fade" id="wasteModal" tabindex="-1" role="dialog" aria-labelledby="wasteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="wasteModalLabel">폐기물 사용량 입력</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 수도사용량 테이블 -->
+        <table class="table table-striped">
+          <thead>
+              <tr class="text-center table-info">
+                  <th>년월선택</th>
+                  <th>201호</th>
+                  <th>202호</th>
+                  <th>203호</th>
+                  <th>204호</th>
+                  <th>205호</th>
+                  <th>206호</th>
+                  <th>207호</th>
+                  <th>208호</th>
+                  <th>209호</th>
+                  <th>210호</th>
+              </tr>
+          </thead>
+          <tbody>
+            <tr class="text-center">
+                <td>
+                    <select id="wasteYearMonth" class="form-control" style="width: 120px;">
+                        <!-- 연월 선택 옵션 -->
+                        {% for offset in range(-12, 13) %}
+                            {% set target_date = current_date.replace(month=(current_date.month + offset - 1) % 12 + 1, year=current_date.year + (current_date.month + offset - 1) // 12) %}
+                            <option value="{{ target_date.year }}-{{ '%02d' % target_date.month }}" 
+                                    {% if target_date.year == selected_year and target_date.month == selected_month %}selected{% endif %}>
+                                {{ target_date.year }}년 {{ target_date.month }}월
+                            </option>
+                        {% endfor %}
+                    </select>
+                </td>
+                {% for room_no in range(201, 211) %}
+                <td>
+                    <input type="text" id="waste_prev_{{ room_no }}" class="form-control" readonly>
+                    <input type="text" id="waste_current_{{ room_no }}" class="form-control">
+                    <input type="text" id="waste_difference_{{ room_no }}" class="form-control" readonly>
+                </td>
+                {% endfor %}
+               
+            </tr>
+        </tbody>
+        
+      </table>
+      
+    
+    
+          
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+        <button type="button" class="btn btn-primary" id="wasteSave">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 차량 이동 거리 모달 -->
+<div class="modal fade" id="vehicleModal" tabindex="-1" role="dialog" aria-labelledby="vehicleModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="vehicleModalLabel">차량 이동거리 입력</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 차량 테이블 -->
+        <table class="table table-striped">
+          <thead>
+            <tr class="text-center table-info">
+              <th>년월선택</th>
+              {% for vehicle in vehicle_use %}
+              <th>{{ vehicle.car_no }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="text-center">
+              <td>
+                <select id="vehicleYearMonth" class="form-control" style="width: 120px;">
+                  <!-- 연월 선택 옵션 -->
+                  {% for offset in range(-12, 13) %}
+                      {% set target_date = current_date.replace(month=(current_date.month + offset - 1) % 12 + 1, year=current_date.year + (current_date.month + offset - 1) // 12) %}
+                      <option value="{{ target_date.year }}-{{ '%02d' % target_date.month }}" 
+                              {% if target_date.year == selected_year and target_date.month == selected_month %}selected{% endif %}>
+                          {{ target_date.year }}년 {{ target_date.month }}월
+                      </option>
+                  {% endfor %}
+                </select>
+              </td>
+              {% for vehicle in vehicle_use %}
+              <td>
+                <input type="text" id="vehicle_prev_{{ vehicle.car_no }}" class="form-control" readonly>
+                <input type="text" id="vehicle_current_{{ vehicle.car_no }}" class="form-control">
+                <input type="text" id="vehicle_difference_{{ vehicle.car_no }}" class="form-control" readonly>
+              </td>
+              {% endfor %}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+        <button type="button" class="btn btn-primary" id="vehicleSave">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- 차량등록 모달 -->
+<div class="modal fade" id="regCarModal" tabindex="-1" role="dialog" aria-labelledby="regCarModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="gasModalLabel">차량번호 등록</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 차량번호 입력 -->
+        <div class="form-group">
+          <label for="vehicle_no_input" class="btn btn-primary">차량번호</label>
+          <input type="text" id="car_no" class="form-control" placeholder="차량번호를 입력하세요">
+        </div>
+        <div class="form-group">
+          <label for="vehicle_no_input" class="btn btn-primary">차량명</label>
+          <input type="text" id="car_name" class="form-control" placeholder="차량명를 입력하세요">
+        </div>
+      
+        <!-- 유종 선택 -->
+        <div class="form-group">
+          <label for="fuel_type_select" class="btn btn-primary">유종 선택</label>
+          <select id="fuel_type_select" class="form-control">
+            <option value="휘발유" selected>가솔린</option>
+            <option value="경유">디젤</option>
+          </select>
+        </div>
+
+         <!-- 연도 선택 -->
+         <div class="form-group">
+          <label for="use_year_select" class="btn btn-primary">연도 선택</label>
+          <select id="use_year_select" class="form-control">
+            <option value="2023" >2023년</option>
+            <option value="2024" selected>2024년</option>
+            <option value="2025"> 2025년</option>
+            <option value="2026">2026년</option>
+            <option value="2027">2027년</option>
+            <option value="2028">2028년</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="vehicle_no_input" class="btn btn-primary">최초운행거리</label>
+          <input type="text" id="acum_ref" class="form-control" placeholder="최초운행킬로수를 입력하세요">
+        </div>       
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+        <button type="button" class="btn btn-primary" id = 'regVehicle'>저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+
+  {% endblock %}
+
+
+
+{% block script %}
+<script type="text/javascript">
+    $(document).ready(function(){
+        $("#co2").on('click', function(event){
+            event.preventDefault(); // 링크의 기본 동작을 막습니다.
+            var pageNum = $(this).data("page");
+            if(pageNum) {
+                $("#page").val(pageNum);
+                $("#searchForm").submit();
+            }
+        });
+
+        $("#elec").on('click', function(event){
+            event.preventDefault(); // 링크의 기본 동작을 막습니다.
+            var pageNum = $(this).data("page");
+            if(pageNum) {
+                $("#page_elec").val(pageNum);
+                $("#searchForm").submit();
+            }
+        });
+
+
+
+        $("#btn_search").on('click', function(){
+            $("#kw").val($(".kw").val());
+            $("#page").val(1); // 검색 버튼을 클릭할 경우 1페이지로 리셋
+            $("#searchForm").submit();
+        });
+
+        $(".so").on('change', function(){
+            $("#so").val($(this).val());
+            $("#page").val(1); // 정렬 변경 시 1페이지로 리셋
+            $("#searchForm").submit();
+        });
+    });
+</script>
+
+
+<script>
+  //################### 전기 사용량 리딩 및 업데이트 ######################################3
+  document.addEventListener('DOMContentLoaded', function() {
+    const yearMonthSelector = document.getElementById('elecYearMonth');
+
+    // Function to update the fields when the year or month changes
+    function elecUpdate() {
+        const [year, month] = yearMonthSelector.value.split('-');
+        const prevMonth = month == 1 ? 12 : month - 1;
+        const prevYear = month == 1 ? year - 1 : year;
+
+        // Perform AJAX request to get the data for the selected year/month and the previous month
+        fetch(`/co2/get_elec_data?year=${year}&month=${month}&prev_year=${prevYear}&prev_month=${prevMonth}`)
+            .then(response => response.json())
+            .then(data => {
+                let totalSum = 0;
+                for (let room_no = 201; room_no <= 210; room_no++) {
+                    const prevField = document.getElementById(`elec_prev_${room_no}`);
+                    const currentField = document.getElementById(`elec_current_${room_no}`);
+                    const diffField = document.getElementById(`elec_difference_${room_no}`);
+
+                    const prevValue = parseFloat(data[`elec_prev_${room_no}`]) || 0;
+                    const currentValue = parseFloat(data[`elec_current_${room_no}`]) || 0;
+
+                    prevField.value = prevValue;
+                    currentField.value = currentValue;
+                    diffField.value = currentValue - prevValue;
+
+                    totalSum += parseFloat(diffField.value) || 0;
+                }
+                //document.getElementById('total_sum').value = totalSum;
+            });
+    }
+
+    yearMonthSelector.addEventListener('change', elecUpdate);
+    elecUpdate(); // Trigger the update on page load
+
+    // When the user modifies a current value, update the difference
+    document.querySelectorAll('[id^="elec_current_"]').forEach(input => {
+        input.addEventListener('input', function() {
+            const room_no = this.id.split('_')[2];        
+            const prevValue = parseFloat(document.getElementById(`elec_prev_${room_no}`).value) || 0;
+            const currentValue = parseFloat(this.value) || 0;
+            const diffField = document.getElementById(`elec_difference_${room_no}`);
+            diffField.value = currentValue - prevValue;
+
+            // Reset the border color if the input is valid
+            if (diffField.value >= 0) {
+                this.style.borderColor = '';
+            }
+        });
+    });
+
+    document.getElementById('elecSave').addEventListener('click', function() {
+        let isValid = true;
+
+        // Check for any negative differences
+        for (let room_no = 201; room_no <= 210; room_no++) {
+            const diffField = document.getElementById(`elec_difference_${room_no}`);
+            const currentField = document.getElementById(`elec_current_${room_no}`);
+            if (parseFloat(diffField.value) < 0) {
+                alert(`오류: ${room_no}호의 현재 사용량이 잘못되었습니다.`);
+                currentField.style.borderColor = 'red';
+                currentField.focus();
+                isValid = false;
+                break; // Stop the loop if an error is found
+            }
+        }
+
+        if (isValid && confirm("정말 저장하시겠습니까?")) {
+            const yearMonthSelector = document.getElementById('elecYearMonth').value;
+            const [selected_year, selected_month] = yearMonthSelector.split('-');
+
+            let saveData = {
+                'selected_year': selected_year,
+                'selected_month': selected_month
+            };
+
+            for (let room_no = 201; room_no <= 210; room_no++) {
+                saveData[`elec_current_${room_no}`] = document.getElementById(`elec_current_${room_no}`).value;
+            }
+
+            fetch('/co2/save_elec_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(saveData),
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = '/co2/admin';
+                } else {
+                    alert('데이터 저장에 실패했습니다.');
+                }
+            });
+        }
+    });
+
+});
+
+ //################### 수도 사용량 리딩 및 업데이트 ######################################3
+ document.addEventListener('DOMContentLoaded', function() {
+    const yearMonthSelector = document.getElementById('waterYearMonth');
+
+    // Function to update the fields when the year or month changes
+    function waterUpdate() {
+        const [year, month] = yearMonthSelector.value.split('-');
+        const prevMonth = month == 1 ? 12 : month - 1;
+        const prevYear = month == 1 ? year - 1 : year;
+
+        // Perform AJAX request to get the data for the selected year/month and the previous month
+        fetch(`/co2/get_water_data?year=${year}&month=${month}&prev_year=${prevYear}&prev_month=${prevMonth}`)
+            .then(response => response.json())
+            .then(data => {
+                let totalSum = 0;
+                for (let room_no = 201; room_no <= 210; room_no++) {
+                    const prevField = document.getElementById(`water_prev_${room_no}`);
+                    const currentField = document.getElementById(`water_current_${room_no}`);
+                    const diffField = document.getElementById(`water_difference_${room_no}`);
+
+                    const prevValue = parseFloat(data[`water_prev_${room_no}`]) || 0;
+                    const currentValue = parseFloat(data[`water_current_${room_no}`]) || 0;
+
+                    prevField.value = prevValue;
+                    currentField.value = currentValue;
+                    diffField.value = currentValue - prevValue;
+
+                    totalSum += parseFloat(diffField.value) || 0;
+                }
+                //document.getElementById('total_sum').value = totalSum;
+            });
+    }
+
+    yearMonthSelector.addEventListener('change', waterUpdate);
+    waterUpdate(); // Trigger the update on page load
+
+    // 현재값 입력 시 차이 업데이트
+    document.querySelectorAll('[id^="water_current_"]').forEach(input => {
+        input.addEventListener('input', function() {
+            const room_no = this.id.split('_')[2];
+            const prevValue = parseFloat(document.getElementById(`water_prev_${room_no}`).value) || 0;
+            const currentValue = parseFloat(this.value) || 0;
+            const diffField = document.getElementById(`water_difference_${room_no}`);
+            diffField.value = currentValue - prevValue;
+
+            // Reset the border color if the input is valid
+            if (diffField.value >= 0) {
+                this.style.borderColor = '';
+            }
+        });
+    });
+
+    document.getElementById('waterSave').addEventListener('click', function() {
+        let isValid = true;
+
+        // Check for any negative differences
+        for (let room_no = 201; room_no <= 210; room_no++) {
+            const diffField = document.getElementById(`water_difference_${room_no}`);
+            const currentField = document.getElementById(`water_current_${room_no}`);
+            if (parseFloat(diffField.value) < 0) {
+                alert(`오류: ${room_no}호의 현재 사용량이 잘못되었습니다.`);
+                currentField.style.borderColor = 'red';
+                currentField.focus();
+                isValid = false;
+                break; // Stop the loop if an error is found
+            }
+        }
+
+        if (isValid && confirm("정말 저장하시겠습니까?")) {
+            const yearMonthSelector = document.getElementById('waterYearMonth').value;
+            const [selected_year, selected_month] = yearMonthSelector.split('-');
+
+            let saveData = {
+                'selected_year': selected_year,
+                'selected_month': selected_month
+            };
+
+            for (let room_no = 201; room_no <= 210; room_no++) {
+                saveData[`water_current_${room_no}`] = document.getElementById(`water_current_${room_no}`).value;
+            }
+
+            fetch('/co2/save_water_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(saveData),
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = '/co2/admin';
+                } else {
+                    alert('데이터 저장에 실패했습니다.');
+                }
+            });
+        }
+    });
+
+});
+
+//################### 차량 이동거리 리딩 및 업데이트 ######################################3
+document.addEventListener('DOMContentLoaded', function() {
+    const yearMonthSelector = document.getElementById('vehicleYearMonth');
+
+    // Function to update the fields when the year or month changes
+    function vehicleUpdate() {
+        const [year, month] = yearMonthSelector.value.split('-');
+        const prevMonth = month == 1 ? 12 : month - 1;
+        const prevYear = month == 1 ? year - 1 : year;
+
+        // Perform AJAX request to get the data for the selected year/month and the previous month
+        fetch(`/co2/get_vehicle_data?year=${year}&month=${month}&prev_year=${prevYear}&prev_month=${prevMonth}`)
+            .then(response => response.json())
+            .then(data => {
+                let totalSum = 0;
+                document.querySelectorAll('[id^="vehicle_current_"]').forEach(input => {
+                    const car_no = input.id.split('_')[2];
+                    const prevField = document.getElementById(`vehicle_prev_${car_no}`);
+                    const diffField = document.getElementById(`vehicle_difference_${car_no}`);
+
+                    const prevValue = parseFloat(data[`vehicle_prev_${car_no}`]) || 0;
+                    const currentValue = parseFloat(data[`vehicle_current_${car_no}`]) || 0;
+
+                    prevField.value = prevValue;
+                    input.value = currentValue;
+                    diffField.value = currentValue - prevValue;
+
+                    totalSum += parseFloat(diffField.value) || 0;
+                });
+                //document.getElementById('total_sum').value = totalSum;
+            });
+    }
+
+    yearMonthSelector.addEventListener('change', vehicleUpdate);
+    vehicleUpdate(); // Trigger the update on page load
+
+    // 현재값 입력 시 차이 업데이트
+    document.querySelectorAll('[id^="vehicle_current_"]').forEach(input => {
+        input.addEventListener('input', function() {
+            const car_no = this.id.split('_')[2];
+            const prevValue = parseFloat(document.getElementById(`vehicle_prev_${car_no}`).value) || 0;
+            const currentValue = parseFloat(this.value) || 0;
+            const diffField = document.getElementById(`vehicle_difference_${car_no}`);
+            diffField.value = currentValue - prevValue;
+
+            // Reset the border color if the input is valid
+            if (diffField.value >= 0) {
+                this.style.borderColor = '';
+            }
+        });
+    });
+
+    document.getElementById('vehicleSave').addEventListener('click', function() {
+        let isValid = true;
+
+        // Check for any negative differences
+        document.querySelectorAll('[id^="vehicle_current_"]').forEach(input => {
+            const car_no = input.id.split('_')[2];
+            const diffField = document.getElementById(`vehicle_difference_${car_no}`);
+            const currentField = document.getElementById(`vehicle_current_${car_no}`);
+            if (parseFloat(diffField.value) < 0) {
+                alert(`오류: 차량 번호 ${car_no}의 현재 사용량이 잘못되었습니다.`);
+                currentField.style.borderColor = 'red';
+                currentField.focus();
+                isValid = false;
+                return; // Stop the loop if an error is found
+            }
+        });
+
+        if (isValid && confirm("정말 저장하시겠습니까?")) {
+            const yearMonthSelector = document.getElementById('vehicleYearMonth').value;
+            const [selected_year, selected_month] = yearMonthSelector.split('-');
+
+            let saveData = {
+                'selected_year': selected_year,
+                'selected_month': selected_month
+            };
+
+            document.querySelectorAll('[id^="vehicle_current_"]').forEach(input => {
+                const car_no = input.id.split('_')[2];
+                saveData[`vehicle_current_${car_no}`] = input.value;
+                console.log(saveData);
+            });
+
+            fetch('/co2/save_vehicle_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(saveData),
+            }).then(response => {
+                if (response.ok) {
+                    window.location.href = '/co2/admin';
+                } else {
+                    alert('데이터 저장에 실패했습니다.');
+                }
+            });
+        }
+    });
+});
+
+
+//############### 자동차 등록 #################################################
+document.getElementById('regVehicle').addEventListener('click', function() {
+    // 입력된 차량 번호, 차량명, 유종 정보를 가져옴
+    const vehicleNo = document.getElementById('car_no').value;
+    const vehicleName = document.getElementById('car_name').value;
+    const fuelType = document.getElementById('fuel_type_select').value;
+    const useYear = document.getElementById('use_year_select').value;
+    const acumRef = document.getElementById('acum_ref').value;
+
+    // 데이터 유효성 검사 (필요 시 추가 가능)
+    if (!vehicleNo || !vehicleName) {
+        alert('차량번호와 차량명을 입력해주세요.');
+        return;
+    }
+
+    // 서버로 데이터 전송
+    fetch('/co2/regvehicle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            vehicle_no: vehicleNo,
+            vehicle_name: vehicleName,
+            fuel_type: fuelType,
+            use_year : useYear,
+            acum_ref : acumRef
+        }),
+    })
+    .then(response => {
+        if (response.ok) {
+            alert('차량이 성공적으로 등록되었습니다.');
+            location.reload();  // 페이지를 새로고침하여 변경 사항을 반영
+        } else {
+            alert('차량 등록에 실패했습니다.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('서버와의 통신 중 오류가 발생했습니다.');
+    });
+});
+
+
+
+// //################### 폐기물 처리 리딩 및 업데이트 ######################################3
+// document.addEventListener('DOMContentLoaded', function() {
+//     const yearMonthSelector = document.getElementById('wasteYearMonth');
+
+//     // Function to update the fields when the year or month changes
+//     function wasteUpdate() {
+//         const [year, month] = yearMonthSelector.value.split('-');
+//         const prevMonth = month == 1 ? 12 : month - 1;
+//         const prevYear = month == 1 ? year - 1 : year;
+
+//         // Perform AJAX request to get the data for the selected year/month and the previous month
+//         fetch(`/co2/get_waste_data?year=${year}&month=${month}&prev_year=${prevYear}&prev_month=${prevMonth}`)
+//             .then(response => response.json())
+//             .then(data => {
+//                 let totalSum = 0;
+//                 for (let room_no = 201; room_no <= 210; room_no++) {
+//                     const prevField = document.getElementById(`waste_prev_${room_no}`);
+//                     const currentField = document.getElementById(`waste_current_${room_no}`);
+//                     const diffField = document.getElementById(`waste_difference_${room_no}`);
+
+//                     const prevValue = parseFloat(data[`waste_prev_${room_no}`]) || 0;
+//                     const currentValue = parseFloat(data[`waste_current_${room_no}`]) || 0;
+
+//                     prevField.value = prevValue;
+//                     currentField.value = currentValue;
+//                     diffField.value = currentValue - prevValue;
+
+//                     totalSum += parseFloat(diffField.value) || 0;
+//                 }
+//                 //document.getElementById('total_sum').value = totalSum;
+//             });
+//     }
+
+//     yearMonthSelector.addEventListener('change', wasteUpdate);
+//     wasteUpdate(); // Trigger the update on page load
+
+//     // 현재값 입력 시 차이 업데이트
+//     document.querySelectorAll('[id^="waste_current_"]').forEach(input => {
+//         input.addEventListener('input', function() {
+//             const room_no = this.id.split('_')[2];
+//             const prevValue = parseFloat(document.getElementById(`waste_prev_${room_no}`).value) || 0;
+//             const currentValue = parseFloat(this.value) || 0;
+//             const diffField = document.getElementById(`waste_difference_${room_no}`);
+//             diffField.value = currentValue - prevValue;
+
+//             // Reset the border color if the input is valid
+//             if (diffField.value >= 0) {
+//                 this.style.borderColor = '';
+//             }
+//         });
+//     });
+
+//     document.getElementById('wasteSave').addEventListener('click', function() {
+//         let isValid = true;
+
+//         // Check for any negative differences
+//         for (let room_no = 201; room_no <= 210; room_no++) {
+//             const diffField = document.getElementById(`waste_difference_${room_no}`);
+//             const currentField = document.getElementById(`waste_current_${room_no}`);
+//             if (parseFloat(diffField.value) < 0) {
+//                 alert(`오류: ${room_no}호의 현재 사용량이 잘못되었습니다.`);
+//                 currentField.style.borderColor = 'red';
+//                 currentField.focus();
+//                 isValid = false;
+//                 break; // Stop the loop if an error is found
+//             }
+//         }
+
+//         if (isValid && confirm("정말 저장하시겠습니까?")) {
+//             const yearMonthSelector = document.getElementById('wasteYearMonth').value;
+//             const [selected_year, selected_month] = yearMonthSelector.split('-');
+
+//             let saveData = {
+//                 'selected_year': selected_year,
+//                 'selected_month': selected_month
+//             };
+
+//             for (let room_no = 201; room_no <= 210; room_no++) {
+//                 saveData[`waste_current_${room_no}`] = document.getElementById(`waste_current_${room_no}`).value;
+//             }
+
+//             fetch('/co2/save_waste_data', {
+//                 method: 'POST',
+//                 headers: {
+//                     'Content-Type': 'application/json',
+//                 },
+//                 body: JSON.stringify(saveData),
+//             }).then(response => {
+//                 if (response.ok) {
+//                     window.location.href = '/co2/admin';
+//                 } else {
+//                     alert('데이터 저장에 실패했습니다.');
+//                 }
+//             });
+//         }
+//     });
+
+// });
+
+
+  </script>
+
+<!-- Bootstrap JS, Popper.js, and jQuery -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+{% endblock %}
+

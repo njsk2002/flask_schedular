@@ -1,0 +1,290 @@
+
+  {% extends 'base.html'%}
+  {% block content %}
+
+  <div class="container">
+    <div class="row  align-items-center">
+        <div class="col ">
+            <img src="{{ url_for('static', filename='images/icetech.png') }}" alt="Your Image" class="img-fluid" width="150" height="50">
+        </div>
+        <div class="col-8">
+            <h3 class="display-6 fw-normal mb-0">이산화탄소( CO<small>2</small> )배출량</h3>
+        </div>
+    </div>
+  </div>
+
+  <div class="pricing-header p-3 pb-md-4 mx-auto text-center position-relative">
+    <!-- 이미지와 제목을 같은 줄에 배치 -->
+    
+  
+    <p class="fs-5 text-muted">우리 아이스기술에서 배출하는 이산화탄소의 양은 얼마나 될까요?</p>
+
+    <div class="container my-2">
+      <div class="row g-3">
+          <!-- Weekly Sales Card -->
+          <div class="col-md-3">
+              <div class="card p-3 shadow-sm">
+                  <div class="card-body">
+                    <div class="d-flex align-items-center">
+                      <img src="{{ url_for('static', filename='images/green-1968591_1280.png') }}" alt="Sales Chart" class="img-fluid ms-2" width="50" height="50">
+                      <h5 class="card-title">누적 CO<small>2</small> 배출량 <span class="info-icon">?</span></h5>
+                     
+                  </div>                  
+                      <h2 class="card-text">{{ "{:,.0f}".format(sum_data.totals.total)}}<small class="text-muted fw-light small-text">kg/(누적)</small></h2>
+                      <p class="text-success fw-bold">[ 2024-01 - {{ data.current_data[0].use_date}} ]</p>
+                 
+                  </div>
+              </div>
+          </div>
+  
+          <!-- Total Order Card -->
+          <div class="col-md-3">
+            <div class="card p-3 shadow-sm">
+                <div class="card-body">
+                  <div class="d-flex align-items-center">
+                    <img src="{{ url_for('static', filename='images/wal.jpg') }}" alt="Sales Chart" class="img-fluid ms-2" width="50" height="50">
+                    <h5 class="card-title">CO<small>2</small> 배출량 <span class="info-icon">?</span></h5>
+                   
+                </div>                  
+                    <h2 class="card-text">{{ "{:,.0f}".format(data.current_data[0].use_total) }} <small class="text-muted fw-light small-text">kg/(월)</small></h2>
+                    <!-- <p class="text-success fw-bold">+3.5%</p> -->
+                    <p class="text-success fw-bold">[ {{ data.current_data[0].use_date}} 기준 ]</p>
+               
+                </div>
+            </div>
+        </div>
+  
+          <!-- Market Share Card -->
+          <div class="col-md-3">
+            <div class="card p-3 shadow-sm">
+                <div class="card-body">
+                  <div class="d-flex align-items-center">
+                    <img src="{{ url_for('static', filename='images/pay.jpg') }}" alt="Sales Chart" class="img-fluid ms-2" width="50" height="50">
+                    <h5 class="card-title">예상 탄소세<span class="info-icon">?</span></h5>         
+                  </div>                  
+                    <h2 class="card-text">{{ "{:,.0f}".format(sum_data.totals.total / 1000 * 40000) }}<small class="text-muted fw-light small-text">원/(누적)</small></h2>
+                    <p class="text-success fw-bold">[ t당 4만원 기준 ]</p>            
+                </div>
+            </div>
+        </div>
+  
+          <!-- Weather Card -->
+          <div class="col-md-3">
+            <div class="card p-3 shadow-sm">
+                <div class="card-body">
+                  <div class="d-flex align-items-center">
+                    <img src="{{ url_for('static', filename='images/namuicon2.png') }}" alt="Sales Chart" class="img-fluid ms-2" width="50" height="50">
+                    <h5 class="card-title">소나무 그루수<span class="info-icon">?</span></h5>
+                   
+                </div>                  
+                    <h2 class="card-text">{{ "{:,.0f}".format(sum_data.totals.total / 9.2) }}<small class="text-muted fw-light small-text">그루/년</small></h2>
+                    
+                    <p class="text-success fw-bold">[ 소나무 1그루당 연간 9.2㎏ 탄소흡수 ]</p>
+               
+                </div>
+            </div>
+        </div>
+      </div>
+  </div>
+</div>
+
+
+<div id="contentCarousel" class="carousel slide" data-bs-ride="carousel" >
+  <div class="carousel-inner" >
+    
+    <!-- 첫 번째 슬라이드 (Container) -->
+    <div class="carousel-item active">
+      <div class="container py-3">
+        <h2>{{ data.current_data[0].use_date}} 사용량 및  CO<small>2</small> 배출량</h2>
+        <div class="row row-cols-1 row-cols-md-5 mb-5 text-center">
+          <div class="col">
+            <div class="card mb-4 rounded-3 shadow-sm border-primary">
+              <div class="card-header py-3 text-white bg-primary border-primary">
+                <h4 class="my-0 fw-normal">전력</h4>
+              </div>
+              <div class="card-body">
+                <h3 class="styled-heading">전기사용량</h3>
+                <h2 class="card-title pricing-card-title border-blue">{{ data.current_data[0].use_elec}}<small class="text-muted fw-light small-text"> kwh/월</small></h2>
+          
+                <!-- 회색 가로줄 추가 -->
+                <hr class="styled-divider">
+          
+                <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+                <h1 class="card-title pricing-card-title border-orange">{{ data.current_data[0].co2_elec}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+                <h5><small class="text-muted fw-light small-text">전기 CO₂ 발생량 | (전기 사용량 * 0.4781)</small></h5>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col">
+            <div class="card mb-4 rounded-3 shadow-sm">
+              <div class="card-header py-3">
+                <h4 class="my-0 fw-normal">수도</h4>
+              </div>
+              <div class="card-body">
+                <h3 class="styled-heading">수도사용량</h3>
+                <h1 class="card-title pricing-card-title border-blue">{{ data.current_data[0].use_water}}<small class="text-muted fw-light small-text"> m&sup3/월</small></h1>
+          
+                <!-- 회색 가로줄 추가 -->
+                <hr class="styled-divider">
+          
+                <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+                <h1 class="card-title pricing-card-title border-orange">{{ data.current_data[0].co2_water}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+                <h5><small class="text-muted fw-light small-text">수도 CO₂ 발생량 | (수도 사용량 * 0.237)</small></h5>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card mb-4 rounded-3 shadow-sm border-primary">
+              <div class="card-header py-3 text-white bg-primary border-primary">
+                <h4 class="my-0 fw-normal">폐기물</h4>
+              </div>
+              <div class="card-body">
+                <h3 class="styled-heading">폐기물사용량</h3>
+                <h1 class="card-title pricing-card-title border-blue">{{ data.current_data[0].use_waste}}<small class="text-muted fw-light small-text"> kg/월</small></h1>
+          
+                <!-- 회색 가로줄 추가 -->
+                <hr class="styled-divider">
+          
+                <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+                <h1 class="card-title pricing-card-title border-orange">{{ data.current_data[0].co2_waste}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+                <h5><small class="text-muted fw-light small-text">폐기물 CO₂ 발생량 | (폐기물 사용량 * 0.5573)</small></h5>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card mb-4 rounded-3 shadow-sm">
+              <div class="card-header py-3">
+                <h4 class="my-0 fw-normal">교통</h4>
+              </div>
+              <div class="card-body">
+                <h3 class="styled-heading">이동거리</h3>
+                <h2 class="card-title pricing-card-title border-blue">{{ data.current_data[0].use_vehicle}}<small class="text-muted fw-light small-text"> km/월</small></h2>
+          
+                <!-- 회색 가로줄 추가 -->
+                <hr class="styled-divider">
+          
+                <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+                <h1 class="card-title pricing-card-title border-orange">{{ data.current_data[0].co2_vehicle}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+                <h6><small class="text-muted fw-light small-text">교통 CO₂ 발생량 | 경유 : (이동거리 / 15.35 * 2.582)</small></h6>
+              </div>
+            </div>
+          </div>
+          <div class="col">
+            <div class="card mb-4 rounded-3 shadow-sm border-primary">
+              <div class="card-header py-3 text-white bg-primary border-primary">
+                <h4 class="my-0 fw-normal">제조가스</h4>
+              </div>
+              <div class="card-body">
+                <h3 class="styled-heading">가스사용량</h3>
+                <h1 class="card-title pricing-card-title border-blue">{{ data.current_data[0].use_gas}}<small class="text-muted fw-light small-text"> m&sup3/월</small></h1>
+          
+                <!-- 회색 가로줄 추가 -->
+                <hr class="styled-divider">
+          
+                <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+                <h1 class="card-title pricing-card-title border-orange">{{ data.current_data[0].co2_gas}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+                <h5><small class="text-muted fw-light small-text">가스 CO₂ 발생량 | (가스 사용량 * 2.176)</small></h5>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+  <!-- 두 번째 슬라이드 (Stacked Bar Chart) -->
+  <div class="carousel-item">
+    <div class="container">
+      <h1 class="h2">월별 사용량 그래프</h1>
+    </div>
+    <div class="container" style="max-width: 1200px;">
+      <canvas class="my-4 w-100" id="stackedBarChart" width="900" height="350"></canvas>
+     </div>
+  </div>
+
+  <!-- 세 번째 슬라이드 (Line Chart) -->
+  <div class="carousel-item">
+    <div class="container">
+      <h1 class="h2">월별 사용량 그래프</h1>
+    </div>   
+    <div class=" container" style="max-width: 1200px; ">
+    <canvas class="my-4 w-100" id="myChart" width="900" height="350"></canvas>
+    </div>
+  </div>
+
+
+  <!-- 네 번째 슬라이드 (Image) -->
+<div class="carousel-item">
+  <div class="container">
+    <h1 class="h2">CO<small>2</small> 줄이기</h1>
+  </div>   
+  <div class="container" style="max-width: 1500px; max-height: 500px;">
+    <img src="{{ url_for('static', filename='images/carbon-8132649_1920.jpg') }}" alt="CO2 줄이기 이미지" class="img-fluid" width="1500" height="350">
+  </div>
+</div>
+</div>
+
+
+<!-- 슬라이드 컨트롤 버튼 -->
+<button class="carousel-control-prev custom-prev"  type="button" data-bs-target="#contentCarousel" data-bs-slide="prev">
+  <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+  <!-- <span class="visually-hidden">이전</span> -->
+</button>
+<button class="carousel-control-next custom-next" type="button" data-bs-target="#contentCarousel" data-bs-slide="next">
+  <span class="carousel-control-next-icon" aria-hidden="true"></span>
+  <!-- <span class="visually-hidden">다음</span> -->
+</button>
+
+</div>
+
+<div style="height: 100px;"></div>
+
+ 
+  <div class="table-responsive">
+    <div class="container">
+    <h2>항목별 ( CO<small>2</small> ) 배출량(Kg/월)</h2>
+    </div>
+    <table class="table table-striped table-sm">
+      <thead>
+        <tr>
+          <th scope="col">년월</th>
+          <th scope="col">전력</th>
+          <th scope="col">수도</th>
+          <th scope="col">폐기물</th>
+          <th scope="col">교통</th>
+          <th scope="col">제조가스</th>
+          <th scope="col">합계</th>
+        </tr>
+      </thead>
+      <tbody id="table-body1">
+        {% if data %}
+        {% for index in range(data['labels']|length) %}
+        <tr class="text-center">
+            <td>{{ data.labels[index] }}</td>
+            <td>{{ data.co2_elec[index] }}</td>
+            <td>{{ data.co2_water[index] }}</td> 
+            <td>{{ data.co2_waste[index] }}</td>
+            <td>{{ data.co2_vehicle[index] }}</td>
+            <td>{{ data.co2_gas[index] }}</td>
+            <td>{{ (data.co2_elec[index] + data.co2_water[index] + data.co2_waste[index] + data.co2_vehicle[index] + data.co2_gas[index]) | round(2) }}</td>
+        </tr>
+        {% endfor %}
+        {% else %}
+          <tr>
+              <td colspan="30">데이터가 없습니다.</td>
+          </tr>
+          {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+  
+
+  {% endblock %}
+
+
+
+  {% block script %}
+ <script id="chart-data" type="application/json">{{ data | tojson }}</script>
+  {% endblock %}

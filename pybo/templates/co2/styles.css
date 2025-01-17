@@ -1,0 +1,66 @@
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #f4f7f9;
+}
+
+.dashboard-container {
+    min-height: 100vh;
+}
+
+.sidebar .logo h2 {
+    font-size: 24px;
+    margin-bottom: 20px;
+}
+
+.header h1 {
+    font-size: 28px;
+}
+
+.stats .stat-item {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chart-item {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.projects ul li {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.carousel-control-prev-icon,
+.carousel-control-next-icon {
+  width: 50px;
+  height: 50px;
+  background-size: 100%, 100%;
+  background-image: none;
+  border-radius: 50%;
+  border: 2px solid #000; /* 원하는 색상으로 변경 가능 */
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.carousel-control-prev-icon::after {
+  content: '◀'; /* 왼쪽 화살표 */
+  font-size: 30px;
+  color: white;
+}
+
+.carousel-control-next-icon::after {
+  content: '▶'; /* 오른쪽 화살표 */
+  font-size: 30px;
+  color: white;
+}
+
+ /* 왼쪽 슬라이드 버튼을 오른쪽으로 10mm 이동 */
+ .custom-prev {
+    left: 10mm !important;
+  }
+
+  /* 오른쪽 슬라이드 버튼을 왼쪽으로 10mm 이동 */
+  .custom-next {
+    right: 10mm !important;
+  }

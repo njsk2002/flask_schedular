@@ -1,0 +1,257 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container my-3">
+    <!-- 검색기능 추가 -->
+    <div class="row justify-content-between my-3">
+        <div class="row">
+            <div class="col-2">
+                <select class="form-control so">
+                    <option value="recent" {% if stock_list['so'] == 'recent' %}selected{% endif %}>최신순</option>
+                    <option value="recommend" {% if stock_list['so'] == 'recommend' %}selected{% endif %}>추천순</option>
+                    <option value="popular" {% if stock_list['so'] == 'popular' %}selected{% endif %}>인기순</option>
+                </select>
+            </div>
+            <div class="col-4"> </div>
+            <div class="col-4">
+                <input type="text" class="form-control kw" value="{{ stock_list['kw'] }}">
+            </div>
+            <div class="col-2">
+                <button class="btn btn-outline-secondary" type="button" id="btn_search">찾기</button>
+                <button class="btn btn-outline-secondary" type="button" id="btn_reload">새로고침</button>
+            </div>
+        </div>
+    </div>
+    <div class="row justify-content-between my-3">
+        <div class="row">
+            <div class="col-2"></div>
+            <div class="col-8">
+
+                <input type="checkbox" name="stockdate" id="stockdate_checkbox" value="{{sdate}}" {% if sdate %}checked{% endif %}>VB일자
+                <input type="text" id="stockdate_input" name="stockdate_input" value="{{sdate}}" readonly> <!-- 선택된 날짜 표시를 위한 input 요소 -->
+
+
+                <input type="checkbox" name="selected1" value="1" {% if sel1 == '1' %}checked{% endif %}> 선택1
+                <input type="checkbox" name="selected2" value="1" {% if sel2 == '1' %}checked{% endif %}> 선택2
+
+                <input type="checkbox" name="selectdate" id="selectdate_checkbox" value="{{selectdate}}" {% if selectdate %}checked{% endif %}>선택날짜
+                <input type="text" id="selectdate_input" name="selectdate_input" value="{{selectdate}}" readonly> <!-- 선택된 날짜 표시를 위한 input 요소 -->
+
+                <!-- <input type="checkbox" name="stockdate" id="stockdate_checkbox" value="stockdate">종목날짜
+                <input type="text" id="stockdate_input" name="stockdate_input" readonly>
+                <input type="checkbox" name="selected1" value="1">선택1
+                <input type="checkbox" name="selected2" value="1">선택2
+                <input type="checkbox" name="selectdate" id="selectdate_checkbox" value="selectdate">선택날짜
+                <input type="text" id="selectdate_input" name="selectdate_input" readonly>  -->
+                <button type="button" class="btn btn-primary" id="selBtn">전송</button>
+
+            </div>
+            <div class="col-2"></div>
+        </div>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr class="text-center table-dark">
+                <th>번호</th>
+                <th>종목코드</th>
+                <th>종목명</th>
+                <th>날짜</th>
+                <th>선택1</th>
+                <th>선택2</th>
+                <th>선택날짜</th>
+                <th>관련테마</th>
+
+            </tr>
+        </thead>
+        <tbody>
+            {% if stock_list['items'] %}
+                {% for stock in stock_list['items'] %}
+                <tr>
+                    <td>{{ stock_list['total'] - ((stock_list['page'] - 1) * stock_list['per_page']) - loop.index0 }}</td>
+                    <td>{{ stock['stockcode'] }}</td>
+                    <td class="text-left">
+                        
+                        <a href="{{ url_for('kinvestor.daily_detail', stockcode=stock['stockcode'], no=stock['no'], sdate=sdate, sel1=sel1, sel2=sel2, selectdate=selectdate) }}">{{ stock['stockname'] }}</a>
+
+                    </td>
+                    <td>{{ stock['stockdate'] }}</td>
+                    <td>{{ stock['selected1'] }}</td>
+                    <td>{{ stock['selected2'] }}</td>
+                    <td>{{ stock['selecteddate'] }}</td>
+                    <td class="text-left">{{ stock['themenames'] }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6">검색된 종목이 없습니다.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+<!-- 페이지 처리 시작 -->
+<ul class="pagination justify-content-center">
+  <!-- 이전 페이지 -->
+  {% if stock_list['has_prev'] %}
+  <li class="page-item">
+      <a class="page-link" data-page="{{ stock_list['prev_num'] }}" href="#">이전</a>
+  </li>
+  {% else %}
+  <li class="page-item disabled">
+      <a class="page-link" tabindex="-1" aria-disabled="true" href="#">이전</a>
+  </li>
+  {% endif %}
+
+  <!-- 페이지 번호 -->
+  {% for page_num in stock_list['iter_pages'] %}
+  <li class="page-item {% if page_num == stock_list['page'] %}active{% endif %}">
+      <a class="page-link" href="#" data-page="{{ page_num }}">{{ page_num }}</a>
+  </li>
+  {% endfor %}
+
+  <!-- 다음 페이지 -->
+  {% if stock_list['has_next'] %}
+  <li class="page-item">
+      <a class="page-link" href="#" data-page="{{ stock_list['next_num'] }}">다음</a>
+  </li>
+  {% else %}
+  <li class="page-item disabled">
+      <a class="page-link" tabindex="-1" aria-disabled="true" href="#">다음</a>
+  </li>
+  {% endif %}
+</ul>
+<!-- 페이지 처리 끝 -->
+
+</div>
+
+<form id="searchForm" method="get" action="{{ url_for('kinvestor._dailylist') }}">
+    <input type="hidden" id="kw" name="kw" value="{{ stock_list['kw'] }}">
+    <input type="hidden" id="page" name="page" value="{{ stock_list['page'] }}">
+    <input type="hidden" id="so" name="so" value="{{ stock_list['so'] }}">
+    <input type="hidden" id="hiddenStockdate" name="stockdate" value="">
+    <input type="hidden" id="hiddenSelected1" name="selected1" value="">
+    <input type="hidden" id="hiddenSelected2" name="selected2" value="">
+    <input type="hidden" id="hiddenSelectdate" name="selectdate" value="">
+</form>
+
+{% endblock %}
+
+{% block script %}
+<script type="text/javascript">
+$(document).ready(function() {
+    // 페이지가 로드될 때 selected1 체크 상태에 따라 hidden 입력 필드 값 설정
+    // if ($("input[name='selected1']").is(':checked')) {
+    //     $("#hiddenSelected1").val($("input[name='selected1']:checked").val());
+    // }
+
+    // $(".page-link").on('click', function() {
+    //     $("#page").val($(this).data("page"));
+
+    //     // 페이지 이동 전에 selected1 체크 상태를 저장
+    //     var selected1 = $("input[name='selected1']").is(':checked');
+    //     $("#hiddenSelected1").val(selected1 ? $("input[name='selected1']:checked").val() : "");
+
+    //     $("#searchForm").submit();
+    // });
+
+    $("#btn_search").on('click', function() {
+        $("#kw").val($(".kw").val());
+        $("#page").val(1);
+        $("#searchForm").submit();
+    });
+
+    $(".kw").on('keyup', function(event) {
+        if (event.keyCode === 13) {
+            $("#btn_search").click();
+        }
+    });
+
+    $(".so").on('change', function() {
+        $("#so").val($(this).val());
+        $("#page").val(1);
+        $("#searchForm").submit();
+    });
+
+    $("#selBtn").on('click', function() {
+        var stockdate = $("#stockdate_input").val() || "";
+        var selected1 = $("input[name='selected1']:checked").val() || "";
+        var selected2 = $("input[name='selected2']:checked").val() || "";
+        var selectdate = $("#selectdate_input").val() || "";
+
+        $("#hiddenStockdate").val(stockdate);
+        $("#hiddenSelected1").val(selected1);
+        $("#hiddenSelected2").val(selected2);
+        $("#hiddenSelectdate").val(selectdate);
+        $("#page").val('1')
+        $("#searchForm").submit();
+    });
+
+    // stockdate 체크박스 변경 이벤트 핸들러
+    $('input[name="stockdate"]').change(function() {
+        // 체크박스가 선택되었을 때
+        if ($(this).is(':checked')) {
+            // 연결된 입력 필드를 활성화하고 Datepicker를 연결
+            $('#stockdate_input').prop('disabled', false).datepicker({
+                dateFormat: 'yymmdd' // 날짜 형식 설정
+            });
+        } else {
+            // 체크박스가 해제되었을 때
+            // 입력 필드 비활성화 및 Datepicker 제거
+            $('#stockdate_input').prop('disabled', true).datepicker('destroy');
+        }
+    });
+
+    // selectdate페이지 로드 시 초기화
+    $('#selectdate_input').prop('disabled', true);
+
+    // 체크박스 변경 이벤트 핸들러
+    $('input[name="selectdate"]').change(function() {
+        // 체크박스가 선택되었을 때
+        if ($(this).is(':checked')) {
+            // 연결된 입력 필드를 활성화하고 Datepicker를 연결
+            $('#selectdate_input').prop('disabled', false).datepicker({
+                dateFormat: 'yymmdd' // 날짜 형식 설정
+            });
+        } else {
+            // 체크박스가 해제되었을 때
+            // 입력 필드 비활성화 및 Datepicker 제거
+            $('#selectdate_input').prop('disabled', true).datepicker('destroy');
+        }
+    });
+
+    // 페이지 로드 시 초기화
+    $('#selectdate_input').prop('disabled', true);
+
+});
+
+$(document).ready(function() {
+    // 페이지가 로드될 때 각 체크박스의 상태를 확인하여 hidden 입력 필드에 값을 설정
+    $("input[type='checkbox']").each(function() {
+        var checkboxName = $(this).attr('name');
+        if ($(this).is(':checked')) {
+            $("#hidden" + checkboxName.capitalize()).val($(this).val());
+        }
+    });
+
+    // 페이지 이동 시에도 선택된 체크박스의 값을 저장하고 form을 submit
+    $(".page-link").on('click', function() {
+        $("#page").val($(this).data("page"));
+
+        // 선택된 체크박스의 값을 hidden 입력 필드에 설정
+        $("input[type='checkbox']").each(function() {
+            var checkboxName = $(this).attr('name');
+            var isChecked = $(this).is(':checked');
+            $("#hidden" + checkboxName.capitalize()).val(isChecked ? $(this).val() : "");
+        });
+
+        $("#searchForm").submit();
+    });
+});
+
+// 문자열의 첫 글자를 대문자로 변환하는 함수
+String.prototype.capitalize = function() {
+    return this.charAt(0).toUpperCase() + this.slice(1);
+};
+
+</script>
+{% endblock %}

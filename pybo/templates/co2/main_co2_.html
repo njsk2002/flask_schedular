@@ -1,0 +1,188 @@
+
+  {% extends 'base.html'%}
+  {% block content %}
+
+
+
+  <div class="pricing-header p-3 pb-md-4 mx-auto text-center position-relative">
+    <h1 class="display-4 fw-normal">이산화탄소( CO<small>2</small> )배출량</h1>
+    <p class="fs-5 text-muted">우리 아이스기술에서 배출하는 이산화탄소의 양은 얼마나 될까요?</p>
+    <h1 class="card-title pricing-card-title border-big">{{sum_data.totals.total}}<small class="text-muted fw-light small-text">kg/(누적)</small></h1>
+    <h1 class="card-title pricing-card-title border-big">{{sum_data.averages.total}}<small class="text-muted fw-light small-text">kg/월(평균)</small></h1>
+
+    <!-- 우측 상단에 이미지 배치 -->
+    <!-- <img src="{{ url_for('static', filename='images/green-1968590_1280.png') }}" alt="Green Footprint" width="128" height="128" class="position-absolute top-0 end-0 mt-3 me-3"> -->
+    <!-- 좌측 상단에 이미지 배치 -->
+    <img src="{{ url_for('static', filename='images/green-1968590_1280.png') }}" alt="Green Footprint" width="400" height="400" class="position-absolute top-0 start-0 mt-4 ms-2">
+</div>
+
+
+
+ 
+  <div class="container py-5">
+    <h2>평균 사용량 및  CO<small>2</small> 배출량</h2>
+    <div class="row row-cols-1 row-cols-md-5 mb-5 text-center">
+      <div class="col">
+        <div class="card mb-4 rounded-3 shadow-sm border-primary">
+          <div class="card-header py-3 text-white bg-primary border-primary">
+            <h4 class="my-0 fw-normal">전력</h4>
+          </div>
+          <div class="card-body">
+            <h3 class="styled-heading">전기사용량</h3>
+            <h2 class="card-title pricing-card-title border-blue">{{sum_data.averages.use_elec}}<small class="text-muted fw-light small-text"> kwh/월</small></h2>
+      
+            <!-- 회색 가로줄 추가 -->
+            <hr class="styled-divider">
+      
+            <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+            <h1 class="card-title pricing-card-title border-orange">{{sum_data.averages.elec}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+            <h5><small class="text-muted fw-light small-text">전기 CO₂ 발생량 | (전기 사용량 * 0.4781)</small></h5>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col">
+        <div class="card mb-4 rounded-3 shadow-sm">
+          <div class="card-header py-3">
+            <h4 class="my-0 fw-normal">수도</h4>
+          </div>
+          <div class="card-body">
+            <h3 class="styled-heading">수도사용량</h3>
+            <h1 class="card-title pricing-card-title border-blue">{{sum_data.averages.use_water}}<small class="text-muted fw-light small-text"> m&sup3/월</small></h1>
+      
+            <!-- 회색 가로줄 추가 -->
+            <hr class="styled-divider">
+      
+            <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+            <h1 class="card-title pricing-card-title border-orange">{{sum_data.averages.water}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+            <h5><small class="text-muted fw-light small-text">수도 CO₂ 발생량 | (수도 사용량 * 0.237)</small></h5>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card mb-4 rounded-3 shadow-sm border-primary">
+          <div class="card-header py-3 text-white bg-primary border-primary">
+            <h4 class="my-0 fw-normal">폐기물</h4>
+          </div>
+          <div class="card-body">
+            <h3 class="styled-heading">폐기물사용량</h3>
+            <h1 class="card-title pricing-card-title border-blue">{{sum_data.averages.use_waste}}<small class="text-muted fw-light small-text"> kg/월</small></h1>
+      
+            <!-- 회색 가로줄 추가 -->
+            <hr class="styled-divider">
+      
+            <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+            <h1 class="card-title pricing-card-title border-orange">{{sum_data.averages.waste}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+            <h5><small class="text-muted fw-light small-text">폐기물 CO₂ 발생량 | (폐기물 사용량 * 0.5573)</small></h5>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card mb-4 rounded-3 shadow-sm">
+          <div class="card-header py-3">
+            <h4 class="my-0 fw-normal">교통</h4>
+          </div>
+          <div class="card-body">
+            <h3 class="styled-heading">이동거리</h3>
+            <h2 class="card-title pricing-card-title border-blue">{{sum_data.averages.use_vehicle}}<small class="text-muted fw-light small-text"> km/월</small></h2>
+      
+            <!-- 회색 가로줄 추가 -->
+            <hr class="styled-divider">
+      
+            <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+            <h1 class="card-title pricing-card-title border-orange">{{sum_data.averages.vehicle}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+            <h6><small class="text-muted fw-light small-text">교통 CO₂ 발생량 | 경유 : (이동거리 / 15.35 * 2.582)</small></h6>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card mb-4 rounded-3 shadow-sm border-primary">
+          <div class="card-header py-3 text-white bg-primary border-primary">
+            <h4 class="my-0 fw-normal">제조가스</h4>
+          </div>
+          <div class="card-body">
+            <h3 class="styled-heading">가스사용량</h3>
+            <h1 class="card-title pricing-card-title border-blue">{{sum_data.averages.use_gas}}<small class="text-muted fw-light small-text"> m&sup3/월</small></h1>
+      
+            <!-- 회색 가로줄 추가 -->
+            <hr class="styled-divider">
+      
+            <h3 class="styled-heading">CO<small>2</small> 발생량</h3>
+            <h1 class="card-title pricing-card-title border-orange">{{sum_data.averages.gas}}<small class="text-muted fw-light small-text">  kg/월</small></h1>
+            <h5><small class="text-muted fw-light small-text">가스 CO₂ 발생량 | (가스 사용량 * 2.176)</small></h5>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container py-7">
+      <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+        <h1 class="h2">월별 사용량 그래프</h1>
+        <!-- <div class="btn-toolbar mb-2 mb-md-0">
+          <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary">Share</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary">Export</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle">
+            <span data-feather="calendar"></span>
+            This week
+          </button>
+        </div> -->
+      </div>
+
+    <!-- 스택된 막대 그래프 -->
+  <canvas class="my-4 w-100" id="stackedBarChart" width="900" height="380"></canvas>
+
+  <!-- 기존 라인 그래프 -->
+  <canvas class="my-4 w-100" id="myChart" width="900" height="380"></canvas>
+  
+  <h2>항목별 ( CO<small>2</small> ) 배출량(Kg/월)</h2>
+  <div class="table-responsive">
+    <table class="table table-striped table-sm">
+      <thead>
+        <tr>
+          <th scope="col">년월</th>
+          <th scope="col">전력</th>
+          <th scope="col">수도</th>
+          <th scope="col">폐기물</th>
+          <th scope="col">교통</th>
+          <th scope="col">제조가스</th>
+          <th scope="col">합계</th>
+        </tr>
+      </thead>
+      <tbody id="table-body1">
+        {% if data %}
+        {% for index in range(data['labels']|length) %}
+        <tr class="text-center">
+            <td>{{ data.labels[index] }}</td>
+            <td>{{ data.co2_elec[index] }}</td>
+            <td>{{ data.co2_water[index] }}</td> 
+            <td>{{ data.co2_waste[index] }}</td>
+            <td>{{ data.co2_vehicle[index] }}</td>
+            <td>{{ data.co2_gas[index] }}</td>
+            <td>{{ (data.co2_elec[index] + data.co2_water[index] + data.co2_waste[index] + data.co2_vehicle[index] + data.co2_gas[index]) | round(2) }}</td>
+        </tr>
+        {% endfor %}
+        {% else %}
+          <tr>
+              <td colspan="30">데이터가 없습니다.</td>
+          </tr>
+          {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+  
+
+  {% endblock %}
+
+
+
+  {% block script %}
+
+
+ <script id="chart-data" type="application/json">{{ data | tojson }}</script>
+
+  
+  {% endblock %}

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="dashboard-container d-flex">
+        <aside class="sidebar bg-light p-3">
+            <div class="logo mb-4">
+                <h2>Dashboard</h2>
+            </div>
+            <nav class="menu mb-4">
+                <ul class="list-unstyled">
+                    <li>Dashboards</li>
+                    <li>Pages</li>
+                    <li>Widgets</li>
+                    <li>Authentication</li>
+                </ul>
+            </nav>
+            <div class="documentation">
+                <h3>Documentation</h3>
+                <ul class="list-unstyled">
+                    <li>Basics</li>
+                    <li>Components</li>
+                    <li>Changelog</li>
+                </ul>
+            </div>
+        </aside>
+
+        <main class="main-content flex-grow-1 p-3">
+            <header class="header d-flex justify-content-between align-items-center mb-4">
+                <h1>Dashboard</h1>
+                <button class="btn btn-primary">Create Report</button>
+            </header>
+
+            <section class="row stats mb-4">
+                <div class="col-md-3 col-sm-6 stat-item bg-white p-3 text-center mb-3">
+                    <div class="value">$24,500</div>
+                    <div class="label text-muted">Value</div>
+                </div>
+                <div class="col-md-3 col-sm-6 stat-item bg-white p-3 text-center mb-3">
+                    <div class="value">763.5</div>
+                    <div class="label text-muted">Total Hours</div>
+                </div>
+                <div class="col-md-3 col-sm-6 stat-item bg-white p-3 text-center mb-3">
+                    <div class="value">35.5%</div>
+                    <div class="label text-muted">Exit %</div>
+                </div>
+                <div class="col-md-3 col-sm-6 stat-item bg-white p-3 text-center mb-3">
+                    <div class="value">2:37</div>
+                    <div class="label text-muted">Avg. Time</div>
+                </div>
+            </section>
+
+            <section class="row charts mb-4">
+                <div class="col-lg-8 col-12 chart-item bg-white p-3 mb-3">
+                    <h2>Conversions</h2>
+                    <canvas id="conversionsChart"></canvas>
+                </div>
+                <div class="col-lg-4 col-12 chart-item bg-white p-3 mb-3">
+                    <h2>Traffic Channels</h2>
+                    <canvas id="trafficChart"></canvas>
+                </div>
+            </section>
+
+            <section class="row projects-and-sales">
+                <div class="col-lg-4 col-12 projects mb-3">
+                    <h2>Projects</h2>
+                    <ul class="list-unstyled">
+                        <li class="bg-white p-3 mb-3">Homepage Redesign</li>
+                        <li class="bg-white p-3 mb-3">Travels & Time</li>
+                        <li class="bg-white p-3 mb-3">Safari Exploration</li>
+                        <li class="bg-white p-3 mb-3">Personal Site</li>
+                    </ul>
+                </div>
+                <div class="col-lg-8 col-12 sales">
+                    <h2>Sales</h2>
+                    <canvas id="salesChart"></canvas>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- <script src="script.js"></script>  -->
+</body>
+</html>

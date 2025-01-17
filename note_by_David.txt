@@ -1,0 +1,11 @@
+1. FFmpeg 다운로드 및 설치
+    Windows용 설치
+    FFmpeg 공식 다운로드 페이지로 이동합니다.
+    Windows builds by gyan.dev 링크를 클릭합니다.
+    Release build 섹션에서 ffmpeg-git-full.7z 파일을 다운로드합니다.
+    다운로드한 파일의 압축을 풀어 폴더를 원하는 경로에 저장합니다.
+    예: C:\ffmpeg
+
+
+GPU Cuda용 설치 
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118

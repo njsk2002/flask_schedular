@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Video List</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="text-center">📚 Admin YOUTUBE LIST</h1>
+        <div class="d-flex justify-content-end mt-3">
+            <button id="generateBtn" class="btn btn-primary">YOUTUBE 생성</button>
+        </div>
+
+        <!-- Video List Section -->
+        <div id="videoContainer" class="mt-4">
+            {% for video in data %}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 text-center">
+                            <iframe width="100%" height="200" src="https://www.youtube.com/embed/{{ video.url.split('=')[-1] }}" 
+                                title="{{ video.titlevideo }}" frameborder="0" 
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                allowfullscreen></iframe>
+                        </div>
+                        <div class="col-md-8">
+                            <h5>{{ video.titlevideo }}</h5>
+                            <p><strong>Update Date:</strong> {{ video.update_date[:4] }}-{{ video.update_date[4:6] }}-{{ video.update_date[6:8] }} {{ video.update_date[8:10] }}:{{ video.update_date[10:12] }}:{{ video.update_date[12:14] }}</p>
+                            <p><strong>Summary:</strong> {{ video.summary }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal fade" id="loadingModal" tabindex="-1" aria-labelledby="loadingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">자료 변환중...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            // "YOUTUBE 생성" 버튼 클릭 이벤트
+            $('#generateBtn').on('click', function () {
+                $('#loadingModal').modal('show');
+
+                $.ajax({
+                    url: '/utube/generate_video',
+                    method: 'GET',
+                    success: function (response) {
+                        // 성공적으로 데이터를 받으면 비디오 리스트를 업데이트
+                        renderVideos(response);
+                    },
+                    error: function () {
+                        alert('Error generating videos.');
+                    },
+                    complete: function () {
+                        $('#loadingModal').modal('hide');
+                    }
+                });
+            });
+
+            // 비디오 데이터를 렌더링하는 함수
+            const renderVideos = (videos) => {
+                const videoContainer = $('#videoContainer');
+                videoContainer.empty(); // 기존 콘텐츠 초기화
+
+                videos.forEach(video => {
+                    const videoHtml = `
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4 text-center">
+                                        <iframe width="100%" height="200" src="https://www.youtube.com/embed/${video.url.split('=')[1]}" 
+                                            title="${video.titlevideo}" frameborder="0" 
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                                            allowfullscreen></iframe>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <h5>${video.titlevideo}</h5>
+                                        <p><strong>Update Date:</strong> ${formatDate(video.update_date)}</p>
+                                        <p><strong>Summary:</strong> ${video.summary}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    videoContainer.append(videoHtml);
+                });
+            };
+
+            // 날짜 형식을 보기 좋게 포맷하는 함수
+            const formatDate = (dateString) => {
+                const year = dateString.substring(0, 4);
+                const month = dateString.substring(4, 6);
+                const day = dateString.substring(6, 8);
+                const hour = dateString.substring(8, 10);
+                const minute = dateString.substring(10, 12);
+                const second = dateString.substring(12, 14);
+                return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+            };
+        });
+    </script>
+</body>
+</html>
