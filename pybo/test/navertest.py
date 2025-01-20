@@ -55,7 +55,8 @@ def getPostData(post, jsonResult, cnt):
 
 #[CODE 0]
 def main():
-    node = 'news'   # 크롤링 할 대상
+    #node = 'news'   # 크롤링 할 대상
+    node = 'image'   # 크롤링 할 대상
     srcText = input('검색어를 입력하세요: ')
     cnt = 0
     jsonResult = []
