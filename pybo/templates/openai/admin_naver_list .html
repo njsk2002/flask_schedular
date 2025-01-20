@@ -16,22 +16,22 @@
             <button id="generateBtn" class="btn btn-primary">YOUTUBE 생성</button>
         </div>
 
-        <!-- Video List Section -->
-        <div id="videoContainer" class="mt-4">
-            {% for video in data %}
+        <!-- image List Section -->
+        <div id="imageContainer" class="mt-4">
+            {% for image in data %}
             <div class="card mb-4">
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4 text-center">
-                            <iframe width="100%" height="200" src="https://www.youtube.com/embed/{{ video.url.split('=')[-1] }}" 
-                                title="{{ video.titlevideo }}" frameborder="0" 
+                            <iframe width="100%" height="200" src="https://www.youtube.com/embed/{{ image.url.split('=')[-1] }}" 
+                                title="{{ image.titleimage }}" frameborder="0" 
                                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                 allowfullscreen></iframe>
                         </div>
                         <div class="col-md-8">
-                            <h5>{{ video.titlevideo }}</h5>
-                            <p><strong>Update Date:</strong> {{ video.update_date[:4] }}-{{ video.update_date[4:6] }}-{{ video.update_date[6:8] }} {{ video.update_date[8:10] }}:{{ video.update_date[10:12] }}:{{ video.update_date[12:14] }}</p>
-                            <p><strong>Summary:</strong> {{ video.summary }}</p>
+                            <h5>{{ image.titleimage }}</h5>
+                            <p><strong>Update Date:</strong> {{ image.update_date[:4] }}-{{ image.update_date[4:6] }}-{{ image.update_date[6:8] }} {{ image.update_date[8:10] }}:{{ image.update_date[10:12] }}:{{ image.update_date[12:14] }}</p>
+                            <p><strong>Summary:</strong> {{ image.summary }}</p>
                         </div>
                     </div>
                 </div>
@@ -64,14 +64,14 @@
                 $('#loadingModal').modal('show');
 
                 $.ajax({
-                    url: '/utube/generate_video',
+                    url: '/naverapi/generate_image',
                     method: 'GET',
                     success: function (response) {
                         // 성공적으로 데이터를 받으면 비디오 리스트를 업데이트
-                        renderVideos(response);
+                        renderImages(response);
                     },
                     error: function () {
-                        alert('Error generating videos.');
+                        alert('Error generating images.');
                     },
                     complete: function () {
                         $('#loadingModal').modal('hide');
@@ -80,32 +80,32 @@
             });
 
             // 비디오 데이터를 렌더링하는 함수
-            const renderVideos = (videos) => {
-                const videoContainer = $('#videoContainer');
-                videoContainer.empty(); // 기존 콘텐츠 초기화
+            const renderImages = (images) => {
+                const imageContainer = $('#imageContainer');
+                imageContainer.empty(); // 기존 콘텐츠 초기화
 
-                videos.forEach(video => {
-                    const videoHtml = `
+                images.forEach(image => {
+                    const imageHtml = `
                         <div class="card mb-4">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-4 text-center">
-                                        <iframe width="100%" height="200" src="https://www.youtube.com/embed/${video.url.split('=')[1]}" 
-                                            title="${video.titlevideo}" frameborder="0" 
+                                        <iframe width="100%" height="200" src="https://www.youtube.com/embed/${image.url.split('=')[1]}" 
+                                            title="${image.titleimage}" frameborder="0" 
                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                                             allowfullscreen></iframe>
                                     </div>
                                     <div class="col-md-8">
-                                        <h5>${video.titlevideo}</h5>
-                                        <p><strong>Update Date:</strong> ${formatDate(video.update_date)}</p>
-                                        <p><strong>Summary:</strong> ${video.summary}</p>
+                                        <h5>${image.titleimage}</h5>
+                                        <p><strong>Update Date:</strong> ${formatDate(image.update_date)}</p>
+                                        <p><strong>Thumbnail:</strong> ${image.thumbnail}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     `;
 
-                    videoContainer.append(videoHtml);
+                    imageContainer.append(imageHtml);
                 });
             };
 
