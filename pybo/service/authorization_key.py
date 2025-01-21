@@ -43,7 +43,7 @@ class Authorization:
     @staticmethod
     def naver_client():
         naver_client_id = os.getenv("NAVER_CLIENT_ID")  # 환경 변수에서 API 키 읽기
-        naver_client_secret = os.getenv("AVER_CLIENT_SECRET")  # 환경 변수에서 API 키 읽기
+        naver_client_secret = os.getenv("NAVER_CLIENT_SECRET")  # 환경 변수에서 API 키 읽기
         if not  naver_client_id and naver_client_secret:
             raise ValueError("Naver API가 정상적으로 설정되지 않았습니다.")
         return naver_client_id, naver_client_secret

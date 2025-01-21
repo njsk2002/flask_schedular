@@ -254,7 +254,7 @@ class YoutubeURL(db.Model):
     modify_date = db.Column(db.DateTime(), nullable=True)
 
 class ImageData(db.Model):
-    __tablename__ = 'NaverData'  # 테이블 이름 명시
+    __tablename__ = 'ImageData'  # 테이블 이름 명시
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 명시적으로 autoincrement 추가
     #user_id = db.Column(db.Integer, db.ForeignKey('user_authorization.id', ondelete='CASCADE'), nullable=False)
     star_name = db.Column(db.String(100), nullable=False)
@@ -264,7 +264,7 @@ class ImageData(db.Model):
     json_file = db.Column(db.String(200), nullable=False)
     thumbnail = db.Column(db.String(500), nullable=False)
     url = db.Column(db.String(200), nullable=False)
-    sizeweight = db.Column(db.String(100), nullable=False)
+    sizewidth = db.Column(db.String(100), nullable=False)
     sizeheight = db.Column(db.String(100), nullable=False)
     update_date = db.Column(db.String(150), nullable=False)
 
