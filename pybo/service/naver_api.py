@@ -4,6 +4,7 @@ import urllib.request
 from .authorization_key import Authorization
 from ..repository.repositoty_youtube import RepositoryYoutube
 from ..repository.repositoty_naverdata import RepositoryNaverData
+from ..service.bmp_trans import BMPTrans
 
 
 class NaverAPI:
@@ -99,25 +100,35 @@ class NaverAPI:
     def get_json_image(post, cnt):    
         title = post.get('title', '')
         thumbnail = post.get('thumbnail', '')
-        link = post.get('link', '')
+        url = post.get('link', '')
         sizeheight = post.get('sizeheight', '')
         sizewidth = post.get('sizewidth', '')
 
         # 링크에서 날짜 추출
-        pDate = NaverAPI.extract_date_from_link(link)
+        pDate = NaverAPI.extract_date_from_link(url)
 
-        json_file ={
-            'cnt': cnt,
-            'title': title,
-            'thumbnail': thumbnail,
-            'link': link,
-            'sizeheight': sizeheight,
-            'sizewidth': sizewidth,
-            'pDate': pDate
-        }
+        # BMP 이미지 생성
+        #bmp_file = BMPTrans.genenate_bmp_top(url,sizeheight,sizewidth)
+        bmp_file = BMPTrans.genenate_bmp_ai(url)
+        print(f"BMP 파일명은 {bmp_file} 입니다.")
+
+        if bmp_file is None:
+            return None  # 실패 시 명시적으로 None 반환
+        
+        else:
+            json_file ={
+                'cnt': cnt,
+                'title': title,
+                'thumbnail': thumbnail,
+                'link': url,
+                'sizeheight': sizeheight,
+                'sizewidth': sizewidth,
+                'bmp_file' : bmp_file,
+                'pDate': pDate
+            }
         
 
-        return json_file
+            return json_file
 
 
     @staticmethod
@@ -153,16 +164,26 @@ class NaverAPI:
                     json_file= NaverAPI.get_json_news(post, cnt)    
 
                 elif type == 'image':
-                    #json 파일 생성 후 jsonResult에 append 전에 
-                    json_file= NaverAPI.get_json_image(post, cnt)
-                    RepositoryNaverData.insert_image_data(key_word, type, output_file, json_file)
+                    try:
+                        # json 파일 생성
+                        json_file = NaverAPI.get_json_image(post, cnt)
+                        
+                        # 유효한 json_file만 DB에 삽입
+                        if json_file is not None:
+                            RepositoryNaverData.insert_image_data(key_word, type, output_file, json_file)
+                            
+                        else:
+                            print(f"JSON 파일 생성 실패: post={post}, cnt={cnt}")
+                    except Exception as e:
+                        print(f"오류 발생: {e}")
 
                 elif type == 'blog':
                     json_file=NaverAPI.get_json_blog(post, jsonResult, cnt)
-                
 
-                jsonResult.append(json_file)
-            
+                    
+                
+                if json_file is not None:
+                    jsonResult.append(json_file)
           
             start = jsonResponse['start'] + jsonResponse['display']
             jsonResponse = NaverAPI.getNaverSearch(type, key_word, start, 100)  #[CODE 2]

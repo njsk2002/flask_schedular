@@ -263,7 +263,8 @@ class ImageData(db.Model):
     
     json_file = db.Column(db.String(200), nullable=False)
     thumbnail = db.Column(db.String(500), nullable=False)
-    url = db.Column(db.String(200), nullable=False)
+    url = db.Column(db.String(500), nullable=False)
+    bmp_file = db.Column(db.String(200), nullable=False)
     sizewidth = db.Column(db.String(100), nullable=False)
     sizeheight = db.Column(db.String(100), nullable=False)
     update_date = db.Column(db.String(150), nullable=False)
