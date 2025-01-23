@@ -17,7 +17,7 @@ bp = Blueprint(
     'naverapi',
     __name__,
     url_prefix='/naverapi',
-    static_folder='../../bmp_files',  # 정적 파일 디렉토리
+    static_folder='../../../bmp_files/iu/',  # 정적 파일 디렉토리
     static_url_path='/naverapi/bmp_files'  # 정적 파일 URL 경로
 )
 
@@ -34,8 +34,8 @@ os.makedirs(TRANSCRIPT_DIR, exist_ok=True)
 Authorization.auth()
 # 정적 파일 경로 추가
 # BMP 파일 디렉토리 설정
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-bmp_dir = os.path.join(BASE_DIR, 'bmp_files')
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..','..'))
+bmp_dir = os.path.join(BASE_DIR, 'bmp_files/iu')
 os.makedirs(bmp_dir, exist_ok=True)  # BMP 파일 디렉토리가 없으면 생성
 # bp.add_url_rule('/bmp_files/<path:filename>', endpoint='bmp_files', view_func=bp.send_static_file, defaults={'filename': ''})
 
@@ -114,7 +114,7 @@ def generate_image():
 def get_bmp():
     # 클라이언트에서 요청받은 BMP 파일 이름
     bmp_file = request.json.get("bmp_file")  # 클라이언트에서 파일명 전달
-    file_path = f"C:/DavidProject/flask_project/flask_schedular/bmp_files/{bmp_file}"  # 서버에서 BMP 파일 경로
+    file_path = f"C:/DavidProject/flask_project/bmp_files/iu/{bmp_file}"  # 서버에서 BMP 파일 경로
     print(bmp_file)
 
     try:

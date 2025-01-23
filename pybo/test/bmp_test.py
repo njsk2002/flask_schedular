@@ -7,7 +7,8 @@ import numpy as np
 
 
 # 이미지 URL
-url = "https://image.ytn.co.kr/general/jpg/2024/1111/202411111646288523_t.jpg"
+#url = "https://image.ytn.co.kr/general/jpg/2024/1111/202411111646288523_t.jpg"
+url = r"C:/DavidProject/flask_project/nationalGeographic.png"
 
 
 # e-paper 해상도 설정
