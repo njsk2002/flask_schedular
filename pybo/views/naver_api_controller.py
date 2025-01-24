@@ -132,6 +132,28 @@ def get_bmp():
         print(f"Error: {e}")
         return jsonify({"error": "서버 오류가 발생했습니다."}), 500
 
+@bp.route('/get_namecard', methods=['GET', 'POST'])
+def get_namecard():
+    # 클라이언트에서 요청받은 BMP 파일 이름
+    bmp_file = request.json.get("bmp_file")  # 클라이언트에서 파일명 전달
+    file_path = f"C:/DavidProject/flask_project/bmp_files/iu/{bmp_file}"  # 서버에서 BMP 파일 경로
+    print(bmp_file)
+
+    try:
+        # 파일 경로 디버깅용 출력
+        print(f"Requested BMP file path: {file_path}")
+
+        # 파일 반환
+        return send_file(file_path, mimetype='image/bmp', as_attachment=True)
+    except FileNotFoundError:
+        # 파일이 없을 경우 에러 반환
+        print("BMP 파일을 찾을 수 없습니다.")
+        return jsonify({"error": "BMP 파일을 찾을 수 없습니다."}), 404
+    except Exception as e:
+        # 기타 에러 처리
+        print(f"Error: {e}")
+        return jsonify({"error": "서버 오류가 발생했습니다."}), 500
+
 
 # 정적 파일 경로 추가
 @bp.route('/bmp_files/<path:filename>')
