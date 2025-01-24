@@ -1,9 +1,10 @@
 #import torch
-from flask import Flask, request, jsonify, Blueprint,render_template, redirect, url_for, send_file, send_from_directory
+from flask import Flask, request, jsonify, Blueprint,render_template, redirect, url_for, send_file, send_from_directory, Response
 from yt_dlp import YoutubeDL
 from moviepy.audio.io.AudioFileClip import AudioFileClip
-import os
+import os, base64
 from datetime import datetime
+from PIL import Image
 import whisper
 import json
 from ..service.authorization_key import Authorization
@@ -181,5 +182,35 @@ def get_video():
     result = RepositoryYoutube.read_utube_url(star_name=None, type_video=None)
     print(result)
     return jsonify(result)
+
+
+@bp.route('/generate_vcard')
+def generate_vcard():
+    photo_base64 = encode_photo_to_base64("C:/DavidProject/flask_project/bmp_files/iu/202411111646288523_t.jpg")
+    vcard_data = f"""BEGIN:VCARD
+VERSION:3.0
+FN:아이유
+EMAIL:iu2@icetech.co.kr
+TEL:+1234567890
+NOTE:안녕하세요! 아이유에요! 만나 뵙게 되어 영광입니다. 2025-01-24일 아이스기술 본사
+PHOTO;ENCODING=b;TYPE=JPEG:{photo_base64}
+END:VCARD
+"""
+    return Response(vcard_data, mimetype='text/vcard', headers={"Content-Disposition": "attachment;filename=contact.vcf"})
+
+   #PHOTO;ENCODING=b;TYPE=JPEG:{photo_base64}
     
+def encode_photo_to_base64(photo_path):
+    with open(photo_path, "rb") as photo_file:
+        encoded_photo = base64.b64encode(photo_file.read()).decode("utf-8")
+    return encoded_photo
+
+def resize_image(image_path, output_path, size=(300, 300)):
+    with Image.open(image_path) as img:
+        img.thumbnail(size)
+        img.save(output_path, "JPEG")
     
+
+# # 호출 예제
+# resize_image("C:/DavidProject/flask_project/bmp_files/iu/202411111646288523_t.jpg", 
+#              "C:/DavidProject/flask_project/bmp_files/iu/resized_t.jpg")

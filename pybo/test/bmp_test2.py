@@ -12,7 +12,7 @@ EPAPER_WIDTH = 400
 EPAPER_HEIGHT = 300
 
 # QR 코드 데이터 및 크기 설정
-qr_data = "http://192.168.0.9:5000/naverapi/bmp_files/iu.png"
+qr_data = "http://192.168.0.9:5000/naverapi/generate_vcard"
 QR_SIZE = 100  # QR 코드 크기 (100x100 픽셀)
 
 # 텍스트 정보
