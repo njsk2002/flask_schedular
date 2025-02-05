@@ -16,7 +16,10 @@ def index():
     #return redirect(url_for('co2.main_list'))
     #return render_template('openai/main.html')
     #return redirect(url_for('utube.get_video'))
-    return render_template('openai/utube_list.html')
+    #return render_template('openai/utube_list.html')
+    #return render_template('auth/e_signup.html')
+    return render_template('auth/e_login.html')
+
 
 
     #return redirect(url_for('kinvestor._list'))

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/js/all.min.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 400px;
+            margin: 50px auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .logo img {
+            max-width: 150px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .btn-custom {
+            width: 100%;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 12px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+        }
+        /* ✅ 네이버 스타일 버튼 */
+        .btn-login {
+            background-color: #03C75A;
+            color: #fff;
+        }
+        .btn-login:hover {
+            background-color: #028a41;
+        }
+        .btn-register {
+            background-color: transparent;
+            color: #03C75A;
+            border: 2px solid #03C75A;
+            margin-top: 10px; /* 로그인과 회원가입 간격 */
+        }
+        .btn-register:hover {
+            background-color: #03C75A;
+            color: #fff;
+        }
+        /* ✅ 아이디 찾기, 비밀번호 찾기 */
+        .find-links {
+            text-align: right;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .find-links a {
+            color: #03C75A;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .find-links a:hover {
+            text-decoration: underline;
+        }
+        /* ✅ 소셜 로그인 스타일 */
+        .social-login-wrapper {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+        }
+        .social-login-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .social-login {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .social-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+            color: #333;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            transition: 0.3s;
+        }
+        .social-btn img {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+        }
+        /* ✅ 소셜 로그인 버튼 호버 효과 */
+        .naver:hover { background-color: #DFF5E3; }
+        .google:hover { background-color: #F8D7DA; }
+        .daum:hover { background-color: #D9EFFF; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- ✅ 로고 추가 -->
+    <div class="logo">
+        <img src="{{ url_for('static', filename='images/icetech.png') }}" alt="IceTech Logo">
+    </div>
+
+    <!-- 로그인 폼 -->
+    <form id="login-form" action="/auth/login" method="POST">
+        <div class="form-group">
+            <input type="text" id="userid" name="userid" class="form-control" placeholder="아이디를 입력해주세요" required>
+        </div>
+
+        <div class="form-group">
+            <input type="password" id="password" name="password" class="form-control" placeholder="비밀번호를 입력해주세요" required>
+        </div>
+
+        <!-- ✅ 아이디 찾기 & 비밀번호 찾기 -->
+        <div class="find-links">
+            <a href="/auth/find-id">아이디 찾기</a> | 
+            <a href="/auth/find-password">비밀번호 찾기</a>
+        </div>
+
+        <button type="submit" class="btn btn-custom btn-login">로그인</button>
+    </form>
+
+   
+
+    <!-- ✅ 소셜 로그인 섹션 -->
+    <div class="social-login-wrapper">
+        <div class="social-login-title">소셜 로그인</div>
+        <div class="social-login">
+            <button class="social-btn naver" onclick="location.href='/auth/naver-login'">
+                <img src="{{ url_for('static', filename='images/naver.png') }}" alt="네이버 로고"> 네이버 로그인
+            </button>
+            <button class="social-btn google" onclick="location.href='/auth/google-login'">
+                <img src="{{ url_for('static', filename='images/google.png') }}" alt="구글 로고"> 구글 로그인
+            </button>
+            <button class="social-btn daum" onclick="location.href='/auth/daum-login'">
+                <img src="{{ url_for('static', filename='images/daum.png') }}" alt="다음 로고"> 다음 로그인
+            </button>
+        </div>
+    </div>
+
+    <!-- ✅ 회원가입 버튼 -->
+    <button onclick="location.href='/auth/signup'" class="btn btn-custom btn-register">회원가입</button>
+
+</div>
+
+</body>
+</html>

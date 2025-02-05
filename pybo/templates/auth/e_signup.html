@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>회원가입</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>회원가입</h2>
+         <!-- action 및 enctype 추가 -->
+         <form id="signup-form" action="/auth/signup" method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="photo">회원 사진</label>
+                <input type="file" id="photo" name="photo" accept="image/*" onchange="previewImage(event)">
+                <img id="photo-preview" alt="사진" src="" onerror="this.style.display='flex'; this.textContent='사진';">
+            </div>
+        
+            <h3>로그인 정보</h3>
+            <div class="form-group">
+                <label for="userid">아이디</label>
+                <input type="text" id="userid" name="userid" placeholder="아이디를 입력하세요" required>
+                <div id="id-message" class="message"></div>
+            </div>
+        
+            <div class="form-group">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password" placeholder="8자리 이상(영문 포함)">
+                <div id="password-message" class="message"></div>
+            </div>
+        
+            <div class="form-group">
+                <label for="password-confirm">비밀번호 확인</label>
+                <input type="password" id="password-confirm" name="password_confirm" placeholder="비밀번호를 다시 입력하세요">
+                <div id="password-confirm-message" class="message"></div>
+            </div>
+        
+            <h3>기본정보</h3>
+            <div class="form-group">
+                <label for="name">이름</label>
+                <input type="text" id="name" name="name" placeholder="이름을 입력하세요">
+            </div>
+        
+            <div class="form-group">
+              <label for="phone">휴대폰 번호</label>
+              <input type="text" id="phone" name="phone" placeholder="숫자만 입력하세요">
+              <div id="phone-message" class="message"></div> <!-- 추가된 메시지 출력 영역 -->
+          </div>
+          
+        
+            <div class="form-group">
+                <label for="email">이메일</label>
+                <input type="text" id="email" name="email" placeholder="이메일 형식에 맞게 입력하세요">
+                <div id="email-message" class="message"></div>
+            </div>
+        
+            <div class="form-group">
+                <label for="company">회사명</label>
+                <input type="text" id="company" name="company" placeholder="회사명을 입력하세요">
+            </div>
+        
+            <div class="form-group">
+                <label for="team-type">부서</label>
+                <select id="team-type" name="team_type">
+                    <option value="owner">임원</option>
+                    <option value="hr">관리팀</option>
+                    <option value="security">안전품질/ESG</option>
+                    <option value="rnd">부설연구소</option>
+                    <option value="sales">기술영업팀</option>
+                    <option value="tech">기술팀</option>
+                    <option value="structer">공사팀</option>
+                    <option value="oversea">무역팀</option>
+                </select>
+            </div>
+        
+            <div class="form-group">
+                <label for="role-type">직급</label>
+                <select id="role-type" name="role_type">
+                    <option value="owner">대표이사</option>
+                    <option value="junmu">전무</option>
+                    <option value="sangmu">상무</option>
+                    <option value="officer">이사</option>
+                    <option value="rnd_header">연구소장</option>
+                    <option value="gm">부장</option>
+                    <option value="sm">차장</option>
+                    <option value="manager">과장</option>
+                    <option value="daeri">대리</option>
+                    <option value="employee">사원</option>
+                    <option value="rnd_manager">책임</option>
+                    <option value="rnd_employee">선임</option>
+                </select>
+            </div>
+        
+            <h3>민감정보</h3>
+            <div class="form-group">
+                <label for="blood-type">혈액형</label>
+                <select id="blood-type" name="blood_type">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="AB">AB</option>
+                    <option value="O">O</option>
+                </select>
+            </div>
+        
+            <div class="form-group">
+                <label for="health">건강 특이사항</label>
+                <select id="health" name="health">
+                    <option value="">선택하세요</option>
+                    <option value="고혈압">고혈압</option>
+                    <option value="당뇨">당뇨</option>
+                    <option value="심장질환">심장질환</option>
+                    <option value="호흡기질환">호흡기질환</option>
+                    <option value="간질환">간질환</option>
+                    <option value="신장질환">신장질환</option>
+                    <option value="암">암</option>
+                    <option value="정신건강">정신건강</option>
+                    <option value="면역질환">면역질환</option>
+                    <option value="기타">기타</option>
+                </select>
+                <textarea id="health-other" name="health_other" placeholder="기타 내용을 입력하세요"></textarea>
+            </div>
+        
+            <div class="form-group">
+                <label for="age">나이</label>
+                <input type="number" id="age" name="age" placeholder="나이를 입력하세요">
+            </div>
+
+
+            <div class="terms">
+                <h3>[필수] 이용약관</h3>
+                <button type="button" class="view-terms-btn" onclick="openTermsPopup();">보기</button>
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="terms-agree" name="terms_agree">
+                <label for="terms-agree">위 약관에 동의합니다.</label>
+            </div>
+
+            <button type="submit" class="btn" id="signup-btn">회원가입</button>
+        </form>
+    </div>
+
+    <script src="{{ url_for('static', filename='e_javascript/e_signup.js') }}"></script>
+</body>
+</html>

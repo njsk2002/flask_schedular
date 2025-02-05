@@ -86,7 +86,9 @@
             font-size: 14px;
             color: #555;
             margin: 0;
-        }
+            max-height: 300px; /* Adjust this value as needed */
+            overflow-y: auto;  /* Enables vertical scrolling */
+        }       
         .checkbox-group {
             display: flex;
             align-items: center;
@@ -103,63 +105,114 @@
                 font-size: 14px;
             }
         }
+
+        .input-error { border-color: red; }
+        .input-success { border-color: green; }
+        .message { font-size: 13px; margin-top: 5px; }
+        .message.error { color: red; }
+        .message.success { color: green; }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>회원가입</h2>
-        <form>
+         <!-- action 및 enctype 추가 -->
+         <form id="signup-form" action="/auth/signup" method="POST" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="photo">회원 사진</label>
-                <input type="file" id="photo" accept="image/*" onchange="previewImage(event)">
+                <input type="file" id="photo" name="photo" accept="image/*" onchange="previewImage(event)">
                 <img id="photo-preview" alt="사진" src="" onerror="this.style.display='flex'; this.textContent='사진';">
             </div>
-
+        
             <h3>로그인 정보</h3>
             <div class="form-group">
-                <label for="username">아이디</label>
-                <input type="text" id="username" placeholder="아이디를 입력하세요" required>
+                <label for="userid">아이디</label>
+                <input type="text" id="userid" name="userid" placeholder="아이디를 입력하세요" required>
+                <div id="id-message" class="message"></div>
             </div>
+        
             <div class="form-group">
                 <label for="password">비밀번호</label>
-                <input type="password" id="password" placeholder="8자리 이상(영문 포함)" required>
+                <input type="password" id="password" name="password" placeholder="8자리 이상(영문 포함)">
+                <div id="password-message" class="message"></div>
             </div>
+        
             <div class="form-group">
                 <label for="password-confirm">비밀번호 확인</label>
-                <input type="password" id="password-confirm" placeholder="비밀번호를 다시 입력하세요" required>
+                <input type="password" id="password-confirm" name="password_confirm" placeholder="비밀번호를 다시 입력하세요">
+                <div id="password-confirm-message" class="message"></div>
             </div>
-
+        
             <h3>기본정보</h3>
             <div class="form-group">
                 <label for="name">이름</label>
-                <input type="text" id="name" placeholder="이름을 입력하세요">
+                <input type="text" id="name" name="name" placeholder="이름을 입력하세요">
             </div>
+        
             <div class="form-group">
-                <label for="phone">휴대폰 번호</label>
-                <input type="text" id="phone" placeholder="숫자만 입력하세요" oninput="formatPhoneNumber()">
+              <label for="phone">휴대폰 번호</label>
+              <input type="text" id="phone" name="phone" placeholder="숫자만 입력하세요">
+              <div id="phone-message" class="message"></div> <!-- 추가된 메시지 출력 영역 -->
+          </div>
+          
+        
+            <div class="form-group">
+                <label for="email">이메일</label>
+                <input type="text" id="email" name="email" placeholder="이메일 형식에 맞게 입력하세요">
+                <div id="email-message" class="message"></div>
             </div>
+        
             <div class="form-group">
                 <label for="company">회사명</label>
-                <input type="text" id="company" placeholder="회사명을 입력하세요">
+                <input type="text" id="company" name="company" placeholder="회사명을 입력하세요">
             </div>
+        
             <div class="form-group">
-                <label for="department">소속</label>
-                <input type="text" id="department" placeholder="소속을 입력하세요">
+                <label for="team-type">부서</label>
+                <select id="team-type" name="team_type">
+                    <option value="owner">임원</option>
+                    <option value="hr">관리팀</option>
+                    <option value="security">안전품질/ESG</option>
+                    <option value="rnd">부설연구소</option>
+                    <option value="sales">기술영업팀</option>
+                    <option value="tech">기술팀</option>
+                    <option value="structer">공사팀</option>
+                    <option value="oversea">무역팀</option>
+                </select>
             </div>
-
+        
+            <div class="form-group">
+                <label for="role-type">직급</label>
+                <select id="role-type" name="role_type">
+                    <option value="owner">대표이사</option>
+                    <option value="junmu">전무</option>
+                    <option value="sangmu">상무</option>
+                    <option value="officer">이사</option>
+                    <option value="rnd_header">연구소장</option>
+                    <option value="gm">부장</option>
+                    <option value="sm">차장</option>
+                    <option value="manager">과장</option>
+                    <option value="daeri">대리</option>
+                    <option value="employee">사원</option>
+                    <option value="rnd_manager">책임</option>
+                    <option value="rnd_employee">선임</option>
+                </select>
+            </div>
+        
             <h3>민감정보</h3>
             <div class="form-group">
                 <label for="blood-type">혈액형</label>
-                <select id="blood-type">
+                <select id="blood-type" name="blood_type">
                     <option value="A">A</option>
                     <option value="B">B</option>
                     <option value="AB">AB</option>
                     <option value="O">O</option>
                 </select>
             </div>
+        
             <div class="form-group">
                 <label for="health">건강 특이사항</label>
-                <select id="health">
+                <select id="health" name="health">
                     <option value="">선택하세요</option>
                     <option value="고혈압">고혈압</option>
                     <option value="당뇨">당뇨</option>
@@ -172,15 +225,16 @@
                     <option value="면역질환">면역질환</option>
                     <option value="기타">기타</option>
                 </select>
-                <textarea id="health-other" placeholder="기타 내용을 입력하세요"></textarea>
+                <textarea id="health-other" name="health_other" placeholder="기타 내용을 입력하세요"></textarea>
             </div>
+        
             <div class="form-group">
                 <label for="age">나이</label>
-                <input type="number" id="age" placeholder="나이를 입력하세요">
+                <input type="number" id="age" name="age" placeholder="나이를 입력하세요">
             </div>
 
             <div class="terms">
-                <h3>[필수] 네이버 이용약관</h3>
+                <h3>[필수] 이용약관</h3>
                 <p>여러분을 환영합니다.
                   아이스기술 서비스 및 제품(이하 ‘서비스’)을 이용해 주셔서 감사합니다. 본 약관은 다양한 아이스기술 서비스의 이용과 관련하여 아이스기술 서비스를 제공하는 아이스기술 주식회사(이하 ‘아이스기술’)와 이를 이용하는 아이스기술 서비스 회원(이하 ‘회원’) 또는 비회원과의 관계를 설명하며, 아울러 여러분의 아이스기술 서비스 이용에 도움이 될 수 있는 유익한 정보를 포함하고 있습니다.
                   
@@ -302,36 +356,308 @@
                   </p>
             </div>
             <div class="checkbox-group">
-                <input type="checkbox" id="terms-agree" required>
-                <label for="terms-agree">위 약관에 동의합니다.</label>
-            </div>
-
-            <button type="submit" class="btn">회원가입</button>
+              <input type="checkbox" id="terms-agree" name="terms_agree" required>
+              <label for="terms-agree">위 약관에 동의합니다.</label>
+          </div>
+      
+          <button type="submit" class="btn">회원가입</button>
         </form>
     </div>
 
     <script>
-        function previewImage(event) {
-            const reader = new FileReader();
-            reader.onload = function() {
-                const preview = document.getElementById('photo-preview');
-                preview.src = reader.result;
-                preview.alt = "";  // Alt 텍스트 제거
-                preview.style.display = "block";
-            }
-            reader.readAsDataURL(event.target.files[0]);
+        // 이메일 검증 함수 (실시간 및 제출 시)
+        function validateEmailField() {
+          const emailField = document.getElementById('email');
+          const emailMessage = document.getElementById('email-message'); // 이메일 메시지 출력할 요소 추가 필요
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+          if (!emailField.value) {
+            emailMessage.textContent = "이메일을 입력하세요.";
+            emailMessage.className = "message error";
+            emailField.classList.add("input-error");
+            emailField.classList.remove("input-success");
+            return false;
+          }
+
+          if (!emailRegex.test(emailField.value)) {
+            emailMessage.textContent = "올바른 이메일 형식이 아닙니다.";
+            emailMessage.className = "message error";
+            emailField.classList.add("input-error");
+            emailField.classList.remove("input-success");
+            return false;
+          }
+
+          emailMessage.textContent = "사용 가능한 이메일입니다.";
+          emailMessage.className = "message success";
+          emailField.classList.remove("input-error");
+          emailField.classList.add("input-success");
+          return true;
         }
 
-        function formatPhoneNumber() {
-            const phoneInput = document.getElementById('phone');
-            let phoneValue = phoneInput.value.replace(/[^0-9]/g, '');
-            if (phoneValue.length > 3 && phoneValue.length <= 7) {
-                phoneValue = phoneValue.slice(0, 3) + '-' + phoneValue.slice(3);
-            } else if (phoneValue.length > 7) {
-                phoneValue = phoneValue.slice(0, 3) + '-' + phoneValue.slice(3, 7) + '-' + phoneValue.slice(7);
-            }
-            phoneInput.value = phoneValue;
+    
+        // 비밀번호 및 비밀번호 확인 검증 함수 (실시간 및 제출 시)
+        function validatePasswordFields() {
+          const pwdField = document.getElementById('password');
+          const pwdConfirmField = document.getElementById('password-confirm');
+          const pwdMessage = document.getElementById('password-message'); // 비밀번호 메시지 출력할 요소 추가 필요
+          const confirmMessage = document.getElementById('password-confirm-message'); // 비밀번호 확인 메시지 요소 추가 필요
+          let valid = true;
+
+          if (!pwdField.value) {
+            pwdMessage.textContent = "비밀번호를 입력하세요.";
+            pwdMessage.className = "message error";
+            pwdField.classList.add("input-error");
+            pwdField.classList.remove("input-success");
+            valid = false;
+          } else if (pwdField.value.length < 8) {
+            pwdMessage.textContent = "비밀번호는 8자리 이상이어야 합니다.";
+            pwdMessage.className = "message error";
+            pwdField.classList.add("input-error");
+            pwdField.classList.remove("input-success");
+            valid = false;
+          } else {
+            pwdMessage.textContent = "사용 가능한 비밀번호입니다.";
+            pwdMessage.className = "message success";
+            pwdField.classList.remove("input-error");
+            pwdField.classList.add("input-success");
+          }
+
+          if (!pwdConfirmField.value) {
+            confirmMessage.textContent = "비밀번호 확인을 입력하세요.";
+            confirmMessage.className = "message error";
+            pwdConfirmField.classList.add("input-error");
+            pwdConfirmField.classList.remove("input-success");
+            valid = false;
+          } else if (pwdField.value !== pwdConfirmField.value) {
+            confirmMessage.textContent = "비밀번호가 일치하지 않습니다.";
+            confirmMessage.className = "message error";
+            pwdConfirmField.classList.add("input-error");
+            pwdConfirmField.classList.remove("input-success");
+            valid = false;
+          } else {
+            confirmMessage.textContent = "비밀번호가 일치합니다.";
+            confirmMessage.className = "message success";
+            pwdConfirmField.classList.remove("input-error");
+            pwdConfirmField.classList.add("input-success");
+          }
+
+          return valid;
         }
-    </script>
-</body>
-</html>
+
+    
+        // 이미지 미리보기
+        function previewImage(event) {
+          const reader = new FileReader();
+          reader.onload = function() {
+            const preview = document.getElementById('photo-preview');
+            preview.src = reader.result;
+            preview.alt = "";
+            preview.style.display = "block";
+          }
+          reader.readAsDataURL(event.target.files[0]);
+        }
+    
+      // 📌 휴대폰 번호 자동 하이픈 추가 + 검증
+      function formatAndValidatePhoneNumber() {
+          const phoneInput = document.getElementById('phone');
+          let phoneValue = phoneInput.value.replace(/[^0-9]/g, ''); // 숫자만 입력 가능
+          const phoneMessage = document.getElementById('phone-message'); // 메시지 표시용 요소
+
+          if (!phoneMessage) {
+              console.error("phone-message 요소가 없습니다.");
+              return;
+          }
+
+          // 📌 휴대폰 번호 자동 하이픈 추가
+          if (phoneValue.length > 3 && phoneValue.length <= 7) {
+              phoneValue = phoneValue.slice(0, 3) + '-' + phoneValue.slice(3);
+          } else if (phoneValue.length > 7) {
+              phoneValue = phoneValue.slice(0, 3) + '-' + phoneValue.slice(3, 7) + '-' + phoneValue.slice(7);
+          }
+          phoneInput.value = phoneValue;
+
+          // 📌 휴대폰 번호 유효성 검사
+          const rawPhoneValue = phoneValue.replace(/-/g, ''); // 하이픈 제거한 숫자만 남기기
+
+          if (!rawPhoneValue) {
+              phoneMessage.textContent = "휴대폰 번호를 입력하세요.";
+              phoneMessage.className = "message error";
+              phoneInput.classList.add("input-error");
+              phoneInput.classList.remove("input-success");
+              return false;
+          }
+
+          if (rawPhoneValue.length < 11 || rawPhoneValue.length > 11) {
+              phoneMessage.textContent = "휴대폰 번호는 10~11자리 숫자로 입력해야 합니다.";
+              phoneMessage.className = "message error";
+              phoneInput.classList.add("input-error");
+              phoneInput.classList.remove("input-success");
+              return false;
+          }
+
+          phoneMessage.textContent = "올바른 휴대폰 번호입니다.";
+          phoneMessage.className = "message success";
+          phoneInput.classList.remove("input-error");
+          phoneInput.classList.add("input-success");
+          return true;
+      }
+
+   
+        // 아이디 중복 체크 (실시간)
+        async function checkIdDuplication() {
+          const useridField = document.getElementById('userid');
+          const idMessage = document.getElementById('id-message');
+          const userid = useridField.value.trim();
+          if (!userid) {
+            idMessage.textContent = "";
+            useridField.classList.remove("input-error", "input-success");
+            return;
+          }
+          
+          try {
+            const response = await fetch('/auth/idcheck', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ userid: userid })
+            });
+            const result = await response.json();
+            if (result.available) {
+              idMessage.textContent = result.message;
+              idMessage.className = "message success";
+              useridField.classList.remove("input-error");
+              useridField.classList.add("input-success");
+            } else {
+              idMessage.textContent = result.message;
+              idMessage.className = "message error";
+              useridField.classList.remove("input-success");
+              useridField.classList.add("input-error");
+            }
+          } catch (error) {
+            console.error('Error during id check:', error);
+          }
+        }
+    
+        // 📌 실시간 이벤트 리스너 추가
+        document.getElementById('email').addEventListener('input', validateEmailField);  
+        document.getElementById('phone').addEventListener('input', formatAndValidatePhoneNumber);
+
+        document.getElementById('password').addEventListener('input', validatePasswordFields);
+        document.getElementById('password-confirm').addEventListener('input', validatePasswordFields);
+        document.getElementById('userid').addEventListener('blur', checkIdDuplication);
+    
+        document.getElementById('signup-form').addEventListener('submit', async function(e) {
+          e.preventDefault(); // 기본 제출 동작을 먼저 막음
+
+          // 📌 사진 선택 여부 검증
+          const photoInput = document.getElementById('photo');
+          if (!photoInput.files || photoInput.files.length === 0) {
+              alert("회원 사진을 선택해 주세요.");
+              photoInput.focus();
+              return;
+          }
+        
+          // 📌 아이디 중복 체크 (최종 확인)
+          await checkIdDuplication();
+          const idMsg = document.getElementById('id-message').textContent;
+          if (idMsg === "이미 존재하는 사용자입니다.") {
+              alert("이미 존재하는 아이디입니다.");
+              document.getElementById('userid').focus();
+              return;
+          }
+        
+          // 📌 이메일 형식 검증
+          if (!validateEmailField()) {
+              alert("이메일 형식이 올바르지 않습니다.");
+              document.getElementById('email').focus();
+              return;
+          }
+        
+          // 📌 비밀번호 및 비밀번호 확인 검증
+          if (!validatePasswordFields()) {
+              alert("비밀번호는 8자리 이상이어야 하며, 비밀번호와 확인이 일치해야 합니다.");
+              document.getElementById('password').focus();
+              return;
+          }
+
+          // 📌 휴대폰 번호 형식 검증
+          if (!formatAndValidatePhoneNumber()) {
+              alert("휴대폰 번호 형식이 올바르지 않습니다.");
+              document.getElementById('phone').focus();
+              return;
+          }
+
+          // 📌 기타 필수 입력란 검증 (userid, 이름, 휴대폰, 이메일, 회사, 나이)
+          const requiredFields = ['userid', 'name', 'phone', 'email', 'company', 'age'];
+          for (let i = 0; i < requiredFields.length; i++) {
+              const field = document.getElementById(requiredFields[i]);
+              if (field && field.value.trim() === '') {
+                  alert(field.previousElementSibling.textContent + " 항목을 입력해 주세요."); // 해당 label의 텍스트 가져오기
+                  field.focus();
+                  return;
+              }
+          }
+
+          // 📌 모든 검증을 통과한 후 `confirm` 창 띄우기
+          if (confirm("회원가입 하시겠습니까?")) {
+              e.target.submit(); // 폼 제출 진행
+          }
+      });
+
+
+          
+        //   // 사진 선택 여부 검증
+        //   const photoInput = document.getElementById('photo');
+        //   if (photoInput.files.length === 0) {
+        //     alert("회원 사진을 선택해 주세요.");
+        //     e.preventDefault();
+        //     return;
+        //   }
+          
+        //   // 아이디 중복 체크 (최종 확인)
+        //   await checkIdDuplication();
+        //   const idMsg = document.getElementById('id-message').textContent;
+        //   if (idMsg === "이미 존재하는 사용자입니다.") {
+        //     alert("이미 존재하는 아이디입니다.");
+        //     e.preventDefault();
+        //     return;
+        //   }
+          
+        //   // 이메일 형식 검증
+        //   if (!validateEmailField()) {
+        //     alert("이메일 형식이 올바르지 않습니다.");
+        //     e.preventDefault();
+        //     return;
+        //   }
+          
+        //   // 휴대폰 번호 형식 검증
+        //   if (!validatePhoneField()) {
+        //     alert("휴대폰 번호 형식이 올바르지 않습니다.");
+        //     e.preventDefault();
+        //     return;
+        //   }
+          
+        //   // 비밀번호 및 비밀번호 확인 검증
+        //   if (!validatePasswordFields()) {
+        //     alert("비밀번호는 8자리 이상이어야 하며, 비밀번호와 확인이 일치해야 합니다.");
+        //     e.preventDefault();
+        //     return;
+        //   }
+          
+        //   // 기타 필수 입력란 검증 (userid, 이름, 휴대폰, 이메일, 회사, 나이)
+        //   const requiredFields = ['userid', 'name', 'phone', 'email', 'company', 'age'];
+        //   for (let i = 0; i < requiredFields.length; i++) {
+        //     const field = document.getElementById(requiredFields[i]);
+        //     if (field && field.value.trim() === '') {
+        //       alert(requiredFields[i] + ' 항목을 입력해 주세요.');
+        //       field.focus();
+        //       e.preventDefault();
+        //       return;
+        //     }
+        //   }
+        //   // 모든 검증 통과 시 폼 제출 진행 (기본 폼 제출 방식)
+        // });
+      </script>
+    </body>
+    </html>

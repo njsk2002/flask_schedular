@@ -6,21 +6,24 @@ import platform
 
 # 이미지 경로
 background_path = r"C:/DavidProject/flask_project/출입증2.png"
+#background_path = r"C:/DavidProject/flask_project/카리나1.jpg"
 
 # e-paper 해상도 설정
 EPAPER_WIDTH = 400
 EPAPER_HEIGHT = 300
 
 # QR 코드 데이터 및 크기 설정
-qr_data = "http://192.168.0.9:5000/naverapi/generate_vcard"
+#qr_data = "http://192.168.0.9:5000/naverapi/generate_vcard"
+qr_data = "http://192.168.0.136:5000/naverapi/generate_vcard"
+#qr_data = "http://192.168.219.104:5000/naverapi/generate_vcard"
 QR_SIZE = 100  # QR 코드 크기 (100x100 픽셀)
 
 # 텍스트 정보
-auth_date = "2025-01-25"
+auth_date = "2025-02-03"
 staff_name = "아이유"
 staff_b_type = "A"
 staff_condition = "고혈압"
-year_grade = "고령자"
+year_grade = "장년"
 security_grade = "B"
 
 # 출력 폴더 생성
