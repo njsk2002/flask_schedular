@@ -8,6 +8,7 @@ from werkzeug.utils import redirect, secure_filename
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
 from pybo.models import User
+from ..service.image_manageent import ImageManagement
 
 bp =Blueprint('auth',__name__,url_prefix='/auth')
 
@@ -26,11 +27,11 @@ def login_required(view):
 #=== 로그인 되었을때 session data를 g.user 데이터로 이동/ 다른 class에서 g.user로 login 유무 확인가능 ====
 @bp.before_app_request
 def load_logged_in_user():
-    user_no = session.get('user_no')
-    if user_no is None:
+    user_id = session.get('user_id')
+    if user_id is None:
         g.user = None
     else:
-        g.user = User.query.get(user_no)
+        g.user = User.query.get(user_id)
 
 ### terms 열기 
 @bp.route('/terms')
@@ -66,12 +67,18 @@ def signup():
             email = request.form.get('email', '').strip()
             phone = request.form.get('phone', '').strip()
             company = request.form.get('company', '').strip()
+            address = request.form.get('address', '').strip()
+            tel_rep = request.form.get('tel_rep', '').strip()
+            tel = request.form.get('tel', '').strip()
+            fax = request.form.get('fax', '').strip()
+            homepage = request.form.get('homepage', '').strip()
+
             team_type = request.form.get('team_type', '').strip()
             role_type = request.form.get('role_type', '').strip()
-            blood_type = request.form.get('blood_type', '').strip()
-            health = request.form.get('health', '').strip()
-            health_other = request.form.get('health_other', '').strip()
-            age = request.form.get('age', '').strip()
+            # blood_type = request.form.get('blood_type', '').strip()
+            # health = request.form.get('health', '').strip()
+            # health_other = request.form.get('health_other', '').strip()
+            # age = request.form.get('age', '').strip()
 
             # 📌 아이디 중복 체크
             existing_user = User.query.filter_by(userid=userid).first()
@@ -80,30 +87,38 @@ def signup():
                 return render_template('auth/signup.html')
 
             # 📌 파일 처리 (사진 업로드)
-            photo = request.files.get('photo')
-            photo_filename = None
 
-            if photo and photo.filename != "":
-                filename = secure_filename(photo.filename)  # 보안 처리를 위한 안전한 파일명 변환
-                upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+            # 📌 메인 파일 처리 로직
+            upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
 
-                # 📌 폴더가 없으면 생성
-                if not os.path.exists(upload_folder):
-                    os.makedirs(upload_folder)
+            photo1_filename = ImageManagement.save_uploaded_photo(request.files.get('photo1'), upload_folder)
+            photo2_filename = ImageManagement.save_uploaded_photo(request.files.get('photo2'), upload_folder)
+            photo3_filename = ImageManagement.save_uploaded_photo(request.files.get('photo3'), upload_folder)
 
-                # 📌 파일명과 확장자 분리
-                name, ext = os.path.splitext(filename)
+            # 📌 저장된 파일 로그 출력
+            print(f"✅ 저장된 파일명 - photo1: {photo1_filename}, photo2: {photo2_filename}, photo3: {photo3_filename}")
 
-                # 📌 10자 이상이면 앞 10자 + UUID4, 10자 이하면 전체 파일명 + UUID4
-                short_name = name[:10] if len(name) >= 10 else name
-                unique_filename = f"{short_name}_{uuid4().hex[:8]}{ext}"  # UUID 8자리 추가
+            # if photo and photo.filename != "":
+            #     filename = secure_filename(photo.filename)  # 보안 처리를 위한 안전한 파일명 변환
+            #     upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
 
-                # 📌 파일 저장 경로
-                photo_path = os.path.join(upload_folder, unique_filename)
-                photo.save(photo_path)  # 사진 저장
-                photo_filename = unique_filename  # DB 저장용 파일명
+            #     # 📌 폴더가 없으면 생성
+            #     if not os.path.exists(upload_folder):
+            #         os.makedirs(upload_folder)
 
-            print(f"✅ 저장된 파일명: {photo_filename}")  # 서버 로그 출력
+            #     # 📌 파일명과 확장자 분리
+            #     name, ext = os.path.splitext(filename)
+
+            #     # 📌 10자 이상이면 앞 10자 + UUID4, 10자 이하면 전체 파일명 + UUID4
+            #     short_name = name[:10] if len(name) >= 10 else name
+            #     unique_filename = f"{short_name}_{uuid4().hex[:8]}{ext}"  # UUID 8자리 추가
+
+            #     # 📌 파일 저장 경로
+            #     photo_path = os.path.join(upload_folder, unique_filename)
+            #     photo.save(photo_path)  # 사진 저장
+            #     photo_filename = unique_filename  # DB 저장용 파일명
+
+            # print(f"✅ 저장된 파일명: {photo_filename}")  # 서버 로그 출력
 
             # 📌 새 사용자 객체 생성
             user = User(
@@ -115,10 +130,18 @@ def signup():
                 company=company,
                 department=team_type,
                 position=role_type,
-                blood=blood_type,
-                healthy=health,
-                age=age,
-                photo=photo_filename,  # 사진 파일명 저장
+                com_address = address,
+                tel_rep = tel_rep,
+                tel = tel,
+                fax = fax,
+                homepage = homepage,
+                # blood=blood_type,
+                # healthy=health,
+                # age=age,
+                photo1=photo1_filename,  # 사진 파일명 저장
+                photo2=photo2_filename,  # 사진 파일명 저장
+                photo3=photo3_filename,  # 사진 파일명 저장
+
                 create_date=datetime.now(),
                 modify_date=datetime.now()
             )
@@ -133,14 +156,15 @@ def signup():
                 flash('회원가입이 완료되었습니다!', 'success')
                 print("✅ [회원가입 성공] 저장된 사용자 정보:")
                 print(f"아이디: {saved_user.userid}, 이메일: {saved_user.email}, 회사: {saved_user.company}, 등록일: {saved_user.create_date}")
+
+                # 회원가입 완료 후 회원가입 성공 플래그 전달
+                return render_template('auth/e_signup.html', signup_success=True)
+
             else:
                 flash('회원가입에 문제가 발생했습니다. 다시 시도해 주세요.', 'error')
                 print("❌ [회원가입 실패] 데이터 저장 확인 불가")
                 db.session.rollback()
-                return render_template('auth/e_signup.html')
-
-            #return redirect(url_for('main.index'))  # 회원가입 완료 후 메인 페이지로 이동
-            return render_template('auth/e_signup.html')
+                return render_template('auth/e_signup.html', signup_success=False)
 
 
         except Exception as e:
@@ -149,11 +173,25 @@ def signup():
             print(f"❌ [회원가입 오류] {e}")  # 서버 로그에 오류 출력
             return render_template('auth/e_signup.html')
 
-    return render_template('auth/e_signup.html')
+    return render_template('auth/e_signup.html', signup_success=False)
+
+@bp.route('/mypage', methods=['GET', 'POST'])
+@login_required
+def mypage():
+
+    user = g.user # 이미 @login_required가 적용되어 있어 g.user 사용 가능
+
+    print(user)
+
+    if user:
+        return render_template('auth/e_mypage.html', user = user )
+    
+    return redirect(url_for('auth.login'))  # 만약 user가 None이라면 로그인 페이지로 이동
+
 
 ################## 마이페이지 #########################################
-@bp.route('/mypage', methods=['GET', 'POST'])
-def mypage():
+@bp.route('/update', methods=['GET', 'POST'])
+def update():
     # 로그인 체크
     if 'user_id' not in session:
         flash('로그인이 필요합니다.', 'error')
@@ -209,23 +247,29 @@ def mypage():
 
     return render_template('auth/mypage.html', user=user)
 
+#############  LOGIN  로그인 #######################3
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
     form = UserLoginForm()
     print("login 시도")
+
     if request.method == 'POST' and form.validate_on_submit():
         error = None
         print("login 시도2")
         user = User.query.filter_by(userid=form.userid.data).first()
+
         if not user:
-            error = ' 존재하지 않는 사용자입니다.'
+            error = '존재하지 않는 사용자입니다.'
         elif not check_password_hash(user.password, form.password.data):
-            error = ' 비밀번호가 올바르지 않습니다.'
+            error = '비밀번호가 올바르지 않습니다.'
+
         if error is None:
             session.clear()
             session['user_no'] = user.no
-            return redirect(url_for('naverapi.admin_image'))
-        flash(error)
+            session['user_id'] = user.userid  # 사용자 ID 저장
+            return jsonify({'success': True, 'user_id': user.userid})  # 로그인 성공 시 JSON 반환
+
+        return jsonify({'success': False, 'error': error})  # 🚨 로그인 실패 시 JSON에 오류 포함
 
     return render_template('auth/e_login.html', form=form)
 

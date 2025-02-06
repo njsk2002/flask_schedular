@@ -61,7 +61,7 @@ def admin_image():
         # 데이터가 없을 경우 처리
         if not data and page == 1:
             return render_template(
-                "openai/admin_image_list.html", data=[], message="데이터가 없습니다."
+                "openai/e_image.html", data=[], message="데이터가 없습니다."
             )
         
         print("data는? :", data, "\n")
@@ -69,7 +69,7 @@ def admin_image():
         # 처음 요청은 HTML 템플릿 반환
         if page == 1:
             return render_template(
-                "openai/admin_image_list.html", data=data, total_count=total_count
+                "openai/e_image.html", data=data, total_count=total_count
             )
      
         # 이후 요청은 JSON 반환

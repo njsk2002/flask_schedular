@@ -18,7 +18,8 @@ def index():
     #return redirect(url_for('utube.get_video'))
     #return render_template('openai/utube_list.html')
     #return render_template('auth/e_signup.html')
-    return render_template('auth/e_login.html')
+    #return render_template('auth/e_login.html')
+    return redirect(url_for('naverapi.admin_image'))
 
 
 

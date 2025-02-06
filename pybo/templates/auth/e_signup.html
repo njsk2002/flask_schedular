@@ -1,20 +1,54 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>회원가입</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}">
-</head>
-<body>
+{% extends 'e_base.html' %}
+
+{% block content %}
+
     <div class="container">
         <h2>회원가입</h2>
-         <!-- action 및 enctype 추가 -->
-         <form id="signup-form" action="/auth/signup" method="POST" enctype="multipart/form-data">
+
+        <!-- ✅ 회원가입 성공 시 모달 팝업 -->
+        {% if signup_success %}
+        <div id="signupSuccessModal" class="modal fade show" tabindex="-1" aria-labelledby="signupSuccessLabel" aria-hidden="true" style="display: block;">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="signupSuccessLabel">🎉 회원가입 완료</h5>
+                    </div>
+                    <div class="modal-body text-center">
+                        <p>회원가입이 완료되었습니다!<br>로그인 페이지로 이동하세요.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <!-- <button type="button" class="btn btn-primary" onclick="location.href='{{ url_for('auth.login') }}'">로그인 페이지 이동</button> -->
+                        <button type="button" class="btn btn-primary" onclick="window.location.href='/auth/login'">로그인 페이지 이동</button>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ✅ 회원가입 폼 -->
+        <!-- action 및 enctype 추가 -->
+        <form id="signup-form" action="/auth/signup" method="POST" enctype="multipart/form-data">
             <div class="form-group">
                 <label for="photo">회원 사진</label>
-                <input type="file" id="photo" name="photo" accept="image/*" onchange="previewImage(event)">
-                <img id="photo-preview" alt="사진" src="" onerror="this.style.display='flex'; this.textContent='사진';">
+                <div class="form-group">
+                    <label for="photo1">사진(1)</label>
+                    <input type="file" id="photo1" name="photo1" accept="image/*" onchange="previewImage(event, 'photo1-preview')">
+                    <img id="photo1-preview" src="{{ url_for('static', filename='images/icetech.png') }}" alt="사진 1" style="display: block;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="photo2">사진(2)</label>
+                    <input type="file" id="photo2" name="photo2" accept="image/*" onchange="previewImage(event, 'photo2-preview')">
+                    <img id="photo2-preview" src="{{ url_for('static', filename='images/icetech.png') }}" alt="사진 2" style="display: block;">
+                </div>
+                
+                <div class="form-group">
+                    <label for="photo3">사진(3)</label>
+                    <input type="file" id="photo3" name="photo3" accept="image/*" onchange="previewImage(event, 'photo3-preview')">
+                    <img id="photo3-preview" src="{{ url_for('static', filename='images/icetech.png') }}" alt="사진 3" style="display: block;">
+                </div>
+          
             </div>
         
             <h3>로그인 정보</h3>
@@ -43,11 +77,11 @@
             </div>
         
             <div class="form-group">
-              <label for="phone">휴대폰 번호</label>
-              <input type="text" id="phone" name="phone" placeholder="숫자만 입력하세요">
-              <div id="phone-message" class="message"></div> <!-- 추가된 메시지 출력 영역 -->
-          </div>
-          
+                <label for="phone">휴대폰 번호</label>
+                <input type="text" id="phone" name="phone" placeholder="숫자만 입력하세요">
+                <div id="phone-message" class="message"></div> <!-- 추가된 메시지 출력 영역 -->
+            </div>
+            
         
             <div class="form-group">
                 <label for="email">이메일</label>
@@ -55,14 +89,12 @@
                 <div id="email-message" class="message"></div>
             </div>
         
-            <div class="form-group">
-                <label for="company">회사명</label>
-                <input type="text" id="company" name="company" placeholder="회사명을 입력하세요">
-            </div>
+            
         
             <div class="form-group">
                 <label for="team-type">부서</label>
                 <select id="team-type" name="team_type">
+                    <option value="">선택하세요</option>
                     <option value="owner">임원</option>
                     <option value="hr">관리팀</option>
                     <option value="security">안전품질/ESG</option>
@@ -77,6 +109,7 @@
             <div class="form-group">
                 <label for="role-type">직급</label>
                 <select id="role-type" name="role_type">
+                    <option value="">선택하세요</option>
                     <option value="owner">대표이사</option>
                     <option value="junmu">전무</option>
                     <option value="sangmu">상무</option>
@@ -91,8 +124,44 @@
                     <option value="rnd_employee">선임</option>
                 </select>
             </div>
+
+            <div class="form-group">
+                <label for="company">회사명</label>
+                <input type="text" id="company" name="company" value="아이스기술" disabled>
+                <button type="button" onclick="document.getElementById('company').disabled = false;">변경</button>
+            </div>
+
+            <div class="form-group">
+                <label for="address">회사주소</label>
+                <input type="text" id="address" name="address" value="(우 13207) 경기도 성남시 중원구 사기막골로 124 (상대원동 190-1) SKn테크노파크 넥스센터 2층" disabled>
+                <button type="button" onclick="document.getElementById('address').disabled = false;">변경</button>
+            </div>
+
+            <div class="form-group">
+                <label for="tel_rep">전화번호(대표)</label>
+                <input type="text" id="tel_rep" name="tel_rep" value="070-7732-7800" disabled>
+                <button type="button" onclick="document.getElementById('tel_rep').disabled = false;">변경</button>
+            </div>
+
+            <div class="form-group">
+                <label for="tel">전화번호(DIR)</label>
+                <input type="text" id="tel" name="tel" value="070-7732-9113" disabled>
+                <button type="button" onclick="document.getElementById('tel').disabled = false;">변경</button>
+            </div>
+
+            <div class="form-group">
+                <label for="fax">팩스</label>
+                <input type="text" id="fax" name="fax" value="031-776-3520" disabled>
+                <button type="button" onclick="document.getElementById('fax').disabled = false;">변경</button>
+            </div>
+
+            <div class="form-group">
+                <label for="homepage">홈페이지</label>
+                <input type="text" id="homepage" name="homepage" value="www.icetech.co.kr" disabled>
+                <button type="button" onclick="document.getElementById('fax').disabled = false;">변경</button>
+            </div>
         
-            <h3>민감정보</h3>
+            <!-- <h3>민감정보</h3>
             <div class="form-group">
                 <label for="blood-type">혈액형</label>
                 <select id="blood-type" name="blood_type">
@@ -124,7 +193,7 @@
             <div class="form-group">
                 <label for="age">나이</label>
                 <input type="number" id="age" name="age" placeholder="나이를 입력하세요">
-            </div>
+            </div> -->
 
 
             <div class="terms">
@@ -141,6 +210,10 @@
         </form>
     </div>
 
+    {% endblock %}
+
+    {% block script %}
+
     <script src="{{ url_for('static', filename='e_javascript/e_signup.js') }}"></script>
-</body>
-</html>
+
+    {% endblock %}

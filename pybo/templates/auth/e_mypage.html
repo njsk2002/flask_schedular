@@ -1,0 +1,125 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container">
+    <h2>마이페이지</h2>
+    
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <button id="delete-account" class="btn btn-danger">회원 탈퇴</button>
+    </div>
+    
+    <form id="mypage-form" action="/auth/update_profile" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="photo">회원 사진</label>
+            <input type="file" id="photo" name="photo" accept="image/*" onchange="previewImage(event)">
+            <img id="photo-preview" src="{{ user.photo if user and user.photo else url_for('static', filename='images/icetech.png') }}" alt="사진" style="display: block;">
+        </div>
+
+        <div class="form-group">
+            <label for="photo-extra1">추가 사진 1</label>
+            <input type="file" id="photo-extra1" name="photo_extra1" accept="image/*">
+            {% if user and user.photo_extra1 %}
+                <img src="{{ user.photo_extra1 }}" alt="추가 사진 1" style="display: block;">
+            {% endif %}
+        </div>
+
+        <div class="form-group">
+            <label for="photo-extra2">추가 사진 2</label>
+            <input type="file" id="photo-extra2" name="photo_extra2" accept="image/*">
+            {% if user and user.photo_extra2 %}
+                <img src="{{ user.photo_extra2 }}" alt="추가 사진 2" style="display: block;">
+            {% endif %}
+        </div>
+
+        <h3>기본 정보</h3>
+        <div class="form-group">
+            <label for="userid">아이디</label>
+            <input type="text" id="userid" name="userid" value="{{ user.userid if user else '' }}" disabled>
+        </div>
+
+        <div class="form-group">
+            <label for="name">이름</label>
+            <input type="text" id="name" name="name" value="{{ user.name if user else '' }}" disabled>
+        </div>
+
+        <div class="form-group">
+            <label for="email">이메일</label>
+            <input type="text" id="email" name="email" value="{{ user.email if user else '' }}" disabled>
+        </div>
+
+        <div class="form-group">
+            <label for="company">회사명</label>
+            <input type="text" id="company" name="company" value="{{ user.company if user else '' }}" disabled>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <button type="button" id="edit-profile" class="btn btn-secondary">수정</button>
+            <button type="button" id="toggle-card" class="btn btn-primary">명함공개</button>
+        </div>
+    </form>
+</div>
+
+<!-- 명함 공개 설정 모달 -->
+<div id="card-modal" class="modal fade" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">명함 공개 설정</h5>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label><input type="checkbox" name="name" class="card-check"> 이름</label>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" name="email" class="card-check"> 이메일</label>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" name="company" class="card-check"> 회사명</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button type="button" id="save-card" class="btn btn-primary">저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script>
+    document.getElementById('edit-profile').addEventListener('click', function() {
+        document.querySelectorAll('#mypage-form input:not([name=userid])').forEach(input => {
+            input.disabled = !input.disabled;
+        });
+    });
+
+    document.getElementById('toggle-card').addEventListener('click', function() {
+        new bootstrap.Modal(document.getElementById('card-modal')).show();
+    });
+
+    document.getElementById('save-card').addEventListener('click', function() {
+        let selected = {};
+        document.querySelectorAll('.card-check').forEach(checkbox => {
+            selected[checkbox.name] = checkbox.checked ? 'Y' : 'N';
+        });
+        fetch('/auth/selectinfo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(selected)
+        }).then(response => response.json()).then(data => {
+            if (data.success) {
+                document.querySelectorAll('.card-check:checked').forEach(checkbox => {
+                    let label = checkbox.parentElement;
+                    let badge = document.createElement('span');
+                    badge.className = 'badge bg-primary ms-2';
+                    badge.innerText = '명함공개';
+                    label.appendChild(badge);
+                });
+                new bootstrap.Modal(document.getElementById('card-modal')).hide();
+            }
+        });
+    });
+</script>
+{% endblock %}

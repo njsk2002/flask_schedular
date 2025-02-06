@@ -79,16 +79,43 @@
 
 
   // 이미지 미리보기
-  function previewImage(event) {
+  function previewImage(event, previewId) {
     const reader = new FileReader();
-    reader.onload = function() {
-      const preview = document.getElementById('photo-preview');
-      preview.src = reader.result;
-      preview.alt = "";
-      preview.style.display = "block";
+    reader.onload = function () {
+        const preview = document.getElementById(previewId);
+        preview.src = reader.result;
+        preview.style.display = "block";
     }
     reader.readAsDataURL(event.target.files[0]);
-  }
+}
+
+  // 브라우저에서 안전하게 `onerror` 설정
+  document.addEventListener("DOMContentLoaded", function () {
+      const preview = document.getElementById("photo-preview");
+      
+      // 기본 이미지 경로를 자바스크립트 변수에 저장
+      const defaultImage = "{{ url_for('static', filename='images/icetech.png') }}";
+
+      preview.onerror = function () {
+          this.src = defaultImage;
+          this.style.display = "block";
+      };
+  });
+
+ // 가입 완료시 모달 팝업용
+  document.addEventListener("DOMContentLoaded", function () {
+    let modal = document.getElementById('signupSuccessModal');
+    if (modal) {
+        modal.classList.add('show');
+        modal.style.display = 'block';
+
+        modal.onclick = function (event) {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+    }
+});
 
 // 📌 휴대폰 번호 자동 하이픈 추가 + 검증
 function formatAndValidatePhoneNumber() {
@@ -181,7 +208,7 @@ function formatAndValidatePhoneNumber() {
     const top = (window.innerHeight - popupHeight) / 2;
 
     window.open(
-        "auth/terms",  // Flask 라우트
+        "terms",  // Flask 라우트
         "termsPopup",
         `width=${popupWidth},height=${popupHeight},left=${left},top=${top},scrollbars=yes,resizable=yes`
     );
@@ -209,7 +236,7 @@ document.getElementById('signup-btn').addEventListener('click', function (e) {
     e.preventDefault(); // 기본 제출 동작을 먼저 막음
 
     // 📌 사진 선택 여부 검증
-    const photoInput = document.getElementById('photo');
+    const photoInput = document.getElementById('photo1');
     if (!photoInput.files || photoInput.files.length === 0) {
         alert("회원 사진을 선택해 주세요.");
         photoInput.focus();
@@ -247,7 +274,7 @@ document.getElementById('signup-btn').addEventListener('click', function (e) {
     }
 
     // 📌 기타 필수 입력란 검증 (userid, 이름, 휴대폰, 이메일, 회사, 나이)
-    const requiredFields = ['userid', 'name', 'phone', 'email', 'company', 'age'];
+    const requiredFields = ['userid', 'name', 'phone', 'email', 'company' ];
     for (let i = 0; i < requiredFields.length; i++) {
         const field = document.getElementById(requiredFields[i]);
         if (field && field.value.trim() === '') {
