@@ -80,14 +80,33 @@
 
   // 이미지 미리보기
   function previewImage(event, previewId) {
-    const reader = new FileReader();
-    reader.onload = function () {
-        const preview = document.getElementById(previewId);
-        preview.src = reader.result;
-        preview.style.display = "block";
+    const preview = document.getElementById(previewId);
+    const file = event.target.files[0];
+
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function () {
+            preview.src = reader.result;
+            preview.style.display = "block"; // 이미지 선택 시 보이게 함
+        }
+        reader.readAsDataURL(file);
+    } else {
+        preview.src = "";
+        preview.style.display = "none"; // 이미지가 선택되지 않으면 숨김
     }
-    reader.readAsDataURL(event.target.files[0]);
 }
+
+
+// 주소/홈페이지등 인풋값이 고정된것 전송
+function enableField(fieldId) {
+  document.getElementById(fieldId).removeAttribute('readonly');
+}
+
+function enableInputsBeforeSubmit() {
+  const inputs = document.querySelectorAll('input[readonly]');
+  inputs.forEach(input => input.removeAttribute('readonly'));
+}
+
 
   // 브라우저에서 안전하게 `onerror` 설정
   document.addEventListener("DOMContentLoaded", function () {

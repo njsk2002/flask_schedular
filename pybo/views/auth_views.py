@@ -1,7 +1,7 @@
 import os, functools
 from uuid import uuid4
 from datetime import datetime
-from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app
+from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import redirect, secure_filename
 
@@ -12,7 +12,13 @@ from ..service.image_manageent import ImageManagement
 
 bp =Blueprint('auth',__name__,url_prefix='/auth')
 
+# 업로드된 파일을 정적 경로로 서빙
+UPLOAD_FOLDER = "C:/DavidProject/flask_project/flask_schedular/uploads"
+bp.upload_folder = UPLOAD_FOLDER
 
+@bp.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(bp.upload_folder, filename)
 
 #=== 로그인 되었는지 먼저 확인하는 함수 @login_required 어노테이션으로 사용 가능 ====
 def login_required(view):
@@ -31,7 +37,11 @@ def load_logged_in_user():
     if user_id is None:
         g.user = None
     else:
-        g.user = User.query.get(user_id)
+        g.user = db.session.query(User).filter_by(userid=user_id).first()
+        print(f"조회된 사용자: {g.user}")  # user 값이 None인지 확인
+        
+        if g.user is None:
+            session.pop('user_id', None)  # 세션에 유효하지 않은 ID 제거
 
 ### terms 열기 
 @bp.route('/terms')
@@ -79,6 +89,8 @@ def signup():
             # health = request.form.get('health', '').strip()
             # health_other = request.form.get('health_other', '').strip()
             # age = request.form.get('age', '').strip()
+
+            print("전화번호: ", tel_rep)
 
             # 📌 아이디 중복 체크
             existing_user = User.query.filter_by(userid=userid).first()
@@ -132,15 +144,15 @@ def signup():
                 position=role_type,
                 com_address = address,
                 tel_rep = tel_rep,
-                tel = tel,
+                tel_dir = tel,
                 fax = fax,
                 homepage = homepage,
                 # blood=blood_type,
                 # healthy=health,
                 # age=age,
-                photo1=photo1_filename,  # 사진 파일명 저장
-                photo2=photo2_filename,  # 사진 파일명 저장
-                photo3=photo3_filename,  # 사진 파일명 저장
+                photo_1=photo1_filename,  # 사진 파일명 저장
+                photo_2=photo2_filename,  # 사진 파일명 저장
+                photo_3=photo3_filename,  # 사진 파일명 저장
 
                 create_date=datetime.now(),
                 modify_date=datetime.now()
@@ -175,18 +187,53 @@ def signup():
 
     return render_template('auth/e_signup.html', signup_success=False)
 
+
 @bp.route('/mypage', methods=['GET', 'POST'])
 @login_required
 def mypage():
+    user = g.user  # 이미 @login_required 적용됨
 
-    user = g.user # 이미 @login_required가 적용되어 있어 g.user 사용 가능
-
-    print(user)
+    print("login한 사용자:", user)  # 디버깅 확인
 
     if user:
-        return render_template('auth/e_mypage.html', user = user )
-    
-    return redirect(url_for('auth.login'))  # 만약 user가 None이라면 로그인 페이지로 이동
+        user_data = {
+            "no": user.no,
+            "userid": user.userid,
+            "username": user.username,
+            "userimage": url_for('uploaded_file', filename=user.userimage) if user.userimage else "",
+            "email": user.email,
+            "phone": user.phone,
+            "photos": [
+                {"name": "photo_1", "url": url_for('auth.uploaded_file', filename=user.photo_1) if user.photo_1 not in [None, ""] else ""},
+                {"name": "photo_2", "url": url_for('auth.uploaded_file', filename=user.photo_2) if user.photo_2 not in [None, ""] else ""},
+                {"name": "photo_3", "url": url_for('auth.uploaded_file', filename=user.photo_3) if user.photo_3 not in [None, ""] else ""}
+            ],
+            "company": user.company,
+            "com_address": user.com_address,
+            "tel_rep": user.tel_rep,
+            "tel_dir": user.tel_dir,
+            "fax": user.fax,
+            "homepage": user.homepage,
+            "department": user.department,
+            "position": user.position,
+            "blood": user.blood,
+            "healthy": user.healthy,
+            "age": user.age,
+            "namecard": user.namecard,
+            "address": user.address,
+            "security": user.security,
+            "create_date": user.create_date.strftime('%Y-%m-%d %H:%M:%S') if user.create_date else None,
+            "modify_date": user.modify_date.strftime('%Y-%m-%d %H:%M:%S') if user.modify_date else None,
+        }
+        
+        return render_template('auth/e_mypage.html', user=user_data)
+
+    return redirect(url_for('auth.login'))  # 로그인되지 않은 경우 로그인 페이지로 이동
+
+
+
+
+
 
 
 ################## 마이페이지 #########################################
