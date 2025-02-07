@@ -139,6 +139,7 @@ pytorch-metric-learning==2.8.1
 pytubefix==8.11.0
 pytz==2024.1
 PyYAML==6.0.2
+qrcode==8.0
 referencing==0.35.1
 regex==2024.11.6
 requests==2.31.0
