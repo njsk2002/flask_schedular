@@ -130,6 +130,41 @@ class NaverAPI:
 
             return json_file
 
+    #출입증용_Image 및 DB DATA 전송
+    @staticmethod
+    def get_json_permission(post, cnt):    
+        title = post.get('title', '')
+        thumbnail = post.get('thumbnail', '')
+        url = post.get('link', '')
+        sizeheight = post.get('sizeheight', '')
+        sizewidth = post.get('sizewidth', '')
+
+        # 링크에서 날짜 추출
+        pDate = NaverAPI.extract_date_from_link(url)
+
+        # BMP 이미지 생성
+        #bmp_file = BMPTrans.genenate_bmp_top(url,sizeheight,sizewidth)
+        bmp_file = BMPTrans.genenate_bmp_ai(url)
+        print(f"BMP 파일명은 {bmp_file} 입니다.")
+
+        if bmp_file is None:
+            return None  # 실패 시 명시적으로 None 반환
+        
+        else:
+            json_file ={
+                'cnt': cnt,
+                'title': title,
+                'thumbnail': thumbnail,
+                'link': url,
+                'sizeheight': sizeheight,
+                'sizewidth': sizewidth,
+                'bmp_file' : bmp_file,
+                'pDate': pDate
+            }
+        
+
+            return json_file
+
 
     @staticmethod
     def get_json_blog(post, jsonResult, cnt):    
