@@ -1,0 +1,103 @@
+body {
+    background-color: #f8f9fa;
+}
+.container {
+    max-width: 400px;
+    margin: 50px auto;
+    background: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+.logo img {
+    max-width: 150px;
+    height: auto;
+    margin-bottom: 20px;
+}
+.form-group {
+    margin-bottom: 15px;
+    text-align: left;
+}
+.btn-custom {
+    width: 100%;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+}
+/* ✅ 네이버 스타일 버튼 */
+.btn-login {
+    background-color: #03C75A;
+    color: #fff;
+}
+.btn-login:hover {
+    background-color: #028a41;
+}
+.btn-register {
+    background-color: transparent;
+    color: #03C75A;
+    border: 2px solid #03C75A;
+    margin-top: 10px; /* 로그인과 회원가입 간격 */
+}
+.btn-register:hover {
+    background-color: #03C75A;
+    color: #fff;
+}
+/* ✅ 아이디 찾기, 비밀번호 찾기 */
+.find-links {
+    text-align: right;
+    font-size: 14px;
+    margin-bottom: 15px;
+}
+.find-links a {
+    color: #03C75A;
+    text-decoration: none;
+    font-weight: bold;
+}
+.find-links a:hover {
+    text-decoration: underline;
+}
+/* ✅ 소셜 로그인 스타일 */
+.social-login-wrapper {
+    text-align: center;
+    margin-top: 20px;
+    padding: 10px;
+    border-top: 1px solid #ddd;
+}
+.social-login-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+}
+.social-login {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.social-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 5px;
+    background-color: #fff;
+    color: #333;
+    cursor: pointer;
+    font-weight: bold;
+    width: 100%;
+    transition: 0.3s;
+}
+.social-btn img {
+    width: 24px;
+    height: 24px;
+    margin-right: 10px;
+}
+/* ✅ 소셜 로그인 버튼 호버 효과 */
+.naver:hover { background-color: #DFF5E3; }
+.google:hover { background-color: #F8D7DA; }
+.daum:hover { background-color: #D9EFFF; }

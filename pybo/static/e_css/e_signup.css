@@ -1,0 +1,133 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f9f9f9;
+    margin: 0;
+    padding: 0;
+}
+.container {
+    max-width: 600px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+h2 {
+    text-align: center;
+    color: #333;
+}
+.form-group {
+    margin-bottom: 15px;
+}
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+.form-group input, .form-group select, .form-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+.form-group input[type="file"] {
+    padding: 3px;
+}
+.form-group img {
+    display: block;
+    width: 200px;
+    height: 200px;
+    margin-top: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    object-fit: cover;
+    background-color: #f9f9f9;
+    color: #999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+}
+.btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background-color: #007BFF;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+.btn:hover {
+    background-color: #0056b3;
+}
+.terms {
+    display: flex;
+    align-items: center; /* 수직 정렬 */
+    justify-content: space-between; /* 제목과 버튼을 양쪽 정렬 */
+    margin: 20px 0;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+.terms h3 {
+    font-size: 16px;
+    margin: 0; /* 여백 조정 */
+    display: flex;
+    align-items: center; /* 버튼과 정렬 맞춤 */
+}
+
+.terms p {
+    font-size: 14px;
+    color: #555;
+    margin: 0;
+    max-height: 300px; /* 높이 조절 */
+    overflow-y: auto; /* 스크롤 가능 */
+}       
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.checkbox-group input {
+    margin-right: 10px;
+}
+
+.view-terms-btn {
+    font-size: 12px;
+    padding: 5px 10px;
+    background-color: #03C75A;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-left: 10px;
+    white-space: nowrap; /* 버튼 줄바꿈 방지 */
+}
+
+.view-terms-btn:hover {
+    background-color: #029245;
+}
+
+
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    .btn {
+        font-size: 14px;
+    }
+}
+
+.input-error { border-color: red; }
+.input-success { border-color: green; }
+.message { font-size: 13px; margin-top: 5px; }
+.message.error { color: red; }
+.message.success { color: green; }

@@ -1,0 +1,97 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+
+<div class="container">
+    <!-- ✅ 로고 추가 -->
+    <div class="logo">
+        <img src="{{ url_for('static', filename='images/icetech.png') }}" alt="IceTech Logo">
+    </div>
+
+    <!-- ✅ 오류 메시지 출력 (로그인 실패 시 표시) -->
+    <div id="error-message" class="alert alert-danger" style="display: none;"></div>
+
+    <!-- 로그인 폼 -->
+    <form id="login-form">
+        {{ form.csrf_token }}  <!-- ✅ CSRF 토큰 추가 -->
+
+        <div class="form-group">
+            <input type="text" id="userid" name="userid" class="form-control" placeholder="아이디를 입력해주세요" required>
+        </div>
+
+        <div class="form-group">
+            <input type="password" id="password" name="password" class="form-control" placeholder="비밀번호를 입력해주세요" required>
+        </div>
+
+        <!-- ✅ 아이디 찾기 & 비밀번호 찾기 -->
+        <div class="find-links">
+            <a href="/auth/find-id">아이디 찾기</a> | 
+            <a href="/auth/find-password">비밀번호 찾기</a>
+        </div>
+
+        <button type="submit" class="btn btn-custom btn-login">로그인</button>
+    </form>
+
+    <!-- ✅ 소셜 로그인 섹션 -->
+    <div class="social-login-wrapper">
+        <div class="social-login-title">소셜 로그인</div>
+        <div class="social-login">
+            <button class="social-btn naver" onclick="location.href='/auth/naver-login'">
+                <img src="{{ url_for('static', filename='images/naver.png') }}" alt="네이버 로고"> 네이버 로그인
+            </button>
+            <button class="social-btn google" onclick="location.href='/auth/google-login'">
+                <img src="{{ url_for('static', filename='images/google.png') }}" alt="구글 로고"> 구글 로그인
+            </button>
+            <button class="social-btn daum" onclick="location.href='/auth/daum-login'">
+                <img src="{{ url_for('static', filename='images/daum.png') }}" alt="다음 로고"> 다음 로그인
+            </button>
+        </div>
+    </div>
+
+    <!-- ✅ 회원가입 버튼 -->
+    <button onclick="location.href='/auth/signup'" class="btn btn-custom btn-register">회원가입</button>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script>
+    document.getElementById("login-form").addEventListener("submit", function (event) {
+        event.preventDefault();  // 기본 제출 방지
+
+        let formData = new FormData(this);
+
+        fetch("/auth/login", {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                sessionStorage.setItem("userId", data.user_id);  // ✅ 세션 저장
+                window.location.href = "{{ url_for('naverapi.admin_image') }}";  // ✅ 로그인 성공 후 이동
+            } else {
+                // 🚨 로그인 실패 시 오류 메시지 표시
+                let errorMessage = document.getElementById("error-message");
+                errorMessage.style.display = "block";
+                errorMessage.innerText = data.error;
+            }
+        })
+        .catch(error => console.error("Error:", error));
+    });
+
+    // ✅ 로그인 상태 유지
+    document.addEventListener("DOMContentLoaded", function () {
+        let loginBtn = document.getElementById("loginBtn");
+        let userId = sessionStorage.getItem("userId");
+
+        if (userId) {
+            loginBtn.innerText = userId + " (Logout)";
+            loginBtn.onclick = function () {
+                sessionStorage.removeItem("userId");
+                loginBtn.innerText = "Login";
+            };
+        }
+    });
+</script>
+{% endblock %}
