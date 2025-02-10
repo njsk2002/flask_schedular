@@ -1,4 +1,4 @@
-import os, functools
+import os, functools, unicodedata, re
 from uuid import uuid4
 from datetime import datetime
 from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory
@@ -249,49 +249,103 @@ def mypage():
 
 ################## 파일 업로 -- 최대 10개 까지  #########################################
 
-@bp.route('/auth/file_upload', methods=['POST'])
+@bp.route('/file_upload', methods=['POST'])
 @login_required
 def file_upload():
-    user = g.user  # 이미 @login_required 적용됨
+    """ 📂 파일 업로드 API (최대 10개만 저장 후 초과 파일 반환) """
 
-    print("login한 사용자:", user)  # 디버깅 확인
+    user = g.user  # 로그인한 사용자 정보
+    if not user:
+        return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
 
-    """ 파일 업로드 API """
-    if 'file_1' not in request.files:
-        return jsonify({"success": False, "message": "파일이 없습니다."}), 400
+    # ✅ 업로드 폴더 설정
+    upload_folder = current_app.config.get('UPLOAD_FILE_FOLDER')
 
+    # ✅ 기존 업로드된 파일 조회
+    file_upload = FileUpload.query.filter_by(user_id=user.no).first()
     
-    
-    if not user.no:
-        return jsonify({"success": False, "message": "사용자 ID가 필요합니다."}), 400
+    # 기존 업로드된 파일 목록 가져오기 (file_1 ~ file_10)
+    existing_files = {}
+    if file_upload:
+        for i in range(1, 11):
+            file_name = getattr(file_upload, f"file_{i}", None)
+            if file_name:
+                existing_files[file_name] = f"file_{i}"  # 파일명 -> 테이블 칼럼명 매핑
 
-    uploaded_files = {}
+    new_files = {}  # 새로 업로드할 파일 저장
+    duplicate_files = []  # 중복된 파일 리스트
+    exceeded_files = []  # 10개 초과로 업로드할 수 없는 파일
 
-    for i in range(1, 11):  # 최대 10개 파일 업로드 가능
+    for i in range(1, 11):  
         file_key = f'file_{i}'
         if file_key in request.files:
             file = request.files[file_key]
 
             if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                file_path = os.path.join(bp.config['UPLOAD_FILE_FOLDER'], filename)
-                file.save(file_path)
+                original_filename = file.filename
 
-                uploaded_files[file_key] = filename
+                # ✅ `secure_filename()` 적용 후 한글 파일명 복구
+                safe_filename = safe_filename_korean(original_filename)
 
-    # FileUpload 테이블 업데이트
-    file_upload = FileUpload.query.filter_by(user_id=user.no).first()
+                # ✅ 중복 여부 확인
+                if safe_filename in existing_files:
+                    duplicate_files.append(safe_filename)  # 중복된 파일 저장
+                else:
+                    new_files[file_key] = safe_filename  # 새로운 파일만 저장
+
+    # ✅ 기존 파일 개수 + 새로운 파일 개수가 10개를 초과하는 경우 처리
+    available_slots = [f"file_{i}" for i in range(1, 11) if not getattr(file_upload, f"file_{i}", None)]
     
+    # 10개 초과 시 초과된 파일을 따로 저장
+    if len(existing_files) + len(new_files) > 10:
+        excess_count = (len(existing_files) + len(new_files)) - 10
+        exceeded_files = list(new_files.values())[-excess_count:]  # 초과된 파일 저장
+        new_files = dict(list(new_files.items())[:-excess_count])  # 10개까지만 유지
+
+    # ✅ 새로운 파일 저장 (10개 이내만 저장)
+    for key, filename in new_files.items():
+        file_path = os.path.join(upload_folder, filename)
+        request.files[key].save(file_path)
+
+    # ✅ FileUpload 테이블 업데이트 (비어있는 칼럼에 저장)
     if not file_upload:
         file_upload = FileUpload(user_id=user.no)
 
-    for key, filename in uploaded_files.items():
-        setattr(file_upload, key, filename)  # file_1 ~ file_10 필드 업데이트
+    for key, filename in new_files.items():
+        if available_slots:
+            slot = available_slots.pop(0)  # 비어있는 칼럼 가져오기
+            setattr(file_upload, slot, filename)  # 해당 칼럼에 저장
 
     db.session.add(file_upload)
     db.session.commit()
 
-    return jsonify({"success": True, "message": "파일 업로드 성공", "uploaded_files": list(uploaded_files.values())})
+    return jsonify({
+        "success": True,
+        "message": "파일 업로드 완료. 초과된 파일은 제외되었습니다.",
+        "uploaded_files": list(new_files.values()),  # 저장된 파일
+        "duplicate_files": duplicate_files,  # 중복 파일 목록
+        "exceeded_files": exceeded_files  # 초과된 파일 목록
+    })
+
+
+def safe_filename_korean(filename):
+    """ 한글이 깨지지 않도록 secure_filename 적용 후 복구 """
+    safe_name = secure_filename(filename)
+
+    # 확장자를 포함한 경우
+    name, ext = os.path.splitext(filename)
+
+    # secure_filename() 이후 이름이 비었거나 확장자만 남는 경우, 원본 파일명 유지
+    if not safe_name or safe_name == ext:
+        return filename  # 원본 파일명 사용
+
+    # 파일명에 불필요한 공백 및 특수문자 정리 (한글 유지)
+    cleaned_name = re.sub(r'[^\w가-힣.-]', '_', name)
+    
+    # 정규화 (NFC 형태로 변환하여 파일 시스템 호환성 유지)
+    cleaned_name = unicodedata.normalize('NFC', cleaned_name)
+    
+    return f"{cleaned_name}{ext}"
 
 ################## 업데이트 #########################################
 @bp.route('/update', methods=['GET', 'POST'])

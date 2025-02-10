@@ -252,7 +252,7 @@
             <div class="modal-body">
                 <form id="file-upload-form">
                     <div id="file-input-container">
-                        <!-- 기본적으로 3개의 파일 업로드 입력 제공 -->
+                        <!-- 기본 3개의 파일 업로드 입력 -->
                         {% for i in range(1, 4) %}
                         <div class="file-input-group mb-2" id="file-input-{{ i }}">
                             <input type="file" name="file_{{ i }}" class="form-control">
@@ -270,6 +270,7 @@
         </div>
     </div>
 </div>
+
 
 
 {% endblock %}
@@ -327,10 +328,10 @@ document.getElementById('save-card').addEventListener('click', function () {
     /////////////////// 파일 업로드 /////////////////////////////////
     
     document.addEventListener("DOMContentLoaded", function () {
-    let fileCount = 3;  // 기본 파일 입력 3개
-    const maxFiles = 10; // 최대 파일 개수
+    let fileCount = 3;  // 기본 3개
+    const maxFiles = 10; // 최대 10개
 
-    // 파일 추가 버튼
+    // 파일 추가 버튼 클릭 시
     document.getElementById("add-file-btn").addEventListener("click", function () {
         if (fileCount >= maxFiles) {
             alert("최대 10개까지 업로드할 수 있습니다.");
@@ -349,7 +350,7 @@ document.getElementById('save-card').addEventListener('click', function () {
         fileContainer.appendChild(newFileInput);
     });
 
-    // 파일 입력 삭제 기능
+    // 파일 입력 삭제
     window.removeFileInput = function (id) {
         document.getElementById(id).remove();
         fileCount--;
@@ -371,6 +372,7 @@ document.getElementById('save-card').addEventListener('click', function () {
         .catch(error => console.error("파일 업로드 실패:", error));
     });
 });
+
 </script>
 
 {% endblock %}

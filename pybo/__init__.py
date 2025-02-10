@@ -39,7 +39,7 @@ def create_app():
     app.config.from_object(config)
 
    # ✅ 파일 업로드 폴더 설정
-    UPLOAD_FILE_FOLDER = "C:/DavidProject/flask_project/uploads"
+    UPLOAD_FILE_FOLDER = "C:/DavidProject/flask_project/uploads_files"
     app.config['UPLOAD_FILE_FOLDER'] = UPLOAD_FILE_FOLDER
 
     # ✅ 업로드 폴더가 없으면 생성
