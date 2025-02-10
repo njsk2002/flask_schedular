@@ -7,19 +7,15 @@ from werkzeug.utils import redirect, secure_filename
 
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
-from pybo.models import User
+from pybo.models import User,FileUpload
 from ..service.image_manageent import ImageManagement
 
 bp =Blueprint('auth',__name__,url_prefix='/auth')
 
-# 업로드된 파일을 정적 경로로 서빙
-UPLOAD_FOLDER = "C:/DavidProject/flask_project/flask_schedular/uploads"
-bp.upload_folder = UPLOAD_FOLDER
 
-@bp.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(bp.upload_folder, filename)
-
+###########################################################################
+###########################  로그인 유무 ####################################
+###########################################################################
 #=== 로그인 되었는지 먼저 확인하는 함수 @login_required 어노테이션으로 사용 가능 ====
 def login_required(view):
     @functools.wraps(view)
@@ -42,6 +38,27 @@ def load_logged_in_user():
         
         if g.user is None:
             session.pop('user_id', None)  # 세션에 유효하지 않은 ID 제거
+
+###########################################################################
+########################### 이미지 및 파일 업로드 ############################
+###########################################################################
+# 업로드된 파일을 정적 경로로 서빙
+UPLOAD_IMAGE_FOLDER = "C:/DavidProject/flask_project/flask_schedular/uploads"
+# UPLOAD_FILE_FOLDER = 'C:/DavidProject/flask_project/flask_schedular/uploadfiles'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx'}
+
+bp.upload_image_folder = UPLOAD_IMAGE_FOLDER
+# bp.config['UPLOAD_FILE_FOLDER'] = UPLOAD_FILE_FOLDER
+
+@bp.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(bp.upload_image_folder, filename)
+
+
+def allowed_file(filename):
+    """ 허용된 파일 확장자 체크 """
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 ### terms 열기 
 @bp.route('/terms')
@@ -187,7 +204,7 @@ def signup():
 
     return render_template('auth/e_signup.html', signup_success=False)
 
-
+################## 마이페이지 #########################################
 @bp.route('/mypage', methods=['GET', 'POST'])
 @login_required
 def mypage():
@@ -230,13 +247,53 @@ def mypage():
 
     return redirect(url_for('auth.login'))  # 로그인되지 않은 경우 로그인 페이지로 이동
 
+################## 파일 업로 -- 최대 10개 까지  #########################################
 
+@bp.route('/auth/file_upload', methods=['POST'])
+@login_required
+def file_upload():
+    user = g.user  # 이미 @login_required 적용됨
 
+    print("login한 사용자:", user)  # 디버깅 확인
 
+    """ 파일 업로드 API """
+    if 'file_1' not in request.files:
+        return jsonify({"success": False, "message": "파일이 없습니다."}), 400
 
+    
+    
+    if not user.no:
+        return jsonify({"success": False, "message": "사용자 ID가 필요합니다."}), 400
 
+    uploaded_files = {}
 
-################## 마이페이지 #########################################
+    for i in range(1, 11):  # 최대 10개 파일 업로드 가능
+        file_key = f'file_{i}'
+        if file_key in request.files:
+            file = request.files[file_key]
+
+            if file and allowed_file(file.filename):
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(bp.config['UPLOAD_FILE_FOLDER'], filename)
+                file.save(file_path)
+
+                uploaded_files[file_key] = filename
+
+    # FileUpload 테이블 업데이트
+    file_upload = FileUpload.query.filter_by(user_id=user.no).first()
+    
+    if not file_upload:
+        file_upload = FileUpload(user_id=user.no)
+
+    for key, filename in uploaded_files.items():
+        setattr(file_upload, key, filename)  # file_1 ~ file_10 필드 업데이트
+
+    db.session.add(file_upload)
+    db.session.commit()
+
+    return jsonify({"success": True, "message": "파일 업로드 성공", "uploaded_files": list(uploaded_files.values())})
+
+################## 업데이트 #########################################
 @bp.route('/update', methods=['GET', 'POST'])
 def update():
     # 로그인 체크

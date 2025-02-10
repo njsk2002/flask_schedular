@@ -1,4 +1,6 @@
 from pybo import db
+from sqlalchemy.sql import func
+
 
 
 # class Question(db.Model):
@@ -61,6 +63,8 @@ class Answer(db.Model):
 
 
 class User(db.Model):
+    __tablename__ = 'user'
+
     no = db.Column(db.Integer, primary_key=True)
     userid= db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(200),nullable=False)
@@ -87,6 +91,87 @@ class User(db.Model):
     security = db.Column(db.String(100), nullable=False, default = '0')
     create_date = db.Column(db.DateTime(), nullable=False)  
     modify_date = db.Column(db.DateTime(), nullable=False)  
+
+    # User가 삭제될 때 NameCard도 함께 삭제
+    namecards = db.relationship('NameCard', backref='user', cascade="all, delete-orphan", lazy=True)
+    # 관계 설정 (User 1 : N FileUpload)
+    files = db.relationship('FileUpload', backref='user', cascade="all, delete-orphan", lazy=True)
+
+class NameCard(db.Model):
+    __tablename__ = 'namecard'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.no', ondelete="CASCADE"), nullable=False)
+    selected_photo = db.Column(db.String(500), nullable=True)
+    department = db.Column(db.String(150), nullable=True)
+    position = db.Column(db.String(150), nullable=True)
+    username = db.Column(db.String(150), nullable=True)
+    phone = db.Column(db.String(150), nullable=True)
+    email = db.Column(db.String(150), nullable=True)
+    company = db.Column(db.String(100), nullable=True)
+    com_address = db.Column(db.String(500), nullable=True)
+    tel_rep = db.Column(db.String(100), nullable=True)
+    tel_dir = db.Column(db.String(100), nullable=True)
+    fax = db.Column(db.String(100), nullable=True)
+    homepage = db.Column(db.String(300), nullable=True)
+
+    # ✅ DB에서 자동으로 현재 시간 설정
+    create_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())  
+    modify_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "selected_photo": self.selected_photo or "",
+            "department": self.department or "",
+            "position": self.position or "",
+            "username": self.username or "",
+            "phone": self.phone or "",
+            "email": self.email or "",
+            "company": self.company or "",
+            "com_address": self.com_address or "",
+            "tel_rep": self.tel_rep or "",
+            "tel_dir": self.tel_dir or "",
+            "fax": self.fax or "",
+            "homepage": self.homepage or "",
+            "created_at": self.create_date.strftime('%Y-%m-%d %H:%M:%S') if self.create_date else None,
+            "updated_at": self.modify_date.strftime('%Y-%m-%d %H:%M:%S') if self.modify_date else None
+        }
+
+class FileUpload(db.Model):
+    """ 파일 업로드 테이블 (파일 최대 10개 저장 가능) """
+    __tablename__ = 'file_uploads'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.no'), nullable=False)  # 업로드한 사용자
+
+    # 최대 10개의 파일 (파일명 저장)
+    file_1 = db.Column(db.String(255), nullable=True)
+    file_2 = db.Column(db.String(255), nullable=True)
+    file_3 = db.Column(db.String(255), nullable=True)
+    file_4 = db.Column(db.String(255), nullable=True)
+    file_5 = db.Column(db.String(255), nullable=True)
+    file_6 = db.Column(db.String(255), nullable=True)
+    file_7 = db.Column(db.String(255), nullable=True)
+    file_8 = db.Column(db.String(255), nullable=True)
+    file_9 = db.Column(db.String(255), nullable=True)
+    file_10 = db.Column(db.String(255), nullable=True)
+
+    uploaded_at = db.Column(db.DateTime, default=db.func.now())
+
+    def to_dict(self):
+        """ JSON 응답을 위한 Dict 변환 """
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "files": [
+                self.file_1, self.file_2, self.file_3, self.file_4, self.file_5,
+                self.file_6, self.file_7, self.file_8, self.file_9, self.file_10
+            ],
+            "uploaded_at": self.uploaded_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
 
 
 class Comment(db.Model):

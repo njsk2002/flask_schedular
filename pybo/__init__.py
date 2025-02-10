@@ -4,7 +4,7 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 # from flaskext.markdown import Markdown
 
-import config
+import config, os
 # from .views import question_views
 
 # Import the StockVO module
@@ -38,6 +38,14 @@ def create_app():
     #app.config['DEBUG'] = True
     app.config.from_object(config)
 
+   # ✅ 파일 업로드 폴더 설정
+    UPLOAD_FILE_FOLDER = "C:/DavidProject/flask_project/uploads"
+    app.config['UPLOAD_FILE_FOLDER'] = UPLOAD_FILE_FOLDER
+
+    # ✅ 업로드 폴더가 없으면 생성
+    if not os.path.exists(UPLOAD_FILE_FOLDER):
+        os.makedirs(UPLOAD_FILE_FOLDER, exist_ok=True)  # 여러 디렉토리 생성 가능
+
     # Initialize JWT
     jwt = JWTManager(app)
 
@@ -64,7 +72,7 @@ def create_app():
     from . import models
 
     #블루프린트
-    from .views import cal_user_controller,main_views,question_views, answer_views, auth_views,comment_views,vote_views,co2_controller,cal_schedular_controller,openai_controller,ytube_voice_controller,naver_api_controller
+    from .views import cal_user_controller,main_views,question_views, answer_views, auth_views,comment_views,vote_views,co2_controller,cal_schedular_controller,openai_controller,ytube_voice_controller,naver_api_controller,e_namecard_controller
     
     app.register_blueprint(main_views.bp)
     app.register_blueprint(question_views.bp)
@@ -78,6 +86,7 @@ def create_app():
     app.register_blueprint(openai_controller.bp)
     app.register_blueprint(ytube_voice_controller.bp)
     app.register_blueprint(naver_api_controller.bp)
+    app.register_blueprint(e_namecard_controller.bp)
 
 
 

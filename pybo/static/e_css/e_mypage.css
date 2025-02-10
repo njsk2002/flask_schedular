@@ -1,0 +1,19 @@
+/* 회원 탈퇴 버튼: 왼쪽 끝 배치 */
+.delete-btn {
+    min-width: 120px; /* 버튼 크기 통일 */
+    opacity: 0.7; /* 연한 색 */
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* 수정 & 명함공개 버튼: 동일한 크기로 오른쪽 정렬 */
+.action-btn {
+    min-width: 120px; /* 버튼 크기 동일하게 */
+    flex-grow: 1; /* 버튼 크기가 균일하게 조정됨 */
+    opacity: 0.7; /* 기본적으로 연한 색 */
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Hover 효과: Hover 시 색이 진해짐 */
+.delete-btn:hover, .action-btn:hover {
+    opacity: 1;
+}

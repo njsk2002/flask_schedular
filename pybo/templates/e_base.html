@@ -12,9 +12,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_base.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}">
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}"> -->
     <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}">
-
+    {% block extra_css %}{% endblock %}
+   
     <style>
         .content {
             padding: 5px;
@@ -38,6 +39,7 @@
     <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
 
     <!-- 개별 페이지 추가 JavaScript -->
     {% block script %}{% endblock %}
