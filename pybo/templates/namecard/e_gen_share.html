@@ -1,0 +1,164 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-center mb-4">공유 명함 만들기</h2>
+
+    <form id="sharecard-form" method="POST" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="title" class="form-label fw-bold">제목 (100자 내)</label>
+            <input type="text" class="form-control" id="title" name="title" maxlength="100" required>
+        </div>
+        
+        <div class="mb-3">
+            <label for="introduce" class="form-label">인사말 (500자 내)</label>
+            <textarea class="form-control" id="introduce" name="introduce" maxlength="500"></textarea>
+        </div>
+
+        <div class="mb-3">
+            <label for="content" class="form-label">내용 (500자 내)</label>
+            <textarea class="form-control" id="content" name="content" maxlength="500" required></textarea>
+        </div>
+
+        <div class="mb-3 d-flex align-items-center">
+            <input type="checkbox" class="form-check me-2" id="vcf_data" name="vcf_data" checked>
+            <label for="vcf_data" class="form-label">명함정보(vcf) 스마트폰 저장</label>   
+        </div>
+
+        <div class="container mt-4">
+            <h2 class="text-center mb-4">내 명함 목록</h2>
+        
+            <div id="namecard-container" class="d-flex flex-wrap justify-content-center gap-4">
+                {% for card in namecards %}
+                <div class="namecard shadow-sm p-3 rounded">
+        
+                    <!-- 회사명 (우측 상단, 크게) -->
+                    <div class="company-name">
+                        <h3>{{ card.company or "회사 정보 없음" }}</h3>
+                    </div>
+        
+                    <!-- 프로필 사진 -->
+                    <div class="profile-photo">
+                        <img src="{{ card.selected_photo or '/static/default_profile.jpg' }}" class="rounded-img">
+                    </div>
+        
+                    <!-- 사용자 정보 (부서, 직급, 이름 한 줄 정렬) -->
+                    <div class="user-info d-flex align-items-center">
+                        <div class="department-position">
+                            <h5 class="department fw-bold">{{ card.department or "이름 없음" }}</h5>
+                            <h5 class="position fw-bold">{{ card.position or "이름 없음" }}</h5>
+                        </div>
+                        <div class="user-name ms-3">  
+                            <h2 class="fw-bold">{{ card.username or "이름 없음" }}</h2>
+                        </div>
+                    </div>
+        
+                    <!-- 명함 정보 (좌측 하단) -->
+                    <div class="namecard-info">
+                        <p><strong>Email:</strong> {{ card.email or "이메일 없음" }}<strong> | 휴대폰:</strong> {{ card.phone or "팩스 없음" }}</p></p>
+                        <p><strong>대표번호:</strong> {{ card.tel_rep or "전화번호 없음" }} | 
+                            <strong>직통번호:</strong> {{ card.tel_dir or "전화번호 없음" }} | 
+                            <strong>팩스:</strong> {{ card.fax or "팩스 없음" }}</p>
+                        <p id="address-{{ card.id }}" class="address-text">
+                            {{ card.com_address or "주소 없음" }}
+                        </p>
+                        <!-- 홈페이지 (맨 아래 배치, 최소 마진) -->
+                        <p class="homepage">
+                            <a href="http://{{ card.homepage }}" target="_blank">{{ card.homepage }}</a>
+                        </p>
+                    </div>
+        
+                    
+                    <!-- 선택 버튼 (명함 우측 상단) -->
+                    <div class="form-check">
+                        <input type="radio" name="selected_card" value="{{ card.id }}" class="form-check-input">
+                        <label class="form-check-label">선택</label>
+                    </div>
+                </div>
+        
+        
+        
+        
+                {% endfor %}
+            </div>
+        </div>
+    
+        <div class="container mt-4">
+            <h3 class="mt-4">공유 파일 선택 (최대 5개, 15MB 이하)</h3>
+            {% set has_files = false %}
+            {% for file in fileuploads %}
+                {% if file.files is not none %}
+                    {% for filename in file.files|sort if filename %}
+                        {% set has_files = true %}
+                        <div class="file-item d-flex align-items-center">
+                            <input class="file-checkbox" type="checkbox" name="selected_files" value="{{ filename }}" id="file-{{ loop.index }}">
+                            <label class="form-check-label flex-grow-1" for="file-{{ loop.index }}">{{ filename }}</label>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endfor %}
+            {% if not has_files %}
+                <p class="text-muted">첨부된 파일이 없습니다.</p>
+            {% endif %}
+        </div>
+        
+        
+        
+        <div class="text-center mt-4">
+            <button type="submit" class="btn btn-primary">e-쉐어카드 저장</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/e_css/e_share.css">
+{% endblock %}
+
+{% block script %}
+<script>
+    document.getElementById("sharecard-form").addEventListener("submit", function(event) {
+        event.preventDefault();  // 기본 폼 제출 방지
+
+        let selectedCard = document.querySelector("input[name='selected_card']:checked");
+        let selectedFiles = Array.from(document.querySelectorAll(".file-checkbox:checked")).map(input => input.value);
+
+        let formData = {
+            title: document.getElementById("title").value,
+            introduce: document.getElementById("introduce").value,
+            content: document.getElementById("content").value,
+            selected_card: selectedCard ? selectedCard.value : null,
+            selected_files: selectedFiles
+        };
+
+        if (!formData.selected_card) {
+            alert("명함을 선택해주세요.");
+            return;
+        }
+
+        if (selectedFiles.length > 5) {
+            alert("최대 5개의 파일만 선택할 수 있습니다.");
+            return;
+        }
+
+        fetch("/enamecard/save_sharecards", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert("오류 발생: " + data.message);
+            }
+        })
+        .catch(error => console.error("Error:", error));
+    });
+</script>
+{% endblock %}
+
+

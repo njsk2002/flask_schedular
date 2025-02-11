@@ -4,10 +4,11 @@ from datetime import datetime
 from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import redirect, secure_filename
+from sqlalchemy.exc import SQLAlchemyError
 
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
-from pybo.models import User, NameCard
+from pybo.models import User, NameCard, FileUpload, ShareCard
 from ..views.auth_views import login_required
 from ..service.image_manageent import ImageManagement
 
@@ -93,6 +94,133 @@ def get_namecards():
     data = [card.to_dict() for card in namecards]  # JSON 객체 대신 리스트 전달
 
     return render_template('namecard/e_namecard.html', namecards=data)
+
+
+@bp.route('/gen_sharecards', methods=['GET'])
+@login_required
+def gen_sharecards():
+    user = g.user
+    namecards = NameCard.query.filter_by(user_id=user.no).all()
+    fileuploads = FileUpload.query.filter_by(user_id=user.no).all()
+    
+    return render_template(
+        'namecard/e_gen_share.html', 
+        namecards=[card.to_dict() for card in namecards],
+        fileuploads=[file.to_dict() for file in fileuploads]
+    )
+
+@bp.route('/save_sharecards', methods=['POST'])
+@login_required
+def save_sharecard():
+    user = g.user
+    try:
+        # 클라이언트에서 데이터 받기
+        data = request.json
+
+        print("데이터는? ", data)
+
+        title = data.get("title")
+        introduce = data.get("introduce")
+        content = data.get("content")
+        namecard_id = data.get("selected_card")
+        selected_files = data.get("selected_files", [])  # 체크된 파일 목록
+
+        # 필수 필드 확인
+        if not title or not content or not namecard_id:
+            return jsonify({"success": False, "message": "필수 필드가 누락되었습니다."}), 400
+
+        # 파일 저장 처리 (최대 5개)
+        file_fields = ["s_file1", "s_file2", "s_file3", "s_file4", "s_file5"]
+        file_data = {file_fields[i]: selected_files[i] for i in range(min(len(selected_files), 5))}
+
+        # ShareCard 객체 생성 및 DB 저장
+        new_sharecard = ShareCard(
+            user_id= user.no,
+            namecard_id=namecard_id,
+            fileupload_id='1',  # 파일 업로드 관련 추가 구현 필요
+            title=title,
+            introduce=introduce,
+            content=content,
+            s_ncard=str(namecard_id),
+            **file_data,
+            create_date=datetime.utcnow(),
+            modify_date=datetime.utcnow()
+        )
+
+        db.session.add(new_sharecard)
+        db.session.commit()
+
+        return jsonify({"success": True, "message": "공유 명함이 성공적으로 저장되었습니다."})
+
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"DB 오류 발생: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"success": False, "message": f"서버 오류 발생: {str(e)}"}), 500
+
+@bp.route('/view_sharecards', methods=['GET'])
+@login_required
+def view_sharecards():
+    try:
+        # 현재 로그인한 사용자 정보 가져오기
+        user = g.user
+
+        # 현재 사용자의 공유 명함 데이터 조회
+        share_data = ShareCard.query.filter_by(user_id=user.no).all()
+
+        # 공유 명함 리스트 변환
+        sharecards = []
+        for share in share_data:
+            # 명함 데이터 조회
+            namecard = NameCard.query.filter_by(id=share.namecard_id).first()
+            
+            # 공유된 파일 리스트 생성
+            shared_files = [share.s_file1, share.s_file2, share.s_file3, share.s_file4, share.s_file5]
+            shared_files = [f for f in shared_files if f]  # None 값 제거
+
+            sharecards.append({
+                "no": share.no,
+                "namecard_id" : share.namecard_id,
+                "title": share.title,
+                "introduce": share.introduce,
+                "content": share.content,
+                "namecard": {
+                    "username": namecard.username if namecard else "명함 없음",
+                    "company": namecard.company if namecard else "회사 정보 없음",
+                    "position": namecard.position if namecard else "직급 정보 없음",
+                    "email": namecard.email if namecard else "이메일 없음",
+                    "phone": namecard.phone if namecard else "전화번호 없음",
+                    "tel_rep": namecard.tel_rep if namecard else "공용전화 없음",
+                    "tel_dir": namecard.tel_dir if namecard else "직통전화 없음",
+                    "fax": namecard.fax if namecard else "팩스 없음",
+                    "com_address": namecard.com_address if namecard else "팩스 없음",
+                    "homepage": namecard.homepage if namecard else "팩스 없음",
+                    "selected_photo": namecard.selected_photo if namecard else "/static/default_profile.jpg"
+                },
+                "shared_files": shared_files,
+                "created_at": share.create_date.strftime('%Y-%m-%d %H:%M:%S') if share.create_date else None
+            })
+
+            print(sharecards)
+
+        # 공유 명함 데이터를 e_sharecard.html로 전달
+        return render_template('namecard/e_sharecard.html', namecards=sharecards)
+
+    except Exception as e:
+        return render_template('namecard/e_sharecard.html', error_message=f"서버 오류 발생: {str(e)}")
+
+@bp.route('/gen_welcome', methods=['POST'])
+@login_required
+def gen_welcome():
+    data = request.json
+    share_no = data.get("share_no")
+    namecard_id = data.get("share_no")
+
+    user = g.user
+
+
+
+    return jsonify({"message": "선택한 명함이 저장되었습니다."})
 
 @bp.route('/save_namecard', methods=['POST'])
 @login_required

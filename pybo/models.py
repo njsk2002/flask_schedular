@@ -141,7 +141,7 @@ class NameCard(db.Model):
 
 class FileUpload(db.Model):
     """ 파일 업로드 테이블 (파일 최대 10개 저장 가능) """
-    __tablename__ = 'file_uploads'
+    __tablename__ = 'fileuploads'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.no'), nullable=False)  # 업로드한 사용자
@@ -172,6 +172,53 @@ class FileUpload(db.Model):
             "uploaded_at": self.uploaded_at.strftime("%Y-%m-%d %H:%M:%S")
         }
 
+class ShareCard(db.Model):
+    __tablename__ = 'sharecard'
+
+    no = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.no', ondelete="CASCADE"), nullable=False)
+    namecard_id = db.Column(db.Integer, db.ForeignKey('namecard.id', ondelete="CASCADE"), nullable=False)
+    fileupload_id = db.Column(db.Integer, db.ForeignKey('fileuploads.id', ondelete="CASCADE"), nullable=False)
+    title = db.Column(db.String(500), nullable=False)
+    content = db.Column(db.String(500), nullable=False)
+    introduce = db.Column(db.String(500), nullable=True)
+    vcf = db.Column(db.String(150), nullable=True)
+    qrcode = db.Column(db.String(150), nullable=True)
+    s_ncard = db.Column(db.String(150), nullable=False)
+    custom_email = db.Column(db.String(150), nullable=True)
+    s_file1 = db.Column(db.String(300), nullable=True)
+    s_file2 = db.Column(db.String(300), nullable=True)
+    s_file3 = db.Column(db.String(300), nullable=True)
+    s_file4 = db.Column(db.String(300), nullable=True)
+    s_file5 = db.Column(db.String(300), nullable=True)
+    count = db.Column(db.String(100), nullable=True)
+
+    # ✅ DB에서 자동으로 현재 시간 설정
+    create_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())  
+    modify_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+    def to_dict(self):
+        return {
+            "no": self.no,
+            "user_id": self.user_id,
+            "namecard_id": self.namecard_id,
+            "fileupload_id": self.fileupload_id,
+            "title": self.title,
+            "content": self.content,
+            "introduce": self.introduce or "",
+            "vcf": self.vcf or "",
+            "qrcode": self.qrcode or "",
+            "s_ncard": self.s_ncard,
+            "custom_email": self.custom_email or "",
+            "s_file1": self.s_file1 or "",
+            "s_file2": self.s_file2 or "",
+            "s_file3": self.s_file3 or "",
+            "s_file4": self.s_file4 or "",
+            "s_file5": self.s_file5 or "",
+            "count": self.count or "",
+            "created_at": self.create_date.strftime('%Y-%m-%d %H:%M:%S') if self.create_date else None,
+            "updated_at": self.modify_date.strftime('%Y-%m-%d %H:%M:%S') if self.modify_date else None
+        }
 
 
 class Comment(db.Model):

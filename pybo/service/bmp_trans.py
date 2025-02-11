@@ -5,8 +5,6 @@ from PIL import Image, ImageOps, ImageDraw, ImageFont
 
 
 
-
-
 # 이미지 URL
 # url = "https://cdn2.ppomppu.co.kr/zboard/data3/2024/0319/20240319173717_XqPTvgbNiI.jpeg"
 

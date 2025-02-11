@@ -1,0 +1,167 @@
+/* 🟢 카드 기본 스타일 */
+.card {
+    border-radius: 10px;
+    transition: all 0.3s ease-in-out;
+    padding-bottom: 60px; /* 라디오 버튼 공간 확보 */
+    position: relative;
+}
+
+.card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* 🟢 제목 스타일 */
+.title-box {
+    font-size: 22px;
+    font-weight: bold;
+    color: #333;
+    text-align: center;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+/* 🟢 인사말 & 내용 박스 */
+.message-box, .content-box {
+    padding: 10px;
+    border-left: 4px solid #007bff;
+    margin-top: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+}
+
+.message-box h6, .content-box h6 {
+    font-size: 16px;
+    font-weight: bold;
+    color: #007bff;
+    margin-bottom: 5px;
+}
+
+/* 🟢 명함 정보 스타일 */
+.namecard-box {
+    background: #eef5ff;
+    border-left: 4px solid #007bff;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+/* 프로필 사진 스타일 */
+.profile-img {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+}
+
+/* 이름 강조 스타일 */
+.name-highlight {
+    font-size: 18px;
+    font-weight: bold;
+    color: #0056b3;
+}
+
+/* 회사명 스타일 */
+.company-text {
+    font-size: 14px;
+    color: #444;
+}
+
+/* 이메일 스타일 */
+.email-text {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.email-text:hover {
+    text-decoration: underline;
+}
+
+/* 팩스 & 주소 스타일 */
+.fax-text, .address-text {
+    font-size: 14px;
+    color: #666;
+}
+
+
+
+/* 🟢 공유된 파일 리스트 스타일 */
+.file-box {
+    background: #f8f9fa;
+    border-left: 4px solid #6c757d;
+    border-radius: 5px;
+}
+
+.file-list {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.file-list li {
+    background: white;
+    margin: 5px 0;
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+}
+
+.file-list li i {
+    margin-right: 8px;
+    color: #6c757d;
+    font-size: 18px;
+}
+
+/* 🟢 "선택" 라디오 버튼 스타일 */
+.select-radio {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* 라디오 버튼 크기 키우기 */
+.large-radio {
+    transform: scale(1.5);
+}
+
+/* 라벨 글자 크기 키우기 */
+.select-radio .form-check-label {
+    font-size: 18px;
+    color: #333;
+}
+
+/* 🟢 반응형 스타일 (모바일 최적화) */
+@media (max-width: 768px) {
+    .title-box {
+        font-size: 20px;
+        padding: 8px;
+    }
+    .message-box, .content-box {
+        padding: 8px;
+    }
+    .message-box h6, .content-box h6 {
+        font-size: 14px;
+    }
+    .profile-img {
+        width: 50px;
+        height: 50px;
+    }
+    .large-radio {
+        transform: scale(1.3);
+    }
+    .file-list li {
+        font-size: 13px;
+    }
+    .name-highlight {
+        font-size: 16px;
+    }
+    .company-text, .fax-text, .address-text {
+        font-size: 13px;
+    }
+}
+
