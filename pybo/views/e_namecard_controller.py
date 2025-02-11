@@ -1,6 +1,6 @@
-import os, functools
+import os, functools, time
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import redirect, secure_filename
@@ -8,9 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
-from pybo.models import User, NameCard, FileUpload, ShareCard
+from pybo.models import User, NameCard, FileUpload, ShareCard, QRCode
 from ..views.auth_views import login_required
 from ..service.image_manageent import ImageManagement
+from ..service.bmp_trans import BMPTrans
 
 bp =Blueprint('enamecard',__name__,url_prefix='/enamecard')
 
@@ -214,13 +215,39 @@ def view_sharecards():
 def gen_welcome():
     data = request.json
     share_no = data.get("share_no")
-    namecard_id = data.get("share_no")
+    namecard_id = data.get("namecard_id")
 
     user = g.user
+
+    # ✅ 업로드 폴더 설정
+    output_folder = current_app.config.get('UPLOAD_BMP_FOLDER')
+
+   
+    #QR URL 만들기 
+    unique_id = str(uuid4())  # 매번 새로운 UUID 생성
+    expiration_time = datetime.utcnow() + timedelta(minutes=30)  # 30분 후 만료
+
+    # DB에 저장 --> 만료시간도 함께 저장
+    qr_entry = QRCode(unique_id=unique_id, expires_at=expiration_time)
+    db.session.add(qr_entry)
+    db.session.commit()
+
+    # QR 코드에 삽입할 URL 반환
+    qr_url = f"http://192.168.0.136:5000/qr/{unique_id}"
+    print("QR URL: ", qr_url)
+    print("upload_folder: ", output_folder)
+
+    e_namecard = NameCard.query.filter_by(id= namecard_id, user_id=user.no).first()
+
+    bmp_name, bmp_path = BMPTrans.generate_bmp_namecard(e_namecard,output_folder, qr_url )
 
 
 
     return jsonify({"message": "선택한 명함이 저장되었습니다."})
+
+
+
+
 
 @bp.route('/save_namecard', methods=['POST'])
 @login_required
@@ -242,5 +269,18 @@ def save_namecard():
     db.session.commit()
 
     return jsonify({"message": "선택한 명함이 저장되었습니다."})
+
+
+def cleanup_expired_qr_codes(app):
+    while True:
+        with app.app_context():  # ✅ Flask 애플리케이션 컨텍스트 사용
+            expired_qrs = QRCode.query.filter(QRCode.expires_at < datetime.utcnow()).all()
+            for qr in expired_qrs:
+                db.session.delete(qr)
+            db.session.commit()
+            print("✅ 만료된 QR 코드 삭제 완료")
+
+        time.sleep(60)  # 60초마다 실행
+
 
 

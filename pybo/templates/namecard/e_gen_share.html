@@ -82,13 +82,14 @@
                 {% endfor %}
             </div>
         </div>
-    
+
+        
         <div class="container mt-4">
             <h3 class="mt-4">공유 파일 선택 (최대 5개, 15MB 이하)</h3>
             {% set has_files = false %}
             {% for file in fileuploads %}
                 {% if file.files is not none %}
-                    {% for filename in file.files|sort if filename %}
+                    {% for filename in file.files|select('string')|sort %}
                         {% set has_files = true %}
                         <div class="file-item d-flex align-items-center">
                             <input class="file-checkbox" type="checkbox" name="selected_files" value="{{ filename }}" id="file-{{ loop.index }}">
@@ -102,7 +103,7 @@
             {% endif %}
         </div>
         
-        
+               
         
         <div class="text-center mt-4">
             <button type="submit" class="btn btn-primary">e-쉐어카드 저장</button>

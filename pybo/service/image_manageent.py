@@ -29,3 +29,4 @@ class ImageManagement:
 
             return unique_filename  # DB 저장용 파일명
         return None
+    

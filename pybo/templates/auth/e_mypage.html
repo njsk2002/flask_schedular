@@ -127,7 +127,7 @@
                             {% if photo.url != "" %}
                                 <div class="d-flex flex-column align-items-center mx-2">
                                     <img src="{{ photo.url }}" alt="{{ photo.name }}" class="img-thumbnail" style="width: 100px; height: 100px; border-radius: 8px;">
-                                    <input class="form-check-input mt-2" type="radio" name="selected_photo" value="{{ photo.url }}" {% if loop.first %}checked{% endif %}>
+                                    <input class="form-check mt-2" type="radio" name="selected_photo" value="{{ photo.url }}" {% if loop.first %}checked{% endif %}>
                                 </div>
                             {% endif %}
                         {% endfor %}
@@ -139,7 +139,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="username">부서명</label>
-                        <input type="checkbox" name="department_check" class="form-check-input ms-3" {% if user.department == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="department_check" class="form-check ms-3" {% if user.department == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="department" name="department" value="{{ user.department if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -147,7 +147,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="username">직급</label>
-                        <input type="checkbox" name="position_check" class="form-check-input ms-3" {% if user.position == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="position_check" class="form-check ms-3" {% if user.position == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="position" name="position" value="{{ user.position if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -156,7 +156,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="username" class="mb-0">이름</label>
-                        <input type="checkbox" name="username_check" class="form-check-input ms-3" {% if user.username == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="username_check" class="form-check ms-3" {% if user.username == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="username" name="username" value="{{ user.username if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -165,7 +165,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="phone" class="mb-0">휴대폰</label>
-                        <input type="checkbox" name="phone_check" class="form-check-input ms-3" {% if user.phone == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="phone_check" class="form-check ms-3" {% if user.phone == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="phone" name="phone" value="{{ user.phone if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -174,7 +174,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="email" class="mb-0">이메일</label>
-                        <input type="checkbox" name="email_check" class="form-check-input ms-3" {% if user.email == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="email_check" class="form-check ms-3" {% if user.email == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="email" name="email" value="{{ user.email if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -183,7 +183,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="company" class="mb-0">회사명</label>
-                        <input type="checkbox" name="company_check" class="form-check-input ms-3" {% if user.company == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="company_check" class="form-check ms-3" {% if user.company == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="company" name="company" value="{{ user.company if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -192,7 +192,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="com_address" class="mb-0">회사 주소</label>
-                        <input type="checkbox" name="com_address_check" class="form-check-input ms-3" {% if user.com_address == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="com_address_check" class="form-check ms-3" {% if user.com_address == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="com_address" name="com_address" value="{{ user.com_address if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -201,7 +201,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="tel_rep" class="mb-0">대표 전화</label>
-                        <input type="checkbox" name="tel_rep_check" class="form-check-input ms-3" {% if user.tel_rep == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="tel_rep_check" class="form-check ms-3" {% if user.tel_rep == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="tel_rep" name="tel_rep" value="{{ user.tel_rep if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -210,7 +210,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="tel_dir" class="mb-0">직통 전화</label>
-                        <input type="checkbox" name="tel_dir_check" class="form-check-input ms-3" {% if user.tel_dir == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="tel_dir_check" class="form-check ms-3" {% if user.tel_dir == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="tel_dir" name="tel_dir" value="{{ user.tel_dir if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -219,7 +219,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="fax" class="mb-0">팩스</label>
-                        <input type="checkbox" name="fax_check" class="form-check-input ms-3" {% if user.fax == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="fax_check" class="form-check ms-3" {% if user.fax == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="fax" name="fax" value="{{ user.fax if user else '' }}" class="form-control mt-1" disabled>
                 </div>
@@ -228,7 +228,7 @@
                 <div class="form-group">
                     <div class="d-flex align-items-center">
                         <label for="homepage" class="mb-0">홈페이지</label>
-                        <input type="checkbox" name="homepage_check" class="form-check-input ms-3" {% if user.homepage == 'Y' %}checked{% endif %}>
+                        <input type="checkbox" name="homepage_check" class="form-check ms-3" {% if user.homepage == 'Y' %}checked{% endif %}>
                     </div>
                     <input type="text" id="homepage" name="homepage" value="{{ user.homepage if user else '' }}" class="form-control mt-1" disabled>
                 </div>

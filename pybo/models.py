@@ -1,5 +1,10 @@
 from pybo import db
 from sqlalchemy.sql import func
+from datetime import datetime, timezone, timedelta
+
+
+# ✅ KST 타임존 설정 (UTC+9)
+KST = timezone(timedelta(hours=9))
 
 
 
@@ -66,12 +71,12 @@ class User(db.Model):
     __tablename__ = 'user'
 
     no = db.Column(db.Integer, primary_key=True)
-    userid= db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(200),nullable=False)
-    username= db.Column(db.String(150), nullable=False)
+    userid= db.Column(db.String(150), unique=True, nullable=False, default='')
+    password = db.Column(db.String(200), nullable=False, default='')
+    username= db.Column(db.String(150), nullable=False, default='')
     userimage = db.Column(db.String(300), nullable=True)
-    email = db.Column(db.String(150), nullable=False)
-    phone = db.Column(db.String(150), nullable=False)
+    email = db.Column(db.String(150), nullable=False, default='')
+    phone = db.Column(db.String(150), nullable=False, default='')
     photo_1 = db.Column(db.String(500), nullable=True)
     photo_2 = db.Column(db.String(500), nullable=True)
     photo_3 = db.Column(db.String(500), nullable=True)
@@ -86,17 +91,18 @@ class User(db.Model):
     blood = db.Column(db.String(150), nullable=True)
     healthy = db.Column(db.String(150), nullable=True)
     age = db.Column(db.String(150), nullable=True)
-    namecard = db.Column(db.String(150), nullable=False, default = '0')
+    namecard = db.Column(db.String(150), nullable=False, default='0')
     address = db.Column(db.String(500), nullable=True)
-    security = db.Column(db.String(100), nullable=False, default = '0')
-    create_date = db.Column(db.DateTime(), nullable=False)  
-    modify_date = db.Column(db.DateTime(), nullable=False)  
+    security = db.Column(db.String(100), nullable=False, default='0')
 
-    # User가 삭제될 때 NameCard도 함께 삭제
-    namecards = db.relationship('NameCard', backref='user', cascade="all, delete-orphan", lazy=True)
-    # 관계 설정 (User 1 : N FileUpload)
-    files = db.relationship('FileUpload', backref='user', cascade="all, delete-orphan", lazy=True)
+    create_date = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(KST))
+    modify_date = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(KST), onupdate=lambda: datetime.now(KST))
 
+    # ✅ 관계 설정 (User가 삭제될 때, 연결된 데이터 삭제)
+    namecards = db.relationship('NameCard', backref='user', cascade="all, delete", lazy=True)
+    files = db.relationship('FileUpload', backref='user', cascade="all, delete", lazy=True)
+    sharecards = db.relationship('ShareCard', backref='user', cascade="all, delete", lazy=True)
+    
 class NameCard(db.Model):
     __tablename__ = 'namecard'
 
@@ -115,9 +121,12 @@ class NameCard(db.Model):
     fax = db.Column(db.String(100), nullable=True)
     homepage = db.Column(db.String(300), nullable=True)
 
-    # ✅ DB에서 자동으로 현재 시간 설정
-    create_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())  
-    modify_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+   # ✅ Python에서 KST로 변환 후 저장
+    create_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST)) # ✅ KST 시간으로 저장
+    modify_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST), onupdate=lambda: datetime.now(KST))  
+    # ✅ KST 시간으로 저장# ✅ KST 시간으로 업데이트
+
 
     def to_dict(self):
         return {
@@ -193,9 +202,10 @@ class ShareCard(db.Model):
     s_file5 = db.Column(db.String(300), nullable=True)
     count = db.Column(db.String(100), nullable=True)
 
-    # ✅ DB에서 자동으로 현재 시간 설정
-    create_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now())  
-    modify_date = db.Column(db.DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    # ✅ Python에서 KST로 변환 후 저장
+    create_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST)) # ✅ KST 시간으로 저장
+    modify_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST), onupdate=lambda: datetime.now(KST))  
+    # ✅ KST 시간으로 저장# ✅ KST 시간으로 업데이트
 
     def to_dict(self):
         return {
@@ -219,6 +229,14 @@ class ShareCard(db.Model):
             "created_at": self.create_date.strftime('%Y-%m-%d %H:%M:%S') if self.create_date else None,
             "updated_at": self.modify_date.strftime('%Y-%m-%d %H:%M:%S') if self.modify_date else None
         }
+
+# ✅ QR 코드 저장용 테이블 생성
+class QRCode(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    unique_id = db.Column(db.String(100), unique=True, nullable=False)  # 고유한 URL 값
+    # ✅ Python에서 KST로 변환 후 저장
+    create_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST)) # ✅ KST 시간으로 저장
+    expires_at = db.Column(db.DateTime, nullable=False)  # 만료 시간
 
 
 class Comment(db.Model):
