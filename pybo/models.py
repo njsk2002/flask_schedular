@@ -229,10 +229,50 @@ class ShareCard(db.Model):
             "created_at": self.create_date.strftime('%Y-%m-%d %H:%M:%S') if self.create_date else None,
             "updated_at": self.modify_date.strftime('%Y-%m-%d %H:%M:%S') if self.modify_date else None
         }
+## 웰컴 페이지 Welcome Page
+class WelcomeData(db.Model):
+    __tablename__ = 'welcomedata'
+
+    no = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.no', ondelete="CASCADE"), nullable=False)
+    namecard_id = db.Column(db.Integer, db.ForeignKey('namecard.id', ondelete="CASCADE"), nullable=False)
+    share_card_id = db.Column(db.Integer, db.ForeignKey('sharecard.no', ondelete="CASCADE"), nullable=False)
+    bmp_name = db.Column(db.String(200), nullable=False)
+    bmp_path = db.Column(db.String(500), nullable=False)
+    qr_code = db.Column(db.String(500), nullable=True)
+    unique_id = db.Column(db.String(150), nullable=True)
+    count = db.Column(db.String(150), nullable=True)
+
+    # ✅ Python에서 KST로 변환 후 저장
+    create_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST)) # ✅ KST 시간으로 저장
+    expires_at = db.Column(db.DateTime, nullable=False)  # 만료 시간
+    # ✅ KST 시간으로 저장# ✅ KST 시간으로 업데이트
+
+
+    def to_dict(self):
+        return {
+            "no": self.no,
+            "user_id": self.user_id,
+            "namecard_id": self.namecard_id,
+            "share_card_id": self.share_card_id,
+            "bmp_name": self.bmp_name,
+            "bmp_path": self.bmp_path,
+            "qr_code": self.qr_code or "",
+            "unique_id": self.unique_id or "",
+            "count": self.count or "",
+            "created_at": self.create_date.strftime('%Y-%m-%d %H:%M:%S') if self.create_date else None,
+            "expires_at": self.expires_at.strftime('%Y-%m-%d %H:%M:%S') if self.expires_at else None
+        }
+
+
 
 # ✅ QR 코드 저장용 테이블 생성
 class QRCode(db.Model):
+    __tablename__ = 'qr_code'
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=False)
+    namecard_id = db.Column(db.Integer, nullable=False)
+    share_card_id = db.Column(db.Integer, nullable=False)
     unique_id = db.Column(db.String(100), unique=True, nullable=False)  # 고유한 URL 값
     # ✅ Python에서 KST로 변환 후 저장
     create_date = db.Column(db.DateTime(timezone=True),nullable=False,default=lambda: datetime.now(KST)) # ✅ KST 시간으로 저장

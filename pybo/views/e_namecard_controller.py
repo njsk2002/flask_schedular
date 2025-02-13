@@ -1,14 +1,14 @@
-import os, functools, time
+import os, functools, time, base64,vobject, urllib, io
 from uuid import uuid4
 from datetime import datetime, timedelta
-from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory
+from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory,Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import redirect, secure_filename
 from sqlalchemy.exc import SQLAlchemyError
-
+from PIL import Image  # ✅ WEBP 변환을 위해 추가
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
-from pybo.models import User, NameCard, FileUpload, ShareCard, QRCode
+from pybo.models import User, NameCard, FileUpload, ShareCard, QRCode, WelcomeData
 from ..views.auth_views import login_required
 from ..service.image_manageent import ImageManagement
 from ..service.bmp_trans import BMPTrans
@@ -222,28 +222,201 @@ def gen_welcome():
     # ✅ 업로드 폴더 설정
     output_folder = current_app.config.get('UPLOAD_BMP_FOLDER')
 
-   
-    #QR URL 만들기 
+    # ✅ QR URL 생성
     unique_id = str(uuid4())  # 매번 새로운 UUID 생성
     expiration_time = datetime.utcnow() + timedelta(minutes=30)  # 30분 후 만료
 
-    # DB에 저장 --> 만료시간도 함께 저장
-    qr_entry = QRCode(unique_id=unique_id, expires_at=expiration_time)
+    # ✅ QR 정보 DB 저장
+    qr_entry = QRCode(
+        unique_id=unique_id,
+        user_id=user.no,
+        namecard_id=namecard_id,
+        share_card_id=share_no,
+        expires_at=expiration_time
+    )
     db.session.add(qr_entry)
     db.session.commit()
 
-    # QR 코드에 삽입할 URL 반환
+    # ✅ QR 코드 URL 생성
     qr_url = f"http://192.168.0.136:5000/qr/{unique_id}"
+
     print("QR URL: ", qr_url)
     print("upload_folder: ", output_folder)
 
-    e_namecard = NameCard.query.filter_by(id= namecard_id, user_id=user.no).first()
+    # ✅ 명함 정보 가져오기
+    e_namecard = NameCard.query.filter_by(id=namecard_id, user_id=user.no).first()
+    bmp_name, bmp_path = BMPTrans.generate_bmp_namecard(e_namecard, output_folder, qr_url)
 
-    bmp_name, bmp_path = BMPTrans.generate_bmp_namecard(e_namecard,output_folder, qr_url )
+    # ✅ 웰컴페이지 데이터 저장
+    welcome_data = WelcomeData(
+        user_id=user.no,
+        namecard_id=namecard_id,
+        share_card_id=share_no,
+        bmp_name=bmp_name,
+        bmp_path=bmp_path,
+        qr_code=qr_url,
+        unique_id=unique_id,
+        expires_at=expiration_time
+    )
+
+    db.session.add(welcome_data)
+    db.session.commit()
+
+    # ✅ JSON 응답으로 message & QR URL 반환
+    return jsonify({
+        "message": "선택한 웰컴페이지가 저장되었습니다.",
+        "qr_code": qr_url,
+        "unique_id": unique_id
+    })
+
+######## 웰컴페이지 접근 ################################33
+@bp.route('/welcome_page/<unique_id>', methods=['GET'])
+# @login_required
+def welcome_page(unique_id):
+    # ✅ WelcomeData에서 데이터 조회
+    welcome_data = WelcomeData.query.filter_by(unique_id=unique_id).first()
+    
+    if not welcome_data:
+        return "잘못된 요청입니다.", 404
+    
+     # ✅ namecard 데이터 가져오기
+    name_card = NameCard.query.filter_by(id=welcome_data.namecard_id).first()
+
+    # ✅ ShareCard 데이터 가져오기
+    share_card = ShareCard.query.filter_by(no=welcome_data.share_card_id).first()
+
+    return render_template(
+        'namecard/e_welcome_page.html', 
+        welcome_data=welcome_data, 
+        namecard = name_card,
+        share_card=share_card,
+   
+    )
 
 
+# ########## VCF ##################################3
+# @bp.route('/generate_vcard')
+# def generate_vcard():
+#     photo_base64 = encode_photo_to_base64("C:/DavidProject/flask_project/bmp_files/iu/202411111646288523_t.jpg")
+#     vcard_data = f"""BEGIN:VCARD
+# VERSION:3.0
+# FN:아이유
+# EMAIL:iu2@icetech.co.kr
+# TEL:+1234567890
+# NOTE:안녕하세요! 아이유에요! 만나 뵙게 되어 영광입니다. 2025-01-24일 아이스기술 본사
+# PHOTO;ENCODING=b;TYPE=JPEG:{photo_base64}
+# END:VCARD
+# """
+#     return Response(vcard_data, mimetype='text/vcard', headers={"Content-Disposition": "attachment;filename=contact.vcf"})
 
-    return jsonify({"message": "선택한 명함이 저장되었습니다."})
+
+    
+# def encode_photo_to_base64(photo_path):
+#     with open(photo_path, "rb") as photo_file:
+#         encoded_photo = base64.b64encode(photo_file.read()).decode("utf-8")
+#     return encoded_photo
+
+# ########## VCF ##################################3
+
+
+@bp.route('/generate_vcard', methods=['POST'])
+def generate_vcard():
+    data = request.json
+    namecard_id = data.get("namecard_id")
+    unique_id = data.get("unique_id")
+    welcome_data_no = data.get("welcome_data_no")
+
+    namecard = NameCard.query.filter_by(id=namecard_id).first()
+    if not namecard:
+        return jsonify({"error": "명함 정보를 찾을 수 없습니다."}), 404
+
+    welcome_data = WelcomeData.query.filter_by(no=welcome_data_no).first()
+    if not welcome_data or welcome_data.unique_id != unique_id:
+        return jsonify({"error": "잘못된 요청입니다."}), 400
+
+    today_date = datetime.today().strftime('%Y-%m-%d')
+    username = namecard.username.replace(" ", "_").strip() if namecard.username else ""
+    company = namecard.company.replace(" ", "_").strip() if namecard.company else ""
+    email = namecard.email.strip() if namecard.email else ""
+    phone = namecard.phone.strip() if namecard.phone else ""
+    position = namecard.position.strip() if namecard.position else ""
+    com_address = namecard.com_address.strip() if namecard.com_address else ""
+    tel_dir = namecard.tel_dir.strip() if namecard.tel_dir else ""
+    fax = namecard.fax.strip() if namecard.fax else ""
+
+    # ✅ 파일명을 UTF-8로 변환 후 URL 인코딩
+    filename = f"{username}_{company}.vcf"
+    encoded_filename = urllib.parse.quote(filename.encode('utf-8'))
+
+    # ✅ 사진 Base64 인코딩
+    photo_base64 = ""
+    if namecard.selected_photo:
+        split_file = namecard.selected_photo.split("uploads/")[1]
+        photo_path = os.path.join("C:/DavidProject/flask_project/flask_schedular/uploads/", split_file)
+        print("사진 경로:", photo_path)
+        photo_base64 = encode_photo_to_base64(photo_path)
+
+    if not photo_base64:
+        print("⚠️ 사진 Base64 인코딩 실패!")
+        photo_base64 = ""  # 사진이 없을 경우 빈 문자열 처리
+    else:
+        print("✅ 사진 Base64 인코딩 성공!")
+
+    # ✅ Base64 데이터 75바이트마다 줄바꿈 추가 (vCard 표준에 맞게)
+    formatted_photo_base64 = "\n ".join(photo_base64[i:i+75] for i in range(0, len(photo_base64), 75))
+
+    # ✅ vCard 데이터 직접 생성
+    vcard_data = f"""BEGIN:VCARD
+VERSION:3.0
+FN:{username}
+EMAIL;TYPE=WORK:{email}
+TEL;TYPE=CELL:{phone} 
+TITLE:{position}
+"""
+
+    # ✅ 회사명과 부서를 ORG 필드에 추가
+    if namecard.department:
+        vcard_data += f"ORG:{company};{namecard.department}\n"  # 회사 + 부서
+    else:
+        vcard_data += f"ORG:{company}\n"  # 부서 정보가 없으면 회사명만 추가
+
+    vcard_data += f"""ADR;TYPE=WORK:;;{com_address};;;;
+NOTE:안녕하세요! {today_date}에 인사드렸던 {company} {username}입니다.
+"""
+
+    # ✅ 추가 전화번호, 팩스 추가 (옵션)
+    if tel_dir:
+        vcard_data += f"TEL;TYPE=WORK:{tel_dir}\n"  # 직장 전화번호
+    if fax:
+        vcard_data += f"TEL;TYPE=WORK,FAX:{fax}\n"  # 직장 팩스
+
+    # ✅ 사진 추가 (Base64 직접 삽입)
+    if photo_base64:
+        vcard_data += f"PHOTO;ENCODING=b;TYPE=JPEG:\n {formatted_photo_base64}\n"
+
+    vcard_data += "END:VCARD\n"
+
+    return Response(
+        vcard_data,
+        mimetype='text/vcard',
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+        }
+    )
+
+
+# ✅ 사진을 Base64로 변환하는 함수
+def encode_photo_to_base64(photo_path):
+    try:
+        with Image.open(photo_path) as img:
+            img = img.convert("RGB")  # ✅ RGB 변환 (투명 PNG 대비)
+            img = img.resize((300, 300))  # ✅ 300x300 크기 조절
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG")  # ✅ JPEG 포맷으로 저장
+            return base64.b64encode(buffer.getvalue()).decode("utf-8")
+    except FileNotFoundError:
+        print(f"⚠️ 파일을 찾을 수 없음: {photo_path}")
+        return None
 
 
 
@@ -271,16 +444,32 @@ def save_namecard():
     return jsonify({"message": "선택한 명함이 저장되었습니다."})
 
 
+# def cleanup_expired_qr_codes(app):
+#     while True:
+#         with app.app_context():  # ✅ Flask 애플리케이션 컨텍스트 사용
+#             expired_qrs = QRCode.query.filter(QRCode.expires_at < datetime.utcnow()).all()
+#             for qr in expired_qrs:
+#                 db.session.delete(qr)
+#             db.session.commit()
+#             print("✅ 만료된 QR 코드 삭제 완료")
+
+#         time.sleep(60)  # 60초마다 실행
+
 def cleanup_expired_qr_codes(app):
     while True:
-        with app.app_context():  # ✅ Flask 애플리케이션 컨텍스트 사용
-            expired_qrs = QRCode.query.filter(QRCode.expires_at < datetime.utcnow()).all()
-            for qr in expired_qrs:
-                db.session.delete(qr)
-            db.session.commit()
-            print("✅ 만료된 QR 코드 삭제 완료")
+        with app.app_context():
+            try:
+                expired_qrs = QRCode.query.filter(QRCode.expires_at < datetime.utcnow()).all()
+                for qr in expired_qrs:
+                    db.session.delete(qr)
+                db.session.commit()
+                print("✅ 만료된 QR 코드 삭제 완료")
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ QR 코드 삭제 중 오류 발생: {e}")
 
-        time.sleep(60)  # 60초마다 실행
+        time.sleep(300)  # 60초마다 실행
+
 
 
 

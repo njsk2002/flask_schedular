@@ -121,23 +121,24 @@
 {% endblock %}
 
 {% block script %}
+
 <script>
     function confirmSelection(shareNo, namecardId) {
         if (confirm("이 공유 명함을 선택하시겠습니까?")) {
-            // POST 요청으로 share.no 값을 전달
+            // ✅ 서버에 POST 요청 보내기
             fetch('/enamecard/gen_welcome', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     share_no: shareNo,
                     namecard_id: namecardId
-                 })
+                })
             })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    alert("선택이 완료되었습니다!");
-                    window.location.reload(); // 페이지 새로고침 (선택 완료 후)
+                if (data.qr_code) {
+                    // ✅ 팝업 메시지 생성
+                    showPopup(data.message, data.unique_id);
                 } else {
                     alert("오류 발생: " + data.message);
                 }
@@ -146,6 +147,29 @@
                 console.error("Error:", error);
                 alert("서버 오류가 발생했습니다.");
             });
+        }
+    }
+
+    function showPopup(message, uniqueId) {
+        // ✅ 동적으로 팝업 생성
+        let popup = document.createElement("div");
+        popup.classList.add("custom-popup");
+
+        popup.innerHTML = `
+            <div class="popup-content">
+                <p>${message}</p>
+                <button class="btn btn-secondary" onclick="closePopup()">확인</button>
+                <button class="btn btn-primary" onclick="window.location.href='/enamecard/welcome_page/${uniqueId}'">웰컴페이지 이동</button>
+            </div>
+        `;
+
+        document.body.appendChild(popup);
+    }
+
+    function closePopup() {
+        let popup = document.querySelector(".custom-popup");
+        if (popup) {
+            popup.remove();
         }
     }
 </script>

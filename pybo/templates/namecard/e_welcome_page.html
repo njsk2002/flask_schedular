@@ -1,0 +1,164 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-center mb-4">Welcome Page</h2>
+
+    {% if error_message %}
+        <div class="alert alert-danger" role="alert">
+            {{ error_message }}
+        </div>
+    {% endif %}
+
+    <!-- ✅ QR 코드 -->
+    <!-- <div class="text-center">
+        <h4>📌 QR 코드</h4>
+        <img src="{{ welcome_data.qr_code }}" class="qr-code-img" alt="QR Code">
+    </div> -->
+
+    <!-- ✅ 인사말 -->
+    <div class="title-box mt-4">
+        <h4>💬 제목</h4>
+        <h3>{{ share_card.title or '없음' }}</h3>
+    </div>
+
+    <!-- ✅ 인사말 -->
+    <div class="message-box mt-4">
+        <h4>💬 인사말</h4>
+        <p>{{ share_card.introduce or '없음' }}</p>
+    </div>
+
+    <!-- ✅ 내용 -->
+    <div class="content-box mt-3">
+        <h4>📄 내용</h4>
+        <p>{{ share_card.content }}</p>
+    </div>
+
+    <!-- ✅ 명함 정보 -->
+    {% if namecard %}
+    <div class="namecard-box mt-4 p-3 shadow-sm">
+        <h4>📌 명함 정보</h4>
+        <div class="d-flex align-items-center">
+            <!-- 프로필 사진 -->
+            <img src="{{ namecard.selected_photo or '/static/default_profile.jpg' }}" 
+                 class="rounded-circle profile-img me-3">
+            
+            <div>
+                <!-- 이름 및 직급 -->
+                <strong class="name-highlight">{{ namecard.username or '이름 없음' }}</strong> 
+                ({{ namecard.position or '직급 없음' }})<br>
+                
+                <!-- 회사명 -->
+                🏢 {{ namecard.company or '회사 없음' }}<br>
+                
+                <!-- 이메일 -->
+                📧 <a href="mailto:{{ namecard.email }}" class="email-text">
+                    {{ namecard.email or '이메일 없음' }}
+                </a> <br>
+                
+                <!-- 스마트폰 전화번호 -->
+                📱 {{ namecard.phone or '전화 없음' }} <br>
+                
+                <!-- 대표 전화 & 직통 전화 -->
+                ☎ {{ namecard.tel_rep or '대표번호 없음' }} | 📞 {{ namecard.tel_dir or '직통번호 없음' }} <br>
+
+                <!-- 팩스 -->
+                📠 {{ namecard.fax or '팩스 없음' }}<br>
+
+                <!-- 주소 -->
+                📍 {{ namecard.com_address or '주소 없음' }}<br>
+
+                <!-- 홈페이지 -->
+                🌐 <a href="http://{{ namecard.homepage }}" target="_blank">
+                    {{ namecard.homepage or '홈페이지 없음' }}
+                </a>
+            </div>
+        </div>
+    </div>
+   <!-- ✅ "명함 내 폰에 저장" 버튼 -->
+   <div class="text-center mt-4">
+        <button class="btn btn-success" onclick="saveToPhone('{{ namecard.id }}', '{{ welcome_data.unique_id }}', '{{ welcome_data.no }}')">
+            📥 명함 내 폰에 저장
+        </button>
+    </div>
+    {% else %}
+        <p class="text-muted">명함 정보 없음</p>
+    {% endif %}
+
+    <!-- ✅ 공유된 파일 리스트 -->
+    <div class="file-box mt-4 p-3 shadow-sm">
+        <h4>📂 공유할 파일</h4>
+        {% set valid_files = share_card.s_file1, share_card.s_file2, share_card.s_file3, 
+                            share_card.s_file4, share_card.s_file5 %}
+        {% set valid_files = valid_files | select('string') | reject('eq', '') | list %}
+
+        {% if valid_files | length > 0 %}
+            <ul class="file-list">
+                {% for file in valid_files %}
+                    <li>
+                        <i class="bi bi-file-earmark-text"></i> {{ file }}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-muted">공유된 파일이 없습니다.</p>
+        {% endif %}
+    </div>
+
+    <!-- ✅ 작성일 -->
+    <p class="text-muted small">📅 작성일: {{welcome_data.create_date or '날짜 없음' }}</p>
+    
+
+
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/e_css/e_sharecard.css">
+{% endblock %}
+
+{% block script %}
+<script>
+   function saveToPhone(namecardId, uniqueId, welcomeDataNo) {
+    fetch('/enamecard/generate_vcard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            namecard_id: namecardId,
+            unique_id: uniqueId,
+            welcome_data_no: welcomeDataNo
+        })
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        let url = window.URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+
+        let filename = `${namecardId}_contact.vcf`;
+        a.download = filename;
+
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // ✅ URL 해제 (메모리 정리)
+        setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+        }, 1000);
+
+        // ✅ 모바일 환경에서 자동 실행 방지 (중복 다운로드 방지)
+        if (navigator.userAgent.match(/(iPhone|iPad|Android)/)) {
+            setTimeout(() => {
+                window.open(url, '_blank');
+            }, 500);
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        alert("명함 저장 중 오류 발생");
+    });
+}
+
+</script>
+{% endblock %}

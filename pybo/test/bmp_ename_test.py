@@ -19,12 +19,17 @@ qr_data = "http://192.168.0.136:5000/naverapi/generate_vcard"
 QR_SIZE = 100  # QR 코드 크기 (100x100 픽셀)
 
 # 텍스트 정보
-auth_date = "2025-02-03"
-staff_name = "아이유"
-staff_b_type = "A"
-staff_condition = "고혈압"
-year_grade = "장년"
-security_grade = "B"
+username="홍길동"
+company="OpenAI"
+position="개발자"
+email="gildong@openai.com"
+phone="010-1234-5678"
+tel_rep="02-1234-5678"
+tel_dir="070-9876-5432"
+fax="02-1111-2222"
+com_address="서울 강남구 테헤란로"
+homepage="www.openai.com"
+selected_photo="/uploads/profile.jpg"
 
 # 출력 폴더 생성
 output_folder = "bmp_files"
