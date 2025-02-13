@@ -1,0 +1,159 @@
+/* 공유 명함 스타일 */
+.namecard {
+    width: 600px;
+    height: 320px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    padding: 55px;
+    position: relative;
+    padding-bottom: 40px;
+    transition: transform 0.3s ease-in-out;
+}
+
+.namecard:hover {
+    transform: scale(1.03);
+}
+
+.profile-photo {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+}
+
+.profile-photo img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 2px solid #ddd;
+    display: block;
+    margin: auto;
+}
+
+.company-name {
+    position: absolute;
+    top: 10px;
+    right: 20px;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+/* 사용자 정보 한 줄 정렬 */
+.user-info {
+    position: absolute;
+    top: 130px;
+    left: 20px;
+    font-size: 20px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+}
+
+/* 부서 및 직급 스타일 */
+.department-position {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+}
+
+/* 이름 스타일 (오른쪽 정렬, 크기 크게) */
+.user-name {
+    padding-left: 100px; /* 내부 패딩 추가 (오른쪽 이동) */
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+/* 명함 정보 (이메일, 전화번호) */
+.namecard-info {
+    position: absolute;
+    top: 190px;
+    left: 20px;
+}
+
+/* 주소 (좌측 하단에 별도 배치) */
+.address-container {
+    position: absolute;
+    bottom: 30px;
+    left: 20px;
+}
+
+/* 명함 정보 텍스트 간격 최소화 */
+.namecard-info p, .address-text {
+    margin: 2px 0;
+    line-height: 1.2;
+    font-size: 14px;
+}
+
+/* 홈페이지 (맨 아래 중앙 고정, 최소 마진) */
+.homepage {
+   
+    width: 100%;
+    text-align: center;
+    font-size: 14px;
+}
+
+
+/* 명함 카드에 적용되는 선택 버튼 */
+.namecard .form-check {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+
+/* 파일 선택 리스트 전체 스타일 */
+#file-container {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 15px;
+    border: 1px solid #ddd;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+}
+
+
+/* 파일 선택 리스트 스타일 */
+.file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* 파일 이름 왼쪽, 체크박스 오른쪽 */
+    padding: 10px;
+    border-bottom: 1px solid #ddd; /* 줄 추가 (구분) */
+    border-radius: 5px;
+    background: #f8f9fa; /* 약간의 배경색 */
+    transition: background 0.2s ease-in-out;
+}
+
+/* 마우스 호버 효과 */
+.file-item:hover {
+    background: #eef1f4;
+}
+
+/* 파일 체크박스 */
+.file-checkbox {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-right: 10px;
+}
+
+/* 파일 이름 스타일 */
+.file-item .form-check-label {
+    flex-grow: 1;
+    font-size: 16px;
+    color: #333;
+    padding-left: 5px;
+}
+
+

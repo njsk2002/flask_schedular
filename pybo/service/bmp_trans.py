@@ -1,9 +1,7 @@
-import os, requests, uuid, cv2, qrcode, platform
+import os, requests, uuid, cv2, qrcode, platform, re
 from io import BytesIO
 import numpy as np
 from PIL import Image, ImageOps, ImageDraw, ImageFont
-
-
 
 
 
@@ -183,106 +181,197 @@ class BMPTrans:
             return None
 
 
-    # def generate_bmp_permission(url,qr_data):
-    #     # 이미지 경로
-    #     url = r"C:/DavidProject/flask_project/출입증2.png"
 
-    #     # e-paper 해상도 설정
-    #     EPAPER_WIDTH = 400
-    #     EPAPER_HEIGHT = 300
+    ######## e- 명함 ##########################################3
+    @staticmethod
+    def generate_bmp_namecard(namecard,output_folder,qr_data):
+        # 이미지 경로
+        # selected_photo = r"C:/DavidProject/flask_project/출입증2.png"
 
-    #     # QR 코드 데이터 및 크기 설정
-    #     qr_data = "http://icetech.co.kr/"
-    #     QR_SIZE = 100  # QR 코드 크기 (100x100 픽셀)
+        # e-paper 해상도 설정
+        EPAPER_WIDTH = 400
+        EPAPER_HEIGHT = 300
 
-    #     # 텍스트 정보
-    #     auth_date = "2025-01-25"
-    #     staff_name = "아이유"
-    #     staff_b_type = "A"
-    #     staff_condition = "고혈압"
-    #     year_grade = "고령자"
-    #     security_grade = "B"
+        # QR 코드 데이터 및 크기 설정
+        # qr_data = "http://192.168.0.136:5000/naverapi/generate_vcard"
+        QR_SIZE = 100  # QR 코드 크기 (100x100 픽셀)
 
-    #     # 출력 폴더 생성
-    #     output_folder = "bmp_files"
-    #     os.makedirs(output_folder, exist_ok=True)
+        username = namecard.username if namecard and namecard.username else "명함 없음"
+        company = namecard.company if namecard and namecard.company else "회사 정보 없음"
+        department = namecard.department if namecard and namecard.department else "회사 정보 없음"
+        position = namecard.position if namecard and namecard.position else "직급 정보 없음"
+        email = namecard.email if namecard and namecard.email else "이메일 없음"
+        phone = namecard.phone if namecard and namecard.phone else "전화번호 없음"
+        tel_rep = namecard.tel_rep if namecard and namecard.tel_rep else "공용전화 없음"
+        tel_dir = namecard.tel_dir if namecard and namecard.tel_dir else "직통전화 없음"
+        fax = namecard.fax if namecard and namecard.fax else "팩스 없음"
+        homepage = namecard.homepage if namecard and namecard.homepage else "홈페이지 없음"
 
-    #     # 폰트 경로 설정
-    #     if platform.system() == "Windows":
-    #         font_path = "C:/Windows/Fonts/malgun.ttf"  # Windows용 폰트 경로
-    #     elif platform.system() == "Linux":
-    #         font_path = "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"  # Linux용 폰트 경로
-    #     else:
-    #         raise Exception("지원되지 않는 운영체제입니다.")
+        if namecard.selected_photo:
+            photo = namecard.selected_photo
+            split_file = photo.split("uploads/")[1]  # 'uploads/' 이후의 문자열 가져오기   
+            selected_photo = "C:/DavidProject/flask_project/flask_schedular/uploads/" + split_file
+        else:
+            selected_photo = "/static/images/icelogo.png"
+  
+        if namecard and namecard.com_address: 
+            com_address = BMPTrans.format_address(namecard.com_address)
+        else:
+            com_address = "주소 없음"
 
-    #     try:
-    #         # 배경 이미지 열기
-    #         img = Image.open(url)
+        print(selected_photo)
+        # # 텍스트 정보
+        # username = "홍길동"
+        # department = "부설연구소"
+        # position = "책임연구원"
+        # email = "davidjung@icetech.co.kr"
+        # phone = "010-1234-5678"
+        # tel_rep = "02-1234-5678"
+        # tel_dir = "070-9876-5432"
+        # fax = "02-1111-2222"
+        # com_address = "(우 13207)\n경기도 성남시 중원구 사기막골로 124\nSKn테크노파크 넥스센터 2층"
+        # homepage = "www.openai.com"
 
-    #         # 좌측 상단 200x200 크기로 이미지 조정
-    #         img_resized = ImageOps.fit(img, (200, 200), method=Image.LANCZOS)
+        # 출력 폴더 생성
+        # output_folder = "bmp_files"
+        # os.makedirs(output_folder, exist_ok=True)
 
-    #         # e-paper 전체 캔버스 생성
-    #         canvas = Image.new("RGB", (EPAPER_WIDTH, EPAPER_HEIGHT), color="white")  # 흰색 배경
+        # 폰트 경로 설정
+        if platform.system() == "Windows":
+            font_path = "C:/Windows/Fonts/malgun.ttf"  # Windows용 폰트 경로
+        elif platform.system() == "Linux":
+            font_path = "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"  # Linux용 폰트 경로
+        else:
+            raise Exception("지원되지 않는 운영체제입니다.")
 
-    #         # 배경 이미지 삽입 (좌측 상단)
-    #         canvas.paste(img_resized, (5, 50))
+        try:
+            # 배경 이미지 열기
+            img = Image.open(selected_photo)
 
-    #         # QR 코드 생성 및 크기 조정
-    #         qr = qrcode.QRCode(
-    #             version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4
-    #         )
-    #         qr.add_data(qr_data)
-    #         qr.make(fit=True)
-    #         qr_img = qr.make_image(fill_color="black", back_color="white")
-    #         qr_img = qr_img.resize((QR_SIZE, QR_SIZE), Image.LANCZOS)
+            # 좌측 상단 150x150 크기로 이미지 조정
+            img_resized = ImageOps.fit(img, (150, 150), method=Image.LANCZOS)
 
-    #         # QR 코드 삽입 (우측 하단)
-    #         canvas.paste(qr_img, (EPAPER_WIDTH - QR_SIZE - 10, EPAPER_HEIGHT - QR_SIZE - 10))
+            # e-paper 전체 캔버스 생성
+            canvas = Image.new("RGB", (EPAPER_WIDTH, EPAPER_HEIGHT), color="white")  # 흰색 배경
 
-    #         # 텍스트 추가
-    #         draw = ImageDraw.Draw(canvas)
-    #         font_title = ImageFont.truetype(font_path, size=24)  # 제목 글씨 크기 설정
-    #         font = ImageFont.truetype(font_path, size=16)  # 일반 텍스트 크기 설정
+            # 배경 이미지 삽입 (좌측 상단, 여백 조정)
+            canvas.paste(img_resized, (10, 10))  # X=10, Y=10으로 위치 조정
 
-    #         # 출입증 제목 추가 (상단 중앙)
-    #         title_text = "출 입 증"
-    #         title_bbox = draw.textbbox((0, 0), title_text, font=font)
-    #         title_width = title_bbox[2] - title_bbox[0]
-    #         draw.text(((EPAPER_WIDTH - title_width) // 2, 10), title_text, fill="black", font=font_title) # 출입증만 24
+            # QR 코드 생성 및 크기 조정
+            qr = qrcode.QRCode(
+                version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4
+            )
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            qr_img = qr_img.resize((QR_SIZE, QR_SIZE), Image.LANCZOS)
 
-    #         # 텍스트 위치 설정
-    #         text_x = 210  # 사진 오른쪽 시작 위치
-    #         text_y = 52
-    #         line_spacing = 24
+            # QR 코드 삽입 (우측 하단)
+            canvas.paste(qr_img, (EPAPER_WIDTH - QR_SIZE - 10, EPAPER_HEIGHT - QR_SIZE - 10))
 
-    #         # 텍스트 내용 추가
-    #         draw.text((text_x, text_y), f"허용 일자 | {auth_date}", fill="black", font=font)
-    #         text_y += line_spacing
-    #         draw.text((text_x, text_y), f"이름 |       {staff_name}", fill="black", font=font)
-    #         text_y += line_spacing
-    #         draw.text((text_x, text_y), f"혈액형 |      {staff_b_type}", fill="black", font=font)
-    #         text_y += line_spacing
-    #         draw.text((text_x, text_y), f"지병 |       {staff_condition}", fill="black", font=font)
-    #         text_y += line_spacing
-    #         draw.text((text_x, text_y), f"구분 |       {year_grade}", fill="black", font=font)
-    #         text_y += line_spacing
-    #         draw.text((text_x, text_y), f"보안등급 |    {security_grade}", fill="black", font=font)
+            # 텍스트 추가
+            draw = ImageDraw.Draw(canvas)
+            font_title = ImageFont.truetype(font_path, size=24)  # 제목 글씨 크기 설정
+            font = ImageFont.truetype(font_path, size=16)  # 일반 텍스트 크기 설정
 
-    #         # 흑백 변환 및 디더링 적용
-    #         bw_img = canvas.convert("1", dither=Image.FLOYDSTEINBERG)
+            # 회사이름 제목 추가 (오른쪽 상단)
+            title_text = company
+            title_bbox = draw.textbbox((0, 0), title_text, font=font_title)
+            title_width = title_bbox[2] - title_bbox[0]
 
-    #         # 고유 파일명 생성 및 저장
-    #         uuid_4 = uuid.uuid4()
-    #         bmp_name = f"e_paper_{uuid_4}.bmp"
-    #         bmp_path = os.path.join(output_folder, bmp_name)
-    #         bw_img.save(bmp_path, format="BMP")
+            # 오른쪽 상단 정렬 (오른쪽 끝에서 10px 여백)
+            title_x = EPAPER_WIDTH - title_width - 10
+            title_y = 10  # 상단 여백
 
-    #         print(f"이미지가 성공적으로 변환되어 저장되었습니다: {bmp_path}")
+            # 텍스트 추가
+            draw.text((title_x, title_y), title_text, fill="black", font=font_title)
 
-    #     except FileNotFoundError:
-    #         print("로컬 파일을 찾을 수 없습니다. 경로를 확인하세요.")
-    #     except Exception as e:
-    #         print(f"오류가 발생했습니다: {e}")
+            # 텍스트 위치 설정
+            text_x = 170  # 왼쪽 정렬 기준점 (사진 오른쪽)
+            text_y = 52
+            line_spacing = 24
+
+            # 텍스트 크기 측정
+            department_text = f"{department} |"
+            position_text = f"{position} |"
+            username_text = f"{username}"
+
+            # 텍스트 크기 측정
+            department_height = draw.textbbox((0, 0), department_text, font=font)[3]  # 높이 측정
+            position_height = draw.textbbox((0, 0), position_text, font=font)[3]
+            username_height = draw.textbbox((0, 0), username_text, font=font)[3]
+
+            # 중앙 배치를 위해 중간값 계산
+            total_height = department_height + position_height
+            username_y_centered = text_y + (total_height // 2) - (username_height // 2)  # 중앙 정렬
+
+            # 텍스트 내용 추가 (이름을 department & position의 세로 중앙에 배치)
+            draw.text((text_x, text_y), department_text, fill="black", font=font)
+            text_y += line_spacing
+            draw.text((text_x, text_y), position_text, fill="black", font=font)
+
+            # username을 중앙 정렬한 위치에 배치
+            draw.text((text_x + 110, username_y_centered), username_text, fill="black", font=font)
+
+            # 이메일 및 전화번호 (기존 위치 유지)
+            text_y += line_spacing
+            draw.text((text_x, text_y), f"TEL : {phone} ", fill="black", font=font)
+            text_y += line_spacing
+            draw.text((text_x, text_y), f"E : {email}", fill="black", font=font)
+            text_y += line_spacing
+            draw.text((text_x, text_y), f"FAX : {fax}", fill="black", font=font)
+
+            # 📌 **전화번호 및 주소를 이미지 하단 왼쪽으로 배치**
+            bottom_text_x = 10  # 왼쪽 정렬
+            bottom_text_y = EPAPER_HEIGHT - 100  # 하단 정렬 (QR 코드 위쪽)
+
+            draw.text((bottom_text_x, bottom_text_y), f"{tel_rep} | {tel_dir}", fill="black", font=font)
+            bottom_text_y += line_spacing  # 줄 간격 추가
+
+            # 📌 **주소 줄바꿈 처리 (여러 줄 출력)**
+            address_lines = com_address.split("\n")  # 주소를 줄마다 리스트로 변환
+            for line in address_lines:
+                draw.text((bottom_text_x, bottom_text_y), line.strip(), fill="black", font=font)
+                bottom_text_y += line_spacing  # 줄 간격 유지
+
+            # 흑백 변환 및 디더링 적용
+            bw_img = canvas.convert("1", dither=Image.FLOYDSTEINBERG)
+            print("OUTPUT: ", output_folder)
+            # 고유 파일명 생성 및 저장
+            uuid_4 = uuid.uuid4()
+            bmp_name = f"e_paper_{uuid_4}.bmp"
+            bmp_path = os.path.join(output_folder, bmp_name)
+            bw_img.save(bmp_path, format="BMP")
+
+            print(f"이미지가 성공적으로 변환되어 저장되었습니다: {bmp_path}")
+            return bmp_name, bmp_path  #bmp파일 네임과 풀경로 반환
+
+        except FileNotFoundError:
+            print("로컬 파일을 찾을 수 없습니다. 경로를 확인하세요.")
+            return None, None
+        except Exception as e:
+            print(f"오류가 발생했습니다: {e}")
+            return None, None
+
+    # 주소 줄 바꿈
+    def format_address(com_address):
+        # ✅ 1차 줄바꿈: "광역시" 또는 "도" 앞에서 줄바꿈
+        address_pattern = re.compile(r"(서울|부산|대구|인천|광주|대전|울산|세종|제주|경기도|강원도|충청북도|충청남도|전라북도|전라남도|경상북도|경상남도)")
+        
+        match = address_pattern.search(com_address)
+        if match:
+            split_pos = match.start()  # 광역시/도의 시작 위치
+            com_address = com_address[:split_pos] + "\n" + com_address[split_pos:]
+
+        # ✅ 2차 줄바꿈: 도로명 주소 앞에서 줄바꿈
+        road_pattern = re.compile(r"([가-힣]+(?:로|길|대로)\s*\d+)")
+        
+        match = road_pattern.search(com_address)
+        if match:
+            #split_pos = match.start()  # 도로명 주소 시작 위치
+            split_pos = match.end()  # 도로명 주소 끝 위치
+            com_address = com_address[:split_pos] + "\n" + com_address[split_pos:]
+
+        return com_address    
 
 

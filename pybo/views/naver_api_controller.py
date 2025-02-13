@@ -186,7 +186,7 @@ def get_video():
 
 @bp.route('/generate_vcard')
 def generate_vcard():
-    photo_base64 = encode_photo_to_base64("C:/DavidProject/flask_project/bmp_files/iu/202411111646288523_t.jpg")
+    photo_base64 = encode_photo_to_base64("C:/DavidProject/flask_project/flask_schedular/uploads/2_6114c7ee.png")
     vcard_data = f"""BEGIN:VCARD
 VERSION:3.0
 FN:아이유

@@ -1,0 +1,272 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-center mb-4">Welcome Page</h2>
+
+    {% if error_message %}
+        <div class="alert alert-danger" role="alert">
+            {{ error_message }}
+        </div>
+    {% endif %}
+
+    <!-- ✅ QR 코드 -->
+    <!-- <div class="text-center">
+        <h4>📌 QR 코드</h4>
+        <img src="{{ welcome_data.qr_code }}" class="qr-code-img" alt="QR Code">
+    </div> -->
+
+    <!-- ✅ 인사말 -->
+    <div class="title-box mt-4">
+        <h4>💬 제목</h4>
+        <h3>{{ share_card.title or '없음' }}</h3>
+    </div>
+
+    <!-- ✅ 인사말 -->
+    <div class="message-box mt-4">
+        <h4>💬 인사말</h4>
+        <p>{{ share_card.introduce or '없음' }}</p>
+    </div>
+
+    <!-- ✅ 내용 -->
+    <div class="content-box mt-3">
+        <h4>📄 내용</h4>
+        <p>{{ share_card.content }}</p>
+    </div>
+
+    <!-- ✅ 명함 정보 -->
+    {% if namecard %}
+    <div class="namecard-box mt-4 p-3 shadow-sm">
+        <h4>📌 명함 정보</h4>
+        <div class="d-flex align-items-center">
+            <!-- 프로필 사진 -->
+            <img src="{{ namecard.selected_photo or '/static/default_profile.jpg' }}" 
+                 class="rounded-circle profile-img me-3">
+            
+            <div>
+                <!-- 이름 및 직급 -->
+                <strong class="name-highlight">{{ namecard.username or '이름 없음' }}</strong> 
+                ({{ namecard.position or '직급 없음' }})<br>
+                
+                <!-- 회사명 -->
+                🏢 {{ namecard.company or '회사 없음' }}<br>
+                
+                <!-- 이메일 -->
+                📧 <a href="mailto:{{ namecard.email }}" class="email-text">
+                    {{ namecard.email or '이메일 없음' }}
+                </a> <br>
+                
+                <!-- 스마트폰 전화번호 -->
+                📱 {{ namecard.phone or '전화 없음' }} <br>
+                
+                <!-- 대표 전화 & 직통 전화 -->
+                ☎ {{ namecard.tel_rep or '대표번호 없음' }} | 📞 {{ namecard.tel_dir or '직통번호 없음' }} <br>
+
+                <!-- 팩스 -->
+                📠 {{ namecard.fax or '팩스 없음' }}<br>
+
+                <!-- 주소 -->
+                📍 {{ namecard.com_address or '주소 없음' }}<br>
+
+                <!-- 홈페이지 -->
+                🌐 <a href="http://{{ namecard.homepage }}" target="_blank">
+                    {{ namecard.homepage or '홈페이지 없음' }}
+                </a>
+            </div>
+        </div>
+    </div>
+   <!-- ✅ "명함 내 폰에 저장" 버튼 -->
+   <div class="text-center mt-4">
+        <button class="btn btn-success" onclick="saveToPhone('{{ namecard.id }}', '{{ welcome_data.unique_id }}', '{{ welcome_data.no }}')">
+            📥 명함 내 폰에 저장
+        </button>
+    </div>
+    {% else %}
+        <p class="text-muted">명함 정보 없음</p>
+    {% endif %}
+
+        <!-- ✅ 공유된 파일 리스트 (다운로드 및 체크 기능 포함) -->
+        <div class="file-box mt-4 p-3 shadow-sm">
+            <h4>📂 공유할 파일</h4>
+            <ul class="file-list">
+                {% set valid_files = share_card.s_file1, share_card.s_file2, share_card.s_file3, 
+                                    share_card.s_file4, share_card.s_file5 %}
+                {% set valid_files = valid_files | select('string') | reject('eq', '') | list %}
+    
+                {% if valid_files | length > 0 %}
+                    {% for file in valid_files %}
+                        <li>
+                            <input type="checkbox" class="file-checkbox" value="{{ file }}">
+                            <button class="btn btn-primary btn-sm me-2" onclick="downloadFile('{{ file }}')">⬇️ 다운로드</button>
+                            <span>{{ file }}</span>
+                        </li>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">공유된 파일이 없습니다.</p>
+                {% endif %}
+            </ul>
+        </div>
+    
+       <!-- ✅ 이메일 입력 필드 -->
+    <div class="file-box mt-4 p-3 shadow-sm">
+        <h4>📧 수신자 이메일 추가</h4>
+        <div id="emailContainer">
+            <div class="email-entry d-flex mb-2">
+                <input type="email" class="form-control email-input me-2" placeholder="이메일 입력">
+                <button class="btn btn-danger" onclick="this.parentNode.remove()">❌</button>
+            </div>
+        </div>
+        <button id="addEmailButton" class="btn btn-secondary mt-2">➕ 이메일 추가</button>
+    </div>
+
+    <!-- ✅ E-MAIL 보내기 버튼 -->
+    <div class="text-center mt-4">
+        <button class="btn btn-warning" onclick="sendEmail()">선택한 파일 메일 발송</button>
+    </div>
+
+
+    <!-- ✅ 작성일 -->
+    <p class="text-muted small">📅 작성일: {{welcome_data.create_date or '날짜 없음' }}</p>
+    
+
+
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/e_css/e_sharecard.css">
+{% endblock %}
+
+{% block script %}
+<script>
+   function saveToPhone(namecardId, uniqueId, welcomeDataNo) {
+    fetch('/enamecard/generate_vcard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            namecard_id: namecardId,
+            unique_id: uniqueId,
+            welcome_data_no: welcomeDataNo
+        })
+    })
+    .then(response => response.blob())
+    .then(blob => {
+        let url = window.URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+
+        let filename = `${namecardId}_contact.vcf`;
+        a.download = filename;
+
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        // ✅ URL 해제 (메모리 정리)
+        setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+        }, 1000);
+
+        // ✅ 모바일 환경에서 자동 실행 방지 (중복 다운로드 방지)
+        if (navigator.userAgent.match(/(iPhone|iPad|Android)/)) {
+            setTimeout(() => {
+                window.open(url, '_blank');
+            }, 500);
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        alert("명함 저장 중 오류 발생");
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    // ✅ 이메일 리스트 동적 추가/삭제 기능
+    const emailContainer = document.getElementById("emailContainer");
+    const addEmailButton = document.getElementById("addEmailButton");
+
+    addEmailButton.addEventListener("click", function () {
+        const emailCount = document.querySelectorAll(".email-input").length;
+        if (emailCount >= 5) {
+            alert("최대 5개의 이메일을 추가할 수 있습니다.");
+            return;
+        }
+
+        const emailDiv = document.createElement("div");
+        emailDiv.classList.add("email-entry", "d-flex", "mb-2");
+        
+        const emailInput = document.createElement("input");
+        emailInput.type = "email";
+        emailInput.classList.add("form-control", "email-input", "me-2");
+        emailInput.placeholder = "이메일 입력";
+
+        const removeButton = document.createElement("button");
+        removeButton.classList.add("btn", "btn-danger");
+        removeButton.textContent = "❌";
+        removeButton.addEventListener("click", function () {
+            emailContainer.removeChild(emailDiv);
+        });
+
+        emailDiv.appendChild(emailInput);
+        emailDiv.appendChild(removeButton);
+        emailContainer.appendChild(emailDiv);
+    });
+});
+
+// ✅ 파일 다운로드 기능
+function downloadFile(fileName) {
+    window.location.href = '/enamecard/download_file/' + encodeURIComponent(fileName);
+}
+
+// ✅ 이메일 보내기 기능 (선택한 파일 & 입력된 이메일)
+function sendEmail() {
+    let selectedFiles = [];
+    document.querySelectorAll('.file-checkbox:checked').forEach(checkbox => {
+        selectedFiles.push(checkbox.value);
+    });
+
+    if (selectedFiles.length === 0) {
+        alert("전송할 파일을 선택해주세요.");
+        return;
+    }
+
+    let emailInputs = document.querySelectorAll(".email-input");
+    let recipientEmails = [];
+
+    emailInputs.forEach(input => {
+        let email = input.value.trim();
+        if (email) {
+            if (!validateEmail(email)) {
+                alert("잘못된 이메일 형식: " + email);
+                return;
+            }
+            recipientEmails.push(email);
+        }
+    });
+
+    if (recipientEmails.length === 0) {
+        alert("최소 1개 이상의 이메일을 입력해주세요.");
+        return;
+    }
+
+    fetch('/enamecard/send_email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            emails: recipientEmails,
+            files: selectedFiles
+        })
+    })
+    .then(response => response.json())
+    .then(data => alert(data.message))
+    .catch(error => console.error("Error:", error));
+}
+
+// ✅ 이메일 형식 검증 함수
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
+}
+
+</script>
+{% endblock %}
