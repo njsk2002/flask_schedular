@@ -85,25 +85,45 @@
         <p class="text-muted">명함 정보 없음</p>
     {% endif %}
 
-    <!-- ✅ 공유된 파일 리스트 -->
-    <div class="file-box mt-4 p-3 shadow-sm">
-        <h4>📂 공유할 파일</h4>
-        {% set valid_files = share_card.s_file1, share_card.s_file2, share_card.s_file3, 
-                            share_card.s_file4, share_card.s_file5 %}
-        {% set valid_files = valid_files | select('string') | reject('eq', '') | list %}
-
-        {% if valid_files | length > 0 %}
+        <!-- ✅ 공유된 파일 리스트 (다운로드 및 체크 기능 포함) -->
+        <div class="file-box mt-4 p-3 shadow-sm">
+            <h4>📂 공유할 파일</h4>
             <ul class="file-list">
-                {% for file in valid_files %}
-                    <li>
-                        <i class="bi bi-file-earmark-text"></i> {{ file }}
-                    </li>
-                {% endfor %}
+                {% set valid_files = share_card.s_file1, share_card.s_file2, share_card.s_file3, 
+                                    share_card.s_file4, share_card.s_file5 %}
+                {% set valid_files = valid_files | select('string') | reject('eq', '') | list %}
+    
+                {% if valid_files | length > 0 %}
+                    {% for file in valid_files %}
+                        <li>
+                            <input type="checkbox" class="file-checkbox" value="{{ file }}">
+                            <button class="btn btn-primary btn-sm me-2" onclick="downloadFile('{{ file }}')">⬇️ 다운로드</button>
+                            <span>{{ file }}</span>
+                        </li>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">공유된 파일이 없습니다.</p>
+                {% endif %}
             </ul>
-        {% else %}
-            <p class="text-muted">공유된 파일이 없습니다.</p>
-        {% endif %}
+        </div>
+    
+       <!-- ✅ 이메일 입력 필드 -->
+    <div class="file-box mt-4 p-3 shadow-sm">
+        <h4>📧 수신자 이메일 추가</h4>
+        <div id="emailContainer">
+            <div class="email-entry d-flex mb-2">
+                <input type="email" class="form-control email-input me-2" placeholder="이메일 입력">
+                <button class="btn btn-danger" onclick="this.parentNode.remove()">❌</button>
+            </div>
+        </div>
+        <button id="addEmailButton" class="btn btn-secondary mt-2">➕ 이메일 추가</button>
     </div>
+
+    <!-- ✅ E-MAIL 보내기 버튼 -->
+    <div class="text-center mt-4">
+        <button class="btn btn-warning" onclick="sendEmail()">선택한 파일 메일 발송</button>
+    </div>
+
 
     <!-- ✅ 작성일 -->
     <p class="text-muted small">📅 작성일: {{welcome_data.create_date or '날짜 없음' }}</p>
@@ -158,6 +178,94 @@
         console.error("Error:", error);
         alert("명함 저장 중 오류 발생");
     });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    // ✅ 이메일 리스트 동적 추가/삭제 기능
+    const emailContainer = document.getElementById("emailContainer");
+    const addEmailButton = document.getElementById("addEmailButton");
+
+    addEmailButton.addEventListener("click", function () {
+        const emailCount = document.querySelectorAll(".email-input").length;
+        if (emailCount >= 5) {
+            alert("최대 5개의 이메일을 추가할 수 있습니다.");
+            return;
+        }
+
+        const emailDiv = document.createElement("div");
+        emailDiv.classList.add("email-entry", "d-flex", "mb-2");
+        
+        const emailInput = document.createElement("input");
+        emailInput.type = "email";
+        emailInput.classList.add("form-control", "email-input", "me-2");
+        emailInput.placeholder = "이메일 입력";
+
+        const removeButton = document.createElement("button");
+        removeButton.classList.add("btn", "btn-danger");
+        removeButton.textContent = "❌";
+        removeButton.addEventListener("click", function () {
+            emailContainer.removeChild(emailDiv);
+        });
+
+        emailDiv.appendChild(emailInput);
+        emailDiv.appendChild(removeButton);
+        emailContainer.appendChild(emailDiv);
+    });
+});
+
+// ✅ 파일 다운로드 기능
+function downloadFile(fileName) {
+    window.location.href = '/enamecard/download_file/' + encodeURIComponent(fileName);
+}
+
+// ✅ 이메일 보내기 기능 (선택한 파일 & 입력된 이메일)
+function sendEmail() {
+    let selectedFiles = [];
+    document.querySelectorAll('.file-checkbox:checked').forEach(checkbox => {
+        selectedFiles.push(checkbox.value);
+    });
+
+    if (selectedFiles.length === 0) {
+        alert("전송할 파일을 선택해주세요.");
+        return;
+    }
+
+    let emailInputs = document.querySelectorAll(".email-input");
+    let recipientEmails = [];
+
+    emailInputs.forEach(input => {
+        let email = input.value.trim();
+        if (email) {
+            if (!validateEmail(email)) {
+                alert("잘못된 이메일 형식: " + email);
+                return;
+            }
+            recipientEmails.push(email);
+        }
+    });
+
+    if (recipientEmails.length === 0) {
+        alert("최소 1개 이상의 이메일을 입력해주세요.");
+        return;
+    }
+
+    fetch('/enamecard/send_email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            emails: recipientEmails,
+            files: selectedFiles
+        })
+    })
+    .then(response => response.json())
+    .then(data => alert(data.message))
+    .catch(error => console.error("Error:", error));
+}
+
+// ✅ 이메일 형식 검증 함수
+function validateEmail(email) {
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(email);
 }
 
 </script>

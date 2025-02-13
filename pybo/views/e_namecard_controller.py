@@ -12,9 +12,27 @@ from pybo.models import User, NameCard, FileUpload, ShareCard, QRCode, WelcomeDa
 from ..views.auth_views import login_required
 from ..service.image_manageent import ImageManagement
 from ..service.bmp_trans import BMPTrans
+from ..service.e_mail_sender import EMailSender
+from flask import Flask, request, jsonify, send_from_directory
+import smtplib
+
+import mimetypes
+import ssl
+from email.message import EmailMessage
+from email.utils import formataddr
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email.header import Header
+from email import encoders
 
 bp =Blueprint('enamecard',__name__,url_prefix='/enamecard')
 
+
+SMTP_SERVER = EMailSender.SMTP_SERVER
+SMTP_PORT = EMailSender.SMTP_PORT
+EMAIL_SENDER = EMailSender.EMAIL_SENDER
+EMAIL_PASSWORD = EMailSender.EMAIL_PASSWORD
 # 업로드된 파일을 정적 경로로 서빙
 UPLOAD_FOLDER = "C:/DavidProject/flask_project/flask_schedular/uploads"
 bp.upload_folder = UPLOAD_FOLDER
@@ -86,6 +104,7 @@ def gen_namecard():
 
     return jsonify({"message": "명함이 저장되었습니다.", "namecard": namecard.to_dict()}), 201
 
+#### Namecard 확인 #############################333
 @bp.route('/get_namecards', methods=['GET'])
 @login_required
 def get_namecards():
@@ -96,7 +115,7 @@ def get_namecards():
 
     return render_template('namecard/e_namecard.html', namecards=data)
 
-
+########### Sharecard 생성 ############################
 @bp.route('/gen_sharecards', methods=['GET'])
 @login_required
 def gen_sharecards():
@@ -109,7 +128,7 @@ def gen_sharecards():
         namecards=[card.to_dict() for card in namecards],
         fileuploads=[file.to_dict() for file in fileuploads]
     )
-
+########### Sharecard 저장 ############################
 @bp.route('/save_sharecards', methods=['POST'])
 @login_required
 def save_sharecard():
@@ -159,6 +178,8 @@ def save_sharecard():
     except Exception as e:
         return jsonify({"success": False, "message": f"서버 오류 발생: {str(e)}"}), 500
 
+
+############# Sharecard 보기 ############################33
 @bp.route('/view_sharecards', methods=['GET'])
 @login_required
 def view_sharecards():
@@ -210,6 +231,8 @@ def view_sharecards():
     except Exception as e:
         return render_template('namecard/e_sharecard.html', error_message=f"서버 오류 발생: {str(e)}")
 
+
+################ Welcomepage 생성 ###########################
 @bp.route('/gen_welcome', methods=['POST'])
 @login_required
 def gen_welcome():
@@ -294,31 +317,8 @@ def welcome_page(unique_id):
     )
 
 
-# ########## VCF ##################################3
-# @bp.route('/generate_vcard')
-# def generate_vcard():
-#     photo_base64 = encode_photo_to_base64("C:/DavidProject/flask_project/bmp_files/iu/202411111646288523_t.jpg")
-#     vcard_data = f"""BEGIN:VCARD
-# VERSION:3.0
-# FN:아이유
-# EMAIL:iu2@icetech.co.kr
-# TEL:+1234567890
-# NOTE:안녕하세요! 아이유에요! 만나 뵙게 되어 영광입니다. 2025-01-24일 아이스기술 본사
-# PHOTO;ENCODING=b;TYPE=JPEG:{photo_base64}
-# END:VCARD
-# """
-#     return Response(vcard_data, mimetype='text/vcard', headers={"Content-Disposition": "attachment;filename=contact.vcf"})
-
-
-    
-# def encode_photo_to_base64(photo_path):
-#     with open(photo_path, "rb") as photo_file:
-#         encoded_photo = base64.b64encode(photo_file.read()).decode("utf-8")
-#     return encoded_photo
 
 # ########## VCF ##################################3
-
-
 @bp.route('/generate_vcard', methods=['POST'])
 def generate_vcard():
     data = request.json
@@ -421,7 +421,7 @@ def encode_photo_to_base64(photo_path):
 
 
 
-
+################# namecard 저장 ###########################
 @bp.route('/save_namecard', methods=['POST'])
 @login_required
 def save_namecard():
@@ -471,5 +471,213 @@ def cleanup_expired_qr_codes(app):
         time.sleep(300)  # 60초마다 실행
 
 
+@bp.route('/download_file/<filename>')
+def download_file(filename):
+    """ 선택한 파일 다운로드 """
+    # ✅ 업로드된 파일 저장 폴더 (Flask 설정에서 가져옴)
+    output_folder = current_app.config.get('UPLOAD_FILE_FOLDER')
+    return send_from_directory(output_folder, filename, as_attachment=True)
 
 
+# @bp.route('/send_email', methods=['POST'])
+# def send_email():
+#     """ Outlook에서도 첨부파일이 정상적으로 보이도록 MIME 인코딩 최적화 """
+#     data = request.json
+#     recipient_emails = data.get("emails", [])
+#     file_names = data.get("files", [])
+
+#     if not recipient_emails or not file_names:
+#         print("⚠️ 오류: 이메일 또는 파일이 없습니다.")
+#         return jsonify({"error": "이메일 또는 파일이 없습니다."}), 400
+
+#     print(f"📨 이메일 전송 요청: {recipient_emails}")
+#     print(f"📂 첨부할 파일 목록: {file_names}")
+
+#     msg = EmailMessage()
+#     msg["Subject"] = "📂 공유된 파일 전송"
+#     msg["From"] = formataddr(("ICETECH", EMAIL_SENDER))  # 발신자 이름 설정
+#     msg["To"] = ", ".join(recipient_emails)
+#     msg.set_content("첨부된 파일을 확인해주세요.")
+
+#     # ✅ 업로드된 파일 저장 폴더 (Flask 설정에서 가져옴)
+#     output_folder = current_app.config.get('UPLOAD_FILE_FOLDER')
+
+#     # ✅ 파일 첨부 확인 (Outlook 최적화)
+#     attached_files = []
+#     for file_name in file_names:
+#         file_path = os.path.join(output_folder, file_name)
+
+#         print(f"🔍 첨부 파일 경로 확인: {file_path}")  # 📌 경로 확인
+        
+#         if os.path.exists(file_path):
+#             try:
+#                 with open(file_path, "rb") as f:
+#                     file_data = f.read()
+
+#                     # ✅ MIME 타입 자동 설정
+#                     mime_type, _ = mimetypes.guess_type(file_path)
+#                     if mime_type is None:
+#                         mime_type = "application/octet-stream"
+
+#                     # ✅ Outlook 호환성을 위해 파일명 인코딩 방식 변경 (RFC 2047)
+#                     safe_file_name = file_name.replace(" ", "_")
+
+#                     # ✅ 파일 첨부 (Base64 인코딩 + Content-Disposition 강제 설정)
+#                     msg.add_attachment(file_data, maintype=mime_type.split("/")[0], subtype=mime_type.split("/")[1], filename=safe_file_name)
+#                     msg["Content-Disposition"] = f'attachment; filename="{safe_file_name}"'
+
+#                     attached_files.append(safe_file_name)
+#                     print(f"📎 파일 추가 성공: {safe_file_name}")
+
+#             except Exception as file_error:
+#                 print(f"❌ 파일 읽기 오류: {file_name} | {file_error}")
+#         else:
+#             print(f"🚨 파일을 찾을 수 없음: {file_path}")
+
+#     print(f"📎 최종 첨부된 파일 목록: {attached_files}")
+
+#     print(f"📡 SMTP 서버: {SMTP_SERVER}:{SMTP_PORT}")
+#     print(f"📧 발신자 이메일: {EMAIL_SENDER}")
+
+#     try:
+#         # 🚀 최신 TLS 1.2+ 강제 적용
+#         context = ssl.create_default_context()
+#         context.set_ciphers("DEFAULT@SECLEVEL=1")
+
+#         print("🔐 SMTP SSL 연결 시작...")
+#         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+#             print("✅ SMTP SSL 연결 성공")
+
+#             print("🔑 SMTP 로그인 시도...")
+#             server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+#             print("✅ SMTP 로그인 성공")
+
+#             print("📤 이메일 전송 중...")
+#             server.send_message(msg)
+#             print("✅ 이메일 전송 성공")
+
+#         return jsonify({"message": "이메일이 성공적으로 전송되었습니다."})
+    
+#     except smtplib.SMTPAuthenticationError:
+#         print("❌ SMTP 인증 실패: 이메일 또는 비밀번호 확인 필요")
+#         return jsonify({"error": "SMTP 인증 실패: 이메일 또는 비밀번호를 확인하세요."}), 500
+#     except smtplib.SMTPConnectError:
+#         print("❌ SMTP 서버 연결 실패")
+#         return jsonify({"error": "SMTP 서버에 연결할 수 없습니다."}), 500
+#     except smtplib.SMTPRecipientsRefused:
+#         print("❌ 수신자 이메일 주소 오류")
+#         return jsonify({"error": "수신자 이메일 주소가 잘못되었습니다."}), 500
+#     except smtplib.SMTPException as e:
+#         print(f"❌ 이메일 전송 중 예외 발생: {e}")
+#         return jsonify({"error": f"이메일 전송 실패: {str(e)}"}), 500
+
+
+@bp.route('/send_email', methods=['POST'])
+def send_email():
+    """ Outlook 첨부파일 문제 해결 (MIME 인코딩 개선) """
+    data = request.json
+    recipient_emails = data.get("emails", [])
+    file_names = data.get("files", [])
+
+    if not recipient_emails or not file_names:
+        print("⚠️ 오류: 이메일 또는 파일이 없습니다.")
+        return jsonify({"error": "이메일 또는 파일이 없습니다."}), 400
+
+    print(f"📨 이메일 전송 요청: {recipient_emails}")
+    print(f"📂 첨부할 파일 목록: {file_names}")
+
+    # ✅ MIMEMultipart 사용 (본문 + 첨부파일 구조 명확하게 설정)
+    msg = MIMEMultipart()
+    msg["Subject"] = "📂 공유된 파일 전송"
+    msg["From"] = formataddr(("ICETECH", EMAIL_SENDER))  # 발신자 이름 설정
+    msg["To"] = ", ".join(recipient_emails)
+
+    # ✅ 이메일 본문 추가 (첨부파일과 구분)
+    body_text = "안녕하세요,\n\n첨부된 파일을 확인해 주세요.\n\n감사합니다."
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+
+    # ✅ 업로드된 파일 저장 폴더 (Flask 설정에서 가져옴)
+    output_folder = current_app.config.get('UPLOAD_FILE_FOLDER')
+
+    # ✅ 첨부파일 추가 (Outlook 인식 문제 해결)
+    attached_files = []
+    for file_name in file_names:
+        file_path = os.path.join(output_folder, file_name)
+
+        print(f"🔍 첨부 파일 경로 확인: {file_path}")  # 📌 경로 확인
+
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "rb") as f:
+                    file_data = f.read()
+
+                    # ✅ MIME 타입 자동 설정
+                    mime_type, _ = mimetypes.guess_type(file_path)
+                    if mime_type is None:
+                        mime_type = "application/octet-stream"
+
+                    # ✅ MIMEBase 사용하여 파일 첨부 (Base64 인코딩)
+                    part = MIMEBase(mime_type.split("/")[0], mime_type.split("/")[1])
+                    part.set_payload(file_data)
+                    encoders.encode_base64(part)
+
+                    # ✅ 파일명이 ASCII가 아닐 경우 Outlook-friendly 방식으로 인코딩
+                    if all(ord(char) < 128 for char in file_name):
+                        # ASCII 파일명 (RFC 2183 방식)
+                        part.add_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{file_name}"'
+                        )
+                    else:
+                        # 한글 등 ASCII가 아닌 파일명 처리 (Q/B 인코딩 적용)
+                        encoded_filename = Header(file_name, "utf-8").encode()
+                        part.add_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{encoded_filename}"'
+                        )
+
+                    msg.attach(part)
+                    attached_files.append(file_name)
+                    print(f"📎 파일 추가 성공: {file_name}")
+
+            except Exception as file_error:
+                print(f"❌ 파일 읽기 오류: {file_name} | {file_error}")
+        else:
+            print(f"🚨 파일을 찾을 수 없음: {file_path}")
+
+    print(f"📎 최종 첨부된 파일 목록: {attached_files}")
+
+    print(f"📡 SMTP 서버: {SMTP_SERVER}:{SMTP_PORT}")
+    print(f"📧 발신자 이메일: {EMAIL_SENDER}")
+
+    try:
+        # 🚀 최신 TLS 1.2+ 강제 적용
+        context = ssl.create_default_context()
+        context.set_ciphers("DEFAULT@SECLEVEL=1")
+
+        print("🔐 SMTP SSL 연결 시작...")
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+            print("✅ SMTP SSL 연결 성공")
+
+            print("🔑 SMTP 로그인 시도...")
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            print("✅ SMTP 로그인 성공")
+
+            print("📤 이메일 전송 중...")
+            server.sendmail(EMAIL_SENDER, recipient_emails, msg.as_string())
+            print("✅ 이메일 전송 성공")
+
+        return jsonify({"message": "이메일이 성공적으로 전송되었습니다."})
+    
+    except smtplib.SMTPAuthenticationError:
+        print("❌ SMTP 인증 실패: 이메일 또는 비밀번호 확인 필요")
+        return jsonify({"error": "SMTP 인증 실패: 이메일 또는 비밀번호를 확인하세요."}), 500
+    except smtplib.SMTPConnectError:
+        print("❌ SMTP 서버 연결 실패")
+        return jsonify({"error": "SMTP 서버에 연결할 수 없습니다."}), 500
+    except smtplib.SMTPRecipientsRefused:
+        print("❌ 수신자 이메일 주소 오류")
+        return jsonify({"error": "수신자 이메일 주소가 잘못되었습니다."}), 500
+    except smtplib.SMTPException as e:
+        print(f"❌ 이메일 전송 중 예외 발생: {e}")
+        return jsonify({"error": f"이메일 전송 실패: {str(e)}"}), 500
