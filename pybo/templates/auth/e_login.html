@@ -1,5 +1,9 @@
 {% extends 'e_base.html' %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}">
+{% endblock %}
+
 {% block content %}
 
 <div class="container">

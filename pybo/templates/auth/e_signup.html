@@ -1,5 +1,10 @@
 {% extends 'e_base.html' %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}">
+{% endblock %}
+
+
 {% block content %}
 
     <div class="container">
@@ -95,71 +100,100 @@
                 <label for="team-type">부서</label>
                 <select id="team-type" name="team_type">
                     <option value="">선택하세요</option>
-                    <option value="owner">임원</option>
-                    <option value="hr">관리팀</option>
-                    <option value="security">안전품질/ESG</option>
-                    <option value="rnd">부설연구소</option>
-                    <option value="sales">기술영업팀</option>
-                    <option value="tech">기술팀</option>
-                    <option value="structer">공사팀</option>
-                    <option value="oversea">무역팀</option>
+                    <option value="임원">임원</option>
+                    <option value="관리팀">관리팀</option>
+                    <option value="안전품질/ESG">안전품질/ESG</option>
+                    <option value="부설연구소">부설연구소</option>
+                    <option value="기술영업팀">기술영업팀</option>
+                    <option value="기술팀">기술팀</option>
+                    <option value="공사팀">공사팀</option>
+                    <option value="무역팀">무역팀</option>
                 </select>
             </div>
-        
+            
             <div class="form-group">
                 <label for="role-type">직급</label>
                 <select id="role-type" name="role_type">
                     <option value="">선택하세요</option>
-                    <option value="owner">대표이사</option>
-                    <option value="junmu">전무</option>
-                    <option value="sangmu">상무</option>
-                    <option value="officer">이사</option>
-                    <option value="rnd_header">연구소장</option>
-                    <option value="gm">부장</option>
-                    <option value="sm">차장</option>
-                    <option value="manager">과장</option>
-                    <option value="daeri">대리</option>
-                    <option value="employee">사원</option>
-                    <option value="rnd_manager">책임</option>
-                    <option value="rnd_employee">선임</option>
+                    <option value="대표이사">대표이사</option>
+                    <option value="전무">전무</option>
+                    <option value="상무">상무</option>
+                    <option value="이사">이사</option>
+                    <option value="연구소장">연구소장</option>
+                    <option value="부장">부장</option>
+                    <option value="차장">차장</option>
+                    <option value="과장">과장</option>
+                    <option value="대리">대리</option>
+                    <option value="사원">사원</option>
+                    <option value="책임">책임</option>
+                    <option value="선임">선임</option>
                 </select>
             </div>
-
+            
+       
             <div class="form-group">
-                <label for="company">회사명</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="company">회사명</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('company')">변경</button>
+                </div>
                 <input type="text" id="company" name="company" value="아이스기술" readonly>
-                <button type="button" onclick="enableField('company')">변경</button>
             </div>
-        
+            
             <div class="form-group">
-                <label for="address">회사주소</label>
-                <input type="text" id="address" name="address" value="(우 13207) 경기도 성남시 중원구 사기막골로 124 (상대원동 190-1) SKn테크노파크 넥스센터 2층" readonly>
-                <button type="button" onclick="enableField('address')">변경</button>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="address">회사주소</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('address')">변경</button>
+                </div>
+                <input type="text" id="address" name="address" value="(우 13207) 경기도 성남시 중원구 사기막골로 124 SKn테크노파크 넥스센터 2층" readonly>
             </div>
-        
+            
             <div class="form-group">
-                <label for="tel_rep">전화번호(대표)</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="tel_rep">전화번호(대표)</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('tel_rep')">변경</button>
+                </div>
                 <input type="text" id="tel_rep" name="tel_rep" value="070-7732-7800" readonly>
-                <button type="button" onclick="enableField('tel_rep')">변경</button>
             </div>
-        
+            
             <div class="form-group">
-                <label for="tel">전화번호(DIR)</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="tel">전화번호(DIR)</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('tel')">변경</button>
+                </div>
                 <input type="text" id="tel" name="tel" value="070-7732-9113" readonly>
-                <button type="button" onclick="enableField('tel')">변경</button>
             </div>
-        
+            
             <div class="form-group">
-                <label for="fax">팩스</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="fax">팩스</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('fax')">변경</button>
+                </div>
                 <input type="text" id="fax" name="fax" value="031-776-3520" readonly>
-                <button type="button" onclick="enableField('fax')">변경</button>
             </div>
-        
+            
             <div class="form-group">
-                <label for="homepage">홈페이지</label>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="homepage">홈페이지</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('homepage')">변경</button>
+                </div>
                 <input type="text" id="homepage" name="homepage" value="www.icetech.co.kr" readonly>
-                <button type="button" onclick="enableField('homepage')">변경</button>
             </div>
+            
+            
+            
+            
             <!-- <h3>민감정보</h3>
             <div class="form-group">
                 <label for="blood-type">혈액형</label>

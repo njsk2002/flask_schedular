@@ -1,0 +1,218 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-center mb-4">내 명함 목록</h2>
+
+    <div id="namecard-container" class="d-flex flex-wrap justify-content-center gap-4">
+        {% for card in namecards %}
+        <div class="namecard shadow-sm p-3 rounded">
+
+            <!-- 회사명 (우측 상단, 크게) -->
+            <div class="company-name">
+                <h3>{{ card.company or "회사 정보 없음" }}</h3>
+            </div>
+
+            <!-- 프로필 사진 -->
+            <div class="profile-photo">
+                <img src="{{ card.selected_photo or '/static/default_profile.jpg' }}" class="rounded-img">
+            </div>
+
+            <!-- 사용자 정보 (부서, 직급, 이름 한 줄 정렬) -->
+            <div class="user-info d-flex align-items-center">
+                <div class="department-position">
+                    <h5 class="department fw-bold">{{ card.department or "이름 없음" }}</h5>
+                    <h5 class="position fw-bold">{{ card.position or "이름 없음" }}</h5>
+                </div>
+                <div class="user-name ms-3">  
+                    <h2 class="fw-bold">{{ card.username or "이름 없음" }}</h2>
+                </div>
+            </div>
+
+            <!-- 명함 정보 (좌측 하단) -->
+            <div class="namecard-info">
+                <p><strong>Email:</strong> {{ card.email or "이메일 없음" }}<strong> | 휴대폰:</strong> {{ card.phone or "팩스 없음" }}</p></p>
+                <p><strong>대표번호:</strong> {{ card.tel_rep or "전화번호 없음" }} | 
+                    <strong>직통번호:</strong> {{ card.tel_dir or "전화번호 없음" }} | 
+                    <strong>팩스:</strong> {{ card.fax or "팩스 없음" }}</p>
+                <p id="address-{{ card.id }}" class="address-text">
+                    {{ card.com_address or "주소 없음" }}
+                </p>
+                <!-- 홈페이지 (맨 아래 배치, 최소 마진) -->
+                <p class="homepage">
+                    <a href="http://{{ card.homepage }}" target="_blank">{{ card.homepage }}</a>
+                </p>
+            </div>
+
+            
+             <!-- 선택 버튼 (명함 우측 상단) -->
+            <div class="form-check">
+                <input type="radio" name="selected_card" value="{{ card.id }}" class="form-check-input">
+                <label class="form-check-label">선택</label>
+            </div>
+        </div>
+
+
+
+
+        {% endfor %}
+    </div>
+
+    <!-- 저장 버튼 -->
+    <div class="text-center mt-4">
+        <button id="save-namecard" class="btn btn-primary">선택한 명함 저장</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .namecard {
+        width: 600px;
+        height: 320px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        display: flex;
+        flex-direction: column;
+        padding: 55px;
+        position: relative;
+        padding-bottom: 40px; /* 선택 버튼이 가려지지 않도록 하단 여백 추가 */
+    }
+    
+    /* 프로필 사진 (좌측 상단) */
+    .profile-photo {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+    }
+
+    /* 프로필 사진 스타일 (끝부분만 라운드) */
+    .profile-photo img {
+        width: 100px;
+        height: 100px;
+        object-fit: cover;
+        border-radius: 10px; /* 끝부분만 라운드 */
+        border: 2px solid #ddd;
+        display: block;
+        margin: auto;
+    }
+
+    /* 회사명 (우측 상단) */
+    .company-name {
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        font-size: 20px;
+        font-weight: bold;
+    }
+
+    /* 사용자 정보 한 줄 정렬 */
+    .user-info {
+        position: absolute;
+        top: 130px;
+        left: 20px;
+        font-size: 20px;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+    }
+
+    /* 부서 및 직급 스타일 */
+    .department-position {
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+    }
+
+    /* 이름 스타일 (오른쪽 정렬, 크기 크게) */
+    .user-name {
+        padding-left: 100px; /* 내부 패딩 추가 (오른쪽 이동) */
+        font-size: 24px;
+        font-weight: bold;
+        color: #333;
+    }
+
+    /* 명함 정보 (이메일, 전화번호) */
+    .namecard-info {
+        position: absolute;
+        top: 190px;
+        left: 20px;
+    }
+
+    /* 주소 (좌측 하단에 별도 배치) */
+    .address-container {
+        position: absolute;
+        bottom: 30px;
+        left: 20px;
+    }
+
+    /* 명함 정보 텍스트 간격 최소화 */
+    .namecard-info p, .address-text {
+        margin: 2px 0;
+        line-height: 1.2;
+        font-size: 14px;
+    }
+
+    /* 홈페이지 (맨 아래 중앙 고정, 최소 마진) */
+    .homepage {
+       
+        width: 100%;
+        text-align: center;
+        font-size: 14px;
+    }
+
+    /* 선택 버튼 (하단 정렬) */
+    .form-check {
+        position: absolute;
+        bottom: 10px;  /* 명함의 위쪽 정렬 */
+        right: 10px; /* 명함의 오른쪽 정렬 */
+        display: flex;
+        align-items: center;
+        gap: 5px; /* 버튼과 라벨 간격 */
+    }
+
+    /* 라디오 버튼 크기 조정 */
+    .form-check-input {
+        transform: scale(1.2); /* 크기 키우기 */
+    }
+
+</style>
+{% endblock %}
+
+{% block script %}
+<script>
+document.getElementById("save-namecard").addEventListener("click", function () {
+    const selectedCard = document.querySelector("input[name='selected_card']:checked");
+
+    if (!selectedCard) {
+        alert("선택된 명함이 없습니다.");
+        return;
+    }
+
+    const cardId = selectedCard.value;
+
+    fetch('/save_namecard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ namecard_id: cardId })
+    })
+    .then(response => response.json())
+    .then(result => alert(result.message))
+    .catch(error => console.error("Error saving namecard:", error));
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".address-text").forEach(element => {
+        let address = element.innerText;
+        let match = address.match(/\d{1,5}/); // 숫자로 끝나는 도로명 주소 찾기
+
+        if (match) {
+            let index = match.index + match[0].length;
+            let formattedAddress = address.slice(0, index) + "<br>" + address.slice(index + 1);
+            element.innerHTML = `<strong>주소:</strong> ${formattedAddress}`;
+        }
+    });
+});
+</script>
+{% endblock %}
