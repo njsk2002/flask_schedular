@@ -261,7 +261,7 @@ def gen_welcome():
     db.session.commit()
 
     # ✅ QR 코드 URL 생성
-    qr_url = f"http://192.168.0.136:5000/qr/{unique_id}"
+    qr_url = f"http://192.168.0.136:5000/enamecard/welcome_page/{unique_id}"
 
     print("QR URL: ", qr_url)
     print("upload_folder: ", output_folder)

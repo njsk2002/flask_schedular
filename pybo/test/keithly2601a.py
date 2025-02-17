@@ -1,7 +1,7 @@
 import socket
 
 # Keithley 2601A 연결 정보
-host = "192.168.0.17"  # Keithley의 IP 주소
+host = "192.168.0.19"  # Keithley의 IP 주소
 port = 5025             # SCPI 기본 포트
 
 # 소켓 연결
