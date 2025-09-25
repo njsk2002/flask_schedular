@@ -1,0 +1,56 @@
+에러명 : pdf2image.exceptions.PDFInfoNotInstalledError: Unable to get page count. Is poppler installed and in PATH?
+            ==> pdf2image는 설치했지만 Poppler라는 외부 프로그램을 못 찾아서 PDF를 처리 못함
+
+pip install pdf2image 설치 후 , Poppler 설치 + PATH 추가를 반드시 해줘야 정상 동작
+
+해결 방법 (Windows 기준)
+1. Poppler 다운로드
+ Poppler for Windows (github: oschwartz10612/poppler-windows)
+ 최신 릴리스 zip 파일을 다운로드 후, 예를 들어 C:\poppler-24.07.0 같은 경로에 압축 해제.
+
+2. PATH 등록
+C:\poppler-24.07.0\Library\bin 경로를 Windows 환경변수 PATH에 추가.
+제어판 → 시스템 → 고급 시스템 설정 → 환경 변수 → Path 편집 → 새 항목 추가
+추가 후, 새로운 터미널/커맨드 창을 열어야 반영됨.
+
+1) 공통 설치 & 점검
+A. Poppler 설치 (Windows 64-bit)
+최신 릴리스 zip 다운로드 → 예: C:\poppler-24.07.0\
+실제 실행파일 폴더: C:\poppler-24.07.0\Library\bin
+B. PATH 등록(두 가지 중 택1)
+시스템 전역 PATH 권장
+제어판 → 시스템 → 고급 시스템 설정 → 환경 변수 → Path에
+C:\Tools\poppler-24.07.0\Library\bin 추가
+→ 새 터미널 열기
+
+앱 코드에서 직접 경로 지정
+convert_from_path(..., poppler_path=...) 방식(아래 3) 코드 참고)
+
+C. 동작 점검  :  CMD 새로 실행 후
+
+C:\Users\David>where pdfinfo
+C:\poppler-25.07.0\Library\bin\pdfinfo.exe
+
+C:\Users\David>pdfinfo -v
+pdfinfo version 25.07.0
+Copyright 2005-2025 The Poppler Developers - http://poppler.freedesktop.org
+Copyright 1996-2011, 2022 Glyph & Cog, LLC
+
+둘 다 정상 출력되면 준비 완료.
+
+그리고, config.py에  아래 추가 
+PDF_DPI = 200
+POPPLER_PATH = os.getenv("POPPLER_PATH")  # httpd.conf SetEnv 또는 시스템 PATH 사용
+
+///////////////// 아래는 아직 안해봄
+
+3. 운영 서버(Windows + Apache + mod_wsgi) 고려사항
+
+Apache가 서비스로 실행되면, 서비스가 읽는 시스템 PATH에 Poppler 경로가 있어야 한다. 사용자 계정의 PATH만 추가하면 반영 안 될 수 있다.
+PATH 추가 후 Apache 서비스 재시작 필수.
+PATH를 전역으로 못 건드리는 환경이면, httpd.conf에서 환경 변수 주입도 가능:
+
+SetEnv POPPLER_PATH "C:/Tools/poppler-24.07.0/Library/bin"
+
+그리고 애플리케이션에서 os.getenv("POPPLER_PATH")를 읽어 poppler_path로 넘겨준다.
+mod_wsgi(Windows)는 데몬 모드가 제한적이므로, 보통 임베디드 모드로 동작. 환경변수는 시스템 PATH 또는 SetEnv 방식이 가장 실용적이다.

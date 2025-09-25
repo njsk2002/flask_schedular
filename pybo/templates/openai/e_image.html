@@ -10,7 +10,9 @@
                 <option value="아이유" selected>아이유</option>
                 <option value="임영웅">임영웅</option>
                 <option value="카리나">카리나</option>
-                <option value="권지용">권지용</option>
+                <option value="고윤정">고윤정</option>
+                <option value="장원영">장원영</option>
+                <option value="지드래곤">지드래곤</option>
             </select>
 
             <select id="selectimage" class="form-select me-2" style="width: auto;">
@@ -22,7 +24,10 @@
 
             <button id="generateBtn" class="btn btn-primary">IMAGE 생성</button>
         </div>
-    
+
+       
+       
+  
         <!-- 메시지 출력 -->
         {% if message %}
             <div class="alert alert-info mt-4 text-center">
@@ -32,32 +37,45 @@
     
         <!-- 이미지 리스트 출력 -->
         <div id="imageContainer" class="mt-4">
+            <div id="imagetype" class="card mb-4" style="width: 100%; text-align: center;">           
+                <!-- 서버에 등록된 이미지(key_word) 표시 -->
+            </div>
+            
             {% if data %}
-                {% for image in data %}
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-4 text-center">
-                                <!-- 기본 이미지는 JPG URL 표시 -->
-                                <img id="image-{{ loop.index }}" src="{{ image.url }}" alt="{{ image.title_image }}" style="width: 100%; height: auto;" />
-                                <!-- <button class="btn btn-primary toggle-format" data-index="{{ loop.index }}" data-jpg="{{ image.url }}" data-bmp="/naverapi/bmp_files/{{ image.bmp_file }}">BMP 보기</button> -->
-                            </div>
-                            <div class="col-md-8">
-                                <!-- 이미지 정보와 버튼 -->
-                                <!-- <p><a id="link-{{ loop.index }}" href="{{ image.url }}" target="_blank"><strong>크게 보기</strong> </a></p> -->
-                                <!-- 버튼으로 링크 -->
-                                <button id="link-{{ loop.index }}" class="btn btn-outline-primary btn-sm me-2" onclick="openFullscreen('{{ image.url }}')">
-                                    <i class="fas fa-search-plus"></i> 크게 보기
-                                </button>
-                                <button class="btn btn-outline-success btn-sm toggle-format" data-index="{{ loop.index }}" data-jpg="{{ image.url }}" data-bmp="/naverapi/bmp_files/{{ image.bmp_file }}">
-                                    <i class="fas fa-sync-alt"></i> BMP 보기
-                                </button>
-                                
-                            </div>
-                        </div>
+            {% for image in data %}
+            <div class="card mb-4">
+                <div class="card-body">
+                    <!-- 고정된 이미지 컨테이너: 높이 250px로 고정 -->
+                    <div class="image-container" style="width: 100%; height: 250px; overflow: hidden; text-align: center;">
+                        <img id="image-{{ loop.index }}" src="{{ image.url }}" alt="{{ image.title_image }}" 
+                             style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                    </div>
+                    <!-- 버튼들을 이미지 아래쪽에 위치 -->
+                    <div class="mt-3 text-center">
+                        <button id="link-{{ loop.index }}" class="btn btn-outline-primary btn-sm me-2" onclick="openFullscreen('{{ image.url }}')">
+                            <i class="fas fa-search-plus"></i> 크게 보기
+                        </button>
+                        <button class="btn btn-outline-success btn-sm toggle-format me-2" data-index="{{ loop.index }}" data-state="jpg" 
+                                data-jpg="{{ image.url }}" data-bmp="/naverapi/get_bmp?key_word={{ image.key_word }}&bmp_file={{ image.bmp_42_mono }}">
+                            <i class="fas fa-sync-alt"></i> 4.2 MONO
+                        </button>
+                        <button class="btn btn-outline-success btn-sm toggle-format me-2" data-index="{{ loop.index }}" data-state="jpg" 
+                                data-jpg="{{ image.url }}" data-bmp="/naverapi/get_bmp?key_word={{ image.key_word }}&bmp_file={{ image.bmp_42_3color }}">
+                            <i class="fas fa-sync-alt"></i> 4.2 COLOR
+                        </button>
+                        <button class="btn btn-outline-success btn-sm toggle-format me-2" data-index="{{ loop.index }}" data-state="jpg" 
+                                data-jpg="{{ image.url }}" data-bmp="/naverapi/get_bmp?key_word={{ image.key_word }}&bmp_file={{ image.bmp_37_4color }}">
+                            <i class="fas fa-sync-alt"></i> 3.7 COLOR
+                        </button>
+                        <button class="btn btn-outline-success btn-sm toggle-format" data-index="{{ loop.index }}" data-state="jpg" 
+                                data-jpg="{{ image.url }}" data-bmp="/naverapi/get_bmp?key_word={{ image.key_word }}&bmp_file={{ image.bmp_29_4color }}">
+                            <i class="fas fa-sync-alt"></i> 2.9 COLOR
+                        </button>
                     </div>
                 </div>
-                {% endfor %}
+            </div>
+            
+            {% endfor %}
                
             {% else %}
                 <p class="text-center">표시할 데이터가 없습니다.</p>
@@ -140,111 +158,186 @@
 
 
            const renderImages = (images) => {
-               const imageContainer = $('#imageContainer');
+                const imageContainer = $('#imageContainer');
 
-               images.forEach(image => {
-                   const imageHtml = `
-                       <div class="card mb-4">
-                           <div class="card-body">
-                               <div class="row">
-                                   <div class="col-md-4 text-center">
-                                       <img src="${image.url}" alt="${image.title_image}" style="width: 100%; height: auto;" />
-                                   </div>
-                                   <div class="col-md-8">
-                                       <h5>${image.title_image}</h5>
-                                       <p><strong>Update Date:</strong> ${image.update_date}</p>
-                                       <p><strong>Thumbnail:</strong> ${image.thumbnail}</p>
-                                   </div>
-                               </div>
-                           </div>
-                       </div>
-                   `;
-                   imageContainer.append(imageHtml);
-               });
-           };
-
-           const loadImages = () => {
-               $.ajax({
-                   url: '/naverapi/admin_image',
-                   method: 'GET',
-                   data: { 
-                    page: currentPage, 
-                    per_page: perPage 
-                },
-                success: function (response) {
-                    if (response.data.length > 0) {
-                        let currentIndex = currentPage * 10; // 현재 페이지에 기반하여 인덱스 생성
-
-                response.data.forEach((image, index) => { // JavaScript에서 고유 인덱스 생성
-                    const uniqueIndex = currentIndex + index + 1; // 페이지와 로컬 인덱스를 더해 고유 인덱스 생성
-
+                images.forEach(image => {
                     const imageHtml = `
                         <div class="card mb-4">
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-4 text-center">
-                                        <!-- 기본 이미지는 JPG URL 표시 -->
-                                        <img id="image-${uniqueIndex}" src="${image.url}" alt="${image.title_image}" style="width: 100%; height: auto;" />
+                                        <img src="${image.url}" alt="${image.title_image}" style="width: 100%; height: auto;" />
                                     </div>
                                     <div class="col-md-8">
-                                        <!-- 이쁜 버튼들 -->
-                                        <button class="btn btn-outline-primary btn-sm me-2" onclick="openFullscreen('${image.url}')">
-                                            <i class="fas fa-search-plus"></i> 크게 보기
-                                        </button>
-                                        <button class="btn btn-outline-success btn-sm toggle-format" data-index="${uniqueIndex}" data-jpg="${image.url}" data-bmp="/naverapi/bmp_files/${image.bmp_file}">
-                                            <i class="fas fa-sync-alt"></i> BMP 보기
-                                        </button>
+                                        <h5>${image.title_image}</h5>
+                                        <p><strong>Update Date:</strong> ${image.update_date}</p>
+                                        <p><strong>Thumbnail:</strong> ${image.thumbnail}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     `;
-                    $('#imageContainer').append(imageHtml);
-                    });
+                    imageContainer.append(imageHtml);
+                });
+            };
 
-                        // 페이지 증가
-                        currentPage += 1;
-                    } else {
-                        alert("더 이상 데이터가 없습니다.");
-                        $('#loadMoreBtn').hide();
+            const loadImages = () => {
+                $.ajax({
+                    url: '/naverapi/admin_image',
+                    method: 'GET',
+                    data: { 
+                        page: currentPage, 
+                        per_page: perPage 
+                    },
+                    success: function (response) {
+                        console.log("전체 응답 데이터:", response);
+
+                        if (response.unique_key && response.unique_key.length > 0) {
+                            let uniqueHtml = `
+                                <div class="unique-slider-container" style="position: relative; display: flex; align-items: center;">
+                                    <!-- 좌측 화살표 버튼 (투명도 70%, 라운드 네모) -->
+                                    <button class="slider-arrow left-arrow" style="border: none; background: rgba(0, 0, 0, 0.7); cursor: pointer; font-size: 24px; border-radius: 8px; padding: 8px; position: absolute; left: 0; z-index: 10;">
+                                        <i class="fas fa-chevron-left" style="color: #fff;"></i>
+                                    </button>
+                                    <!-- 슬라이더 영역 -->
+                                    <div class="unique-slider" style="overflow: hidden; flex-grow: 1; margin: 0 50px;">
+                                        <div class="unique-slider-inner" style="display: flex; justify-content: center; align-items: center;">
+                            `;
+                            response.unique_key.forEach(item => {
+                                uniqueHtml += `
+                                    <div class="unique-key-item" 
+                                        style="position: relative; width: 100px; height: 100px; margin: 0 10px; text-align: center; cursor: pointer;"
+                                        onclick="location.href='/naverapi/admin_image?key_word=${encodeURIComponent(item.key_word)}'">
+                                        <img src="${item.url}" alt="${item.key_word}" 
+                                            style="width: 100px; height: 100px; object-fit: cover; display: block;">
+                                        <div style="position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0, 0, 0, 0.5); color: #fff; font-size: 14px; padding: 2px;">
+                                            ${item.key_word}
+                                        </div>
+                                    </div>
+                                `;
+                            });
+                            uniqueHtml += `
+                                        </div>
+                                    </div>
+                                    <!-- 우측 화살표 버튼 (투명도 70%, 라운드 네모) -->
+                                    <button class="slider-arrow right-arrow" style="border: none; background: rgba(0, 0, 0, 0.7); cursor: pointer; font-size: 24px; border-radius: 8px; padding: 8px; position: absolute; right: 0; z-index: 10;">
+                                        <i class="fas fa-chevron-right" style="color: #fff;"></i>
+                                    </button>
+                                </div>
+                            `;
+                            $("#imagetype").html(uniqueHtml);
+
+                            // 좌측, 우측 화살표 클릭 시 슬라이더 이동 처리
+                            $(".left-arrow").on("click", function() {
+                                $(".unique-slider").animate({ scrollLeft: "-=100" }, 300);
+                            });
+                            $(".right-arrow").on("click", function() {
+                                $(".unique-slider").animate({ scrollLeft: "+=100" }, 300);
+                            });
+                        } else {
+                            console.log("등록된 이미지가 없습니다.!!");
+                        }
+
+
+
+                        if (response.data && response.data.length > 0) {
+                            // unique_key 데이터를 #imagetype 영역에 표시
+                           // 이미지 카드 생성
+                            let currentIndex = currentPage * 10; // 현재 페이지를 기준으로 고유 인덱스 생성
+                            response.data.forEach((image, index) => {
+                                const uniqueIndex = currentIndex + index + 1;
+                                const imageHtml = `
+                                    <div class="card mb-4">
+                                        <div class="card-body">
+                                            <!-- 고정된 이미지 컨테이너 -->
+                                            <div class="image-container" style="width: 100%; height: 250px; overflow: hidden; text-align: center;">
+                                                <img id="image-${uniqueIndex}" src="${image.url}" alt="${image.title_image}" 
+                                                    style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                                            </div>
+                                            <!-- 버튼들을 이미지 아래쪽에 배치 -->
+                                            <div class="mt-3 text-center">
+                                                <button class="btn btn-outline-primary btn-sm me-2" onclick="openFullscreen('${image.url}')">
+                                                    <i class="fas fa-search-plus"></i> 크게 보기
+                                                </button>
+                                                <button class="btn btn-outline-success btn-sm toggle-format me-2" data-index="${uniqueIndex}" data-state="jpg" data-jpg="${image.url}" data-bmp="/naverapi/get_bmp?key_word=${image.key_word}&bmp_file=${image.bmp_42_mono}">
+                                                    <i class="fas fa-sync-alt"></i> 4.2 MONO
+                                                </button>
+                                                <button class="btn btn-outline-success btn-sm toggle-format me-2" data-index="${uniqueIndex}" data-state="jpg" data-jpg="${image.url}" data-bmp="/naverapi/get_bmp?key_word=${image.key_word}&bmp_file=${image.bmp_42_3color}">
+                                                    <i class="fas fa-sync-alt"></i> 4.2 COLOR
+                                                </button>
+                                                <button class="btn btn-outline-success btn-sm toggle-format me-2" data-index="${uniqueIndex}" data-state="jpg" data-jpg="${image.url}" data-bmp="/naverapi/get_bmp?key_word=${image.key_word}&bmp_file=${image.bmp_37_4color}">
+                                                    <i class="fas fa-sync-alt"></i> 3.7 COLOR
+                                                </button>
+                                                <button class="btn btn-outline-success btn-sm toggle-format" data-index="${uniqueIndex}" data-state="jpg" data-jpg="${image.url}" data-bmp="/naverapi/get_bmp?key_word=${image.key_word}&bmp_file=${image.bmp_29_4color}">
+                                                    <i class="fas fa-sync-alt"></i> 2.9 COLOR
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                $('#imageContainer').append(imageHtml);
+
+                            });
+                                                
+                            // 다음 페이지를 위해 currentPage 증가
+                            currentPage += 1;
+                        } else {
+                            alert("더 이상 데이터가 없습니다.");
+                            $('#loadMoreBtn').hide();
+                        }
+                    },
+                    error: function () {
+                        alert("데이터를 불러오는 중 오류가 발생했습니다.");
                     }
-                   },
-                   error: function () {
-                       alert("데이터를 불러오는 중 오류가 발생했습니다.");
-                   }
-               });
-           };
+                });
+            };
 
-           // 초기 데이터 로드
-           loadImages();
+            // 초기 데이터 로드
+            loadImages();
+
+
 
            
            // BMP와 JPG 전환 버튼 처리
-            $(document).on("click", ".toggle-format", function () {
-                const index = $(this).data("index");
-                const imgElement = $(`#image-${index}`);
-                const currentSrc = imgElement.attr("src");
-                const jpgSrc = $(this).data("jpg");
-                const bmpSrc = $(this).data("bmp");
+        $(document).on("click", ".toggle-format", function () {
+            const $btn = $(this);
+            const index = $btn.data("index");
+            const imgElement = $(`#image-${index}`);
+            const currentState = $btn.data("state");  // 현재 상태: 'jpg' 또는 'bmp'
+            const jpgSrc = $btn.data("jpg");
+            const bmpSrc = $btn.data("bmp");
 
-                console.log("Index:", index);
-                console.log("Current Src:", currentSrc);
-                console.log("JPG Src:", jpgSrc);
-                console.log("BMP Src:", bmpSrc);
+            // 최초 클릭 시 원래 버튼 텍스트(아이콘 제외)를 저장
+            if (!$btn.data("original-text")) {
+                // 아이콘을 제외한 텍스트만 저장하거나, 전체 HTML을 저장할 수도 있음
+                $btn.data("original-text", $btn.text().trim());
+            }
+            const originalLabel = $btn.data("original-text");
 
-                if (currentSrc === jpgSrc) {
-                    // BMP 보기
-                    const uniqueBmpSrc = `${bmpSrc}?t=${new Date().getTime()}`; // 캐싱 방지
-                    imgElement.attr("src", uniqueBmpSrc);
-                    $(this).text("JPG 보기");
-                    console.log("Switched to BMP");
-                } else {
-                    // JPG 보기
-                    imgElement.attr("src", jpgSrc);
-                    $(this).text("BMP 보기");
-                    console.log("Switched to JPG");
-                }
-            });
+            console.log("Index:", index);
+            console.log("Current state:", currentState);
+            console.log("JPG Src:", jpgSrc);
+            console.log("BMP Src:", bmpSrc);
+
+            if (currentState === "jpg") {
+                // BMP 보기: 캐싱 방지 쿼리 스트링 추가
+                const uniqueBmpSrc = `${bmpSrc}?t=${new Date().getTime()}`;
+                imgElement.attr("src", uniqueBmpSrc);
+                $btn.data("state", "bmp");
+                // BMP로 전환 후, 버튼 텍스트를 "JPG 보기"로 변경
+                $btn.html('<i class="fas fa-sync-alt"></i> JPG 보기');
+                console.log("Switched to BMP");
+            } else {
+                // JPG 보기
+                imgElement.attr("src", jpgSrc);
+                $btn.data("state", "jpg");
+                // 원래 저장해둔 텍스트(예: "2.9 COLOR", "3.7 COLOR")로 복원
+                $btn.html(`<i class="fas fa-sync-alt"></i> ${originalLabel}`);
+                console.log("Switched to JPG");
+            }
+        });
+
+
 
            // "더보기" 버튼 클릭 이벤트
            $('#loadMoreBtn').on('click', function () {

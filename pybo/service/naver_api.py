@@ -32,8 +32,10 @@ class NaverAPI:
         # print("타입 및 키워드 : ", node,srcText)
         #urllib.parse.quote(srcText)는 입력된 문자열을 URL 인코딩하여, 안전하게 URL에 포함되도록 변환
         parameters = "?query=%s&start=%s&display=%s" % (urllib.parse.quote(srcText), start, display)
-        
+        # parameters = "?query=카리나&start=1&display=100"
+        print("파라메터 : ", parameters)
         url = base + node + parameters    
+        print("URL : ", url)
         responseDecode = NaverAPI.getRequestUrl(url)   #[CODE 1]
         
         if (responseDecode == None):
@@ -97,7 +99,7 @@ class NaverAPI:
             return default_date
 
     @staticmethod
-    def get_json_image(post, cnt):    
+    def get_json_image(post, cnt, key_word):    
         title = post.get('title', '')
         thumbnail = post.get('thumbnail', '')
         url = post.get('link', '')
@@ -109,10 +111,17 @@ class NaverAPI:
 
         # BMP 이미지 생성
         #bmp_file = BMPTrans.genenate_bmp_top(url,sizeheight,sizewidth)
-        bmp_file = BMPTrans.genenate_bmp_ai(url)
-        print(f"BMP 파일명은 {bmp_file} 입니다.")
+        bmp_42_mono = BMPTrans.genenate_bmp_42_mono(url,key_word)
+        bmp_75_mono = BMPTrans.genenate_bmp_75_mono(url,key_word)
+        bmp_42_3color = BMPTrans.genenate_bmp_42_3color(url,key_word)
+        bmp_37_4color = BMPTrans.genenate_bmp_37_4color(url,key_word)
+        bmp_29_4color = BMPTrans.genenate_bmp_29_4color(url,key_word)
+        bmp_397_4color = BMPTrans.genenate_bmp_397_4color(url,key_word)
 
-        if bmp_file is None:
+
+        print(f"BMP 파일명은 {bmp_42_mono}, {bmp_75_mono},{bmp_42_3color}, {bmp_37_4color}, {bmp_29_4color}, {bmp_397_4color} 입니다.")
+
+        if bmp_42_mono is None or bmp_42_3color is None or bmp_42_3color is None or bmp_29_4color is None or bmp_75_mono is None or bmp_397_4color is None:
             return None  # 실패 시 명시적으로 None 반환
         
         else:
@@ -123,11 +132,14 @@ class NaverAPI:
                 'link': url,
                 'sizeheight': sizeheight,
                 'sizewidth': sizewidth,
-                'bmp_file' : bmp_file,
+                'bmp_42_mono' : bmp_42_mono,
+                'bmp_75_mono' : bmp_75_mono,
+                'bmp_42_3color' : bmp_42_3color,
+                'bmp_37_4color' : bmp_37_4color ,
+                'bmp_29_4color' : bmp_29_4color ,
+                'bmp_397_4color' : bmp_397_4color ,               
                 'pDate': pDate
             }
-        
-
             return json_file
 
     #출입증용_Image 및 DB DATA 전송
@@ -183,59 +195,45 @@ class NaverAPI:
 
     @staticmethod
     def requestNaverAPI(type, key_word):
-       
         jsonResult = []
-        jsonResponse = NaverAPI.getNaverSearch(type, key_word, start = 1, display = 100) 
-
-        total = jsonResponse['total']
-        
+        output_file = f"{type}_{key_word}.json"  # JSON 파일 이름
         cnt = 0
-        output_file = f"{type}_{key_word}.json" #json 파일 이름
-
-        while ((jsonResponse != None) and (jsonResponse['display'] != 0)):         
+        
+        start_points = [1, 51]  # 2번 요청하여 최대 200개 가져오기
+        for start in start_points:
+            jsonResponse = NaverAPI.getNaverSearch(type, key_word, start, 50)
+            
+            if jsonResponse is None or jsonResponse['display'] == 0:
+                break  # 더 이상 결과가 없으면 종료
+            
             for post in jsonResponse['items']:
                 cnt += 1
+                json_file = None  # 기본값
+                
                 if type == 'news':
-                    json_file= NaverAPI.get_json_news(post, cnt)    
-
+                    json_file = NaverAPI.get_json_news(post, cnt)    
                 elif type == 'image':
                     try:
-                        # json 파일 생성
-                        json_file = NaverAPI.get_json_image(post, cnt)
-                        
-                        # 유효한 json_file만 DB에 삽입
+                        json_file = NaverAPI.get_json_image(post, cnt,key_word)
                         if json_file is not None:
                             RepositoryNaverData.insert_image_data(key_word, type, output_file, json_file)
-                            
                         else:
                             print(f"JSON 파일 생성 실패: post={post}, cnt={cnt}")
                     except Exception as e:
                         print(f"오류 발생: {e}")
-
                 elif type == 'blog':
-                    json_file=NaverAPI.get_json_blog(post, jsonResult, cnt)
-
-                    
+                    json_file = NaverAPI.get_json_blog(post, jsonResult, cnt)
                 
                 if json_file is not None:
                     jsonResult.append(json_file)
-          
-            start = jsonResponse['start'] + jsonResponse['display']
-            jsonResponse = NaverAPI.getNaverSearch(type, key_word, start, 100)  #[CODE 2]
-
         
-        print('전체 검색 : %d 건' %total)
-       
+        # JSON 파일 저장
         with open(output_file, 'w', encoding='utf8') as outfile:
-            json_data = json.dumps(jsonResult,  indent=4, sort_keys=True,  ensure_ascii=False)
-                            
+            json_data = json.dumps(jsonResult, indent=4, sort_keys=True, ensure_ascii=False)
             outfile.write(json_data)
-            
-        print("가져온 데이터 : %d 건" %(cnt))
-        print ('%s_naver_%s.json SAVED' % (key_word, type))
-        
-            
-        print(f"Summary saved to {output_file}")
-      
-        #정보 호출
-        #result =RepositoryNaverData.read_image_data(key_word, type)
+
+        print(f"전체 검색 결과: {cnt}건 저장 완료")
+        print(f"{output_file} 파일이 저장되었습니다.")
+        return True
+
+

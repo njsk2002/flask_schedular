@@ -180,19 +180,22 @@ def save_sharecard():
 
 
 ############# Sharecard 보기 ############################33
-@bp.route('/view_sharecards', methods=['GET'])
-@login_required
+@bp.route('/view_sharecards', methods=['GET', 'POST'])
+# @login_required
 def view_sharecards():
     try:
         # 현재 로그인한 사용자 정보 가져오기
         user = g.user
+        print("DEBUG: Current user:", user)
 
         # 현재 사용자의 공유 명함 데이터 조회
         share_data = ShareCard.query.filter_by(user_id=user.no).all()
+        print("DEBUG: Retrieved share_data:", share_data)
 
         # 공유 명함 리스트 변환
         sharecards = []
         for share in share_data:
+            print("DEBUG: Processing share:", share)
             # 명함 데이터 조회
             namecard = NameCard.query.filter_by(id=share.namecard_id).first()
             
@@ -200,9 +203,9 @@ def view_sharecards():
             shared_files = [share.s_file1, share.s_file2, share.s_file3, share.s_file4, share.s_file5]
             shared_files = [f for f in shared_files if f]  # None 값 제거
 
-            sharecards.append({
+            card = {
                 "no": share.no,
-                "namecard_id" : share.namecard_id,
+                "namecard_id": share.namecard_id,
                 "title": share.title,
                 "introduce": share.introduce,
                 "content": share.content,
@@ -221,15 +224,26 @@ def view_sharecards():
                 },
                 "shared_files": shared_files,
                 "created_at": share.create_date.strftime('%Y-%m-%d %H:%M:%S') if share.create_date else None
+            }
+            sharecards.append(card)
+            print("DEBUG: Added sharecard:", card)
+        
+        print("DEBUG: Final sharecards list:", sharecards)
+
+        # Accept 헤더의 우선순위를 비교하여 JSON 응답을 우선하도록 처리
+        if request.accept_mimetypes['application/json'] >= request.accept_mimetypes['text/html']:
+            print("DEBUG: Returning JSON response")
+            return jsonify({
+                "data": sharecards
             })
-
-            print(sharecards)
-
-        # 공유 명함 데이터를 e_sharecard.html로 전달
-        return render_template('namecard/e_sharecard.html', namecards=sharecards)
+        else:
+            print("DEBUG: Rendering HTML template with sharecards")
+            return render_template('namecard/e_sharecard.html', namecards=sharecards)
 
     except Exception as e:
+        print("DEBUG: Exception occurred:", e)
         return render_template('namecard/e_sharecard.html', error_message=f"서버 오류 발생: {str(e)}")
+
 
 
 ################ Welcomepage 생성 ###########################
@@ -261,7 +275,7 @@ def gen_welcome():
     db.session.commit()
 
     # ✅ QR 코드 URL 생성
-    qr_url = f"http://192.168.0.136:5000/qr/{unique_id}"
+    qr_url = f"http://192.168.0.136:5000/enamecard/welcome_page/{unique_id}"
 
     print("QR URL: ", qr_url)
     print("upload_folder: ", output_folder)

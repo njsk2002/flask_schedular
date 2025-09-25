@@ -13,31 +13,46 @@ from ..service.image_manageent import ImageManagement
 bp =Blueprint('auth',__name__,url_prefix='/auth')
 
 
+from flask_wtf.csrf import generate_csrf
+
+@bp.route('/get-csrf-token', methods=['GET'])
+def get_csrf_token():
+    token = generate_csrf()
+    return jsonify({'csrf_token': token})
+
+
 ###########################################################################
 ###########################  로그인 유무 ####################################
 ###########################################################################
 #=== 로그인 되었는지 먼저 확인하는 함수 @login_required 어노테이션으로 사용 가능 ====
+import functools
+from flask import redirect, url_for, session, g
+from pybo.models import User
+from pybo import db
+
 def login_required(view):
     @functools.wraps(view)
     def wrapped_view(**kwargs):
         if g.user is None:
+            print("[DEBUG] @login_required: g.user is None, redirecting to login")
             return redirect(url_for('auth.login'))
+        print(f"[DEBUG] @login_required: g.user is present: {g.user}")
         return view(**kwargs)
-    
     return wrapped_view
 
-#=== 로그인 되었을때 session data를 g.user 데이터로 이동/ 다른 class에서 g.user로 login 유무 확인가능 ====
 @bp.before_app_request
 def load_logged_in_user():
     user_id = session.get('user_id')
     if user_id is None:
         g.user = None
+        print("[DEBUG] load_logged_in_user: No user_id found in session")
     else:
         g.user = db.session.query(User).filter_by(userid=user_id).first()
-        print(f"조회된 사용자: {g.user}")  # user 값이 None인지 확인
-        
+        print(f"[DEBUG] load_logged_in_user: Retrieved user: {g.user}")
         if g.user is None:
-            session.pop('user_id', None)  # 세션에 유효하지 않은 ID 제거
+            session.pop('user_id', None)
+            print("[DEBUG] load_logged_in_user: Invalid user_id removed from session")
+
 
 ###########################################################################
 ########################### 이미지 및 파일 업로드 ############################
@@ -411,7 +426,10 @@ def login():
     form = UserLoginForm()
     print("login 시도")
 
-    if request.method == 'POST' and form.validate_on_submit():
+    # if request.method == 'POST' and form.validate_on_submit():
+    if request.method == 'POST':
+        if not form.validate_on_submit():
+            print("유효성 검사 실패:", form.errors)
         error = None
         print("login 시도2")
         user = User.query.filter_by(userid=form.userid.data).first()
