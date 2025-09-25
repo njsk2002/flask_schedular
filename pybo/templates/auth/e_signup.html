@@ -1,0 +1,252 @@
+{% extends 'e_base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}">
+{% endblock %}
+
+
+{% block content %}
+
+    <div class="container">
+        <h2>회원가입</h2>
+
+        <!-- ✅ 회원가입 성공 시 모달 팝업 -->
+        {% if signup_success %}
+        <div id="signupSuccessModal" class="modal fade show" tabindex="-1" aria-labelledby="signupSuccessLabel" aria-hidden="true" style="display: block;">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="signupSuccessLabel">🎉 회원가입 완료</h5>
+                    </div>
+                    <div class="modal-body text-center">
+                        <p>회원가입이 완료되었습니다!<br>로그인 페이지로 이동하세요.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <!-- <button type="button" class="btn btn-primary" onclick="location.href='{{ url_for('auth.login') }}'">로그인 페이지 이동</button> -->
+                        <button type="button" class="btn btn-primary" onclick="window.location.href='/auth/login'">로그인 페이지 이동</button>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- ✅ 회원가입 폼 -->
+        <!-- action 및 enctype 추가 -->
+        <form id="signup-form" action="/auth/signup" method="POST" enctype="multipart/form-data" onsubmit="enableInputsBeforeSubmit()">
+            <div class="form-group">
+                <label for="photo">회원 사진</label>
+            
+                <div class="form-group">
+                    <label for="photo1">사진(1)</label>
+                    <input type="file" id="photo1" name="photo1" accept="image/*" onchange="previewImage(event, 'photo1-preview')">
+                    <img id="photo1-preview" src="" alt="사진 1" style="display: none;">
+                </div>
+            
+                <div class="form-group">
+                    <label for="photo2">사진(2)</label>
+                    <input type="file" id="photo2" name="photo2" accept="image/*" onchange="previewImage(event, 'photo2-preview')">
+                    <img id="photo2-preview" src="" alt="사진 2" style="display: none;">
+                </div>
+            
+                <div class="form-group">
+                    <label for="photo3">사진(3)</label>
+                    <input type="file" id="photo3" name="photo3" accept="image/*" onchange="previewImage(event, 'photo3-preview')">
+                    <img id="photo3-preview" src="" alt="사진 3" style="display: none;">
+                </div>
+            </div>
+        
+            <h3>로그인 정보</h3>
+            <div class="form-group">
+                <label for="userid">아이디</label>
+                <input type="text" id="userid" name="userid" placeholder="아이디를 입력하세요" required>
+                <div id="id-message" class="message"></div>
+            </div>
+        
+            <div class="form-group">
+                <label for="password">비밀번호</label>
+                <input type="password" id="password" name="password" placeholder="8자리 이상(영문 포함)">
+                <div id="password-message" class="message"></div>
+            </div>
+        
+            <div class="form-group">
+                <label for="password-confirm">비밀번호 확인</label>
+                <input type="password" id="password-confirm" name="password_confirm" placeholder="비밀번호를 다시 입력하세요">
+                <div id="password-confirm-message" class="message"></div>
+            </div>
+        
+            <h3>기본정보</h3>
+            <div class="form-group">
+                <label for="name">이름</label>
+                <input type="text" id="name" name="name" placeholder="이름을 입력하세요">
+            </div>
+        
+            <div class="form-group">
+                <label for="phone">휴대폰 번호</label>
+                <input type="text" id="phone" name="phone" placeholder="숫자만 입력하세요">
+                <div id="phone-message" class="message"></div> <!-- 추가된 메시지 출력 영역 -->
+            </div>
+            
+        
+            <div class="form-group">
+                <label for="email">이메일</label>
+                <input type="text" id="email" name="email" placeholder="이메일 형식에 맞게 입력하세요">
+                <div id="email-message" class="message"></div>
+            </div>
+        
+            
+        
+            <div class="form-group">
+                <label for="team-type">부서</label>
+                <select id="team-type" name="team_type">
+                    <option value="">선택하세요</option>
+                    <option value="임원">임원</option>
+                    <option value="관리팀">관리팀</option>
+                    <option value="안전품질/ESG">안전품질/ESG</option>
+                    <option value="부설연구소">부설연구소</option>
+                    <option value="기술영업팀">기술영업팀</option>
+                    <option value="기술팀">기술팀</option>
+                    <option value="공사팀">공사팀</option>
+                    <option value="무역팀">무역팀</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="role-type">직급</label>
+                <select id="role-type" name="role_type">
+                    <option value="">선택하세요</option>
+                    <option value="대표이사">대표이사</option>
+                    <option value="전무">전무</option>
+                    <option value="상무">상무</option>
+                    <option value="이사">이사</option>
+                    <option value="연구소장">연구소장</option>
+                    <option value="부장">부장</option>
+                    <option value="차장">차장</option>
+                    <option value="과장">과장</option>
+                    <option value="대리">대리</option>
+                    <option value="사원">사원</option>
+                    <option value="책임">책임</option>
+                    <option value="선임">선임</option>
+                </select>
+            </div>
+            
+       
+            <div class="form-group">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="company">회사명</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('company')">변경</button>
+                </div>
+                <input type="text" id="company" name="company" value="아이스기술" readonly>
+            </div>
+            
+            <div class="form-group">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="address">회사주소</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('address')">변경</button>
+                </div>
+                <input type="text" id="address" name="address" value="(우 13207) 경기도 성남시 중원구 사기막골로 124 SKn테크노파크 넥스센터 2층" readonly>
+            </div>
+            
+            <div class="form-group">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="tel_rep">전화번호(대표)</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('tel_rep')">변경</button>
+                </div>
+                <input type="text" id="tel_rep" name="tel_rep" value="070-7732-7800" readonly>
+            </div>
+            
+            <div class="form-group">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="tel">전화번호(DIR)</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('tel')">변경</button>
+                </div>
+                <input type="text" id="tel" name="tel" value="070-7732-9113" readonly>
+            </div>
+            
+            <div class="form-group">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="fax">팩스</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('fax')">변경</button>
+                </div>
+                <input type="text" id="fax" name="fax" value="031-776-3520" readonly>
+            </div>
+            
+            <div class="form-group">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="homepage">홈페이지</label>
+                    <button type="button" class="btn btn-success btn-sm" 
+                        style="height: 25px; padding: 2px 8px; font-size: 12px;" 
+                        onclick="enableField('homepage')">변경</button>
+                </div>
+                <input type="text" id="homepage" name="homepage" value="www.icetech.co.kr" readonly>
+            </div>
+            
+            
+            
+            
+            <!-- <h3>민감정보</h3>
+            <div class="form-group">
+                <label for="blood-type">혈액형</label>
+                <select id="blood-type" name="blood_type">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="AB">AB</option>
+                    <option value="O">O</option>
+                </select>
+            </div>
+        
+            <div class="form-group">
+                <label for="health">건강 특이사항</label>
+                <select id="health" name="health">
+                    <option value="">선택하세요</option>
+                    <option value="고혈압">고혈압</option>
+                    <option value="당뇨">당뇨</option>
+                    <option value="심장질환">심장질환</option>
+                    <option value="호흡기질환">호흡기질환</option>
+                    <option value="간질환">간질환</option>
+                    <option value="신장질환">신장질환</option>
+                    <option value="암">암</option>
+                    <option value="정신건강">정신건강</option>
+                    <option value="면역질환">면역질환</option>
+                    <option value="기타">기타</option>
+                </select>
+                <textarea id="health-other" name="health_other" placeholder="기타 내용을 입력하세요"></textarea>
+            </div>
+        
+            <div class="form-group">
+                <label for="age">나이</label>
+                <input type="number" id="age" name="age" placeholder="나이를 입력하세요">
+            </div> -->
+
+
+            <div class="terms">
+                <h3>[필수] 이용약관</h3>
+                <button type="button" class="view-terms-btn" onclick="openTermsPopup();">보기</button>
+            </div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="terms-agree" name="terms_agree">
+                <label for="terms-agree">위 약관에 동의합니다.</label>
+            </div>
+
+            <button type="submit" class="btn" id="signup-btn">회원가입</button>
+        </form>
+    </div>
+
+    {% endblock %}
+
+    {% block script %}
+
+    <script src="{{ url_for('static', filename='e_javascript/e_signup.js') }}"></script>
+
+    {% endblock %}

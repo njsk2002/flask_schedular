@@ -1,0 +1,415 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3 class="mb-0">E-Ink 전송 대시보드 (3×2)</h3>
+    <div>
+      <button id="btn-send-all" class="btn btn-primary">전체 전송</button>
+    </div>
+  </div>
+
+  <!-- 상태 알림 -->
+  <div id="toast-area" class="position-fixed top-0 end-0 p-3" style="z-index:1080;"></div>
+
+  <!-- NEW: 프리뷰/버튼 크기 조절용 경량 CSS -->
+  <style>
+    .btn-nav-sm { padding: .15rem .35rem; font-size: .75rem; line-height: 1; }
+
+    .preview-surface {
+      height: clamp(300px, 40vh, 520px);
+      width: auto;
+      max-width: 100%;
+      margin-inline: auto;
+      background: #f8f9fa;
+      overflow: hidden;
+      border-radius: .375rem;
+    }
+    .preview-img { width: 100%; height: 100%; object-fit: contain; }
+  </style>
+
+  <!-- 3×2 그리드 -->
+  <div id="tiles" class="row row-cols-1 row-cols-md-3 g-3">
+    {% for i in range(1,7) %}
+    {% set num = "%02d" % i %}
+    <div class="col">
+      <div class="card shadow-sm h-100" data-device-no="{{ num }}" data-device-id="E{{ num }}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong>E-INK/{{ num }}</strong>
+          <span class="badge text-bg-secondary">E{{ num }}</span>
+        </div>
+
+        <div class="card-body d-flex flex-column gap-2">
+          <!-- 1ROW -->
+          <div class="d-flex flex-column gap-2">
+            <div class="d-flex align-items-center gap-2">
+              <div class="flex-grow-1 text-truncate">
+                <span class="fw-semibold">파일명:</span>
+                <span class="file-name" title="파일명">-</span>
+              </div>
+              <input type="file" class="d-none file-input"
+                     accept=".pdf,.png,.jpg,.jpeg,.bmp,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.csv,.txt"/>
+              <button class="btn btn-sm btn-outline-primary btn-choose">선택</button>
+            </div>
+            <input type="text" class="form-control form-control-sm memo-input" placeholder="메모 입력(옵션)">
+          </div>
+
+          <!-- 2ROW -->
+          <div class="row g-2">
+            <div class="col-4">
+              <label class="form-label mb-1 small">해상도</label>
+              <select class="form-select form-select-sm select-resolution">
+                <option value="480x800" selected>480×800</option>
+                <option value="1200x1600">1200×1600</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-label mb-1 small">화면선택</label>
+              <select class="form-select form-select-sm select-scale">
+                <option value="fit" selected>FIT</option>
+                <option value="fill">FILL</option>
+                <option value="percent">PERCENT</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label class="form-label mb-1 small">컬러</label>
+              <select class="form-select form-select-sm select-mode">
+                <option value="BWRYBG" selected>COLOR6 (BWRYBG)</option>
+                <option value="BW">MONO (BW)</option>
+                <option value="BWRY">COLOR (BWRY)</option>
+              </select>
+            </div>
+            <div class="col-12 percent-row d-none">
+              <label class="form-label mb-1 small">배율(%)</label>
+              <input type="range" class="form-range percent-input" min="50" max="200" step="1" value="100">
+            </div>
+          </div>
+
+          <!-- 3ROW: 프리뷰 영역 -->
+          <div class="preview-wrap flex-grow-1 d-flex align-items-center justify-content-center">
+            <div class="preview-surface border" style="aspect-ratio: 3 / 5;">
+              <img class="preview-img" src="" alt="미리보기">
+            </div>
+          </div>
+
+          <!-- 4ROW: 이전/이후/회전/원본/전송 -->
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="btn-group" role="group">
+              <button class="btn btn-outline-secondary btn-nav-sm btn-prev" type="button">이전</button>
+              <span class="px-2 small page-indicator">- / -</span>
+              <button class="btn btn-outline-secondary btn-nav-sm btn-next" type="button">이후</button>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center">
+              <div class="d-flex align-items-center gap-1">
+                <label class="form-label mb-0 small">회전</label>
+                <select class="form-select form-select-sm select-rotate" style="width:auto;">
+                  <option value="0" selected>0°</option>
+                  <option value="90">90°</option>
+                  <option value="180">180°</option>
+                  <option value="270">270°</option>
+                </select>
+              </div>
+
+              <button class="btn btn-outline-dark btn-original" type="button" title="원본 보기 토글">원본</button>
+              <button class="btn btn-success btn-send" type="button">전송</button>
+            </div>
+          </div>
+        </div> <!-- /card-body -->
+
+      </div> <!-- /card -->
+    </div>   <!-- /col -->
+    {% endfor %}
+  </div> <!-- /#tiles -->
+
+</div> <!-- /.container-fluid -->
+{% endblock %}
+
+
+{% block script %}
+<script type="application/json" id="devices-json">
+  {{ devices|default([], true)|tojson }}
+</script>
+
+<script>
+(() => {
+  // 안전한 JSON 주입
+  let injected = [];
+  try {
+    const tag = document.getElementById('devices-json');
+    if (tag && tag.textContent.trim()) injected = JSON.parse(tag.textContent);
+  } catch(e){}
+
+  // 기본 디바이스
+  const fallback = [
+    {device_no:'01', device_id:'E01', name:'E-INK/01', supports:['BW','BWRY','BWRYBG'], default_width:480,  default_height:800},
+    {device_no:'02', device_id:'E02', name:'E-INK/02', supports:['BW','BWRY','BWRYBG'], default_width:480,  default_height:800},
+    {device_no:'03', device_id:'E03', name:'E-INK/03', supports:['BW','BWRY','BWRYBG'], default_width:480,  default_height:800},
+    {device_no:'04', device_id:'E04', name:'E-INK/04', supports:['BW','BWRY','BWRYBG'], default_width:480,  default_height:800},
+    {device_no:'05', device_id:'E05', name:'E-INK/05', supports:['BW','BWRY','BWRYBG'], default_width:480,  default_height:800},
+    {device_no:'06', device_id:'E06', name:'E-INK/06', supports:['BW','BWRY','BWRYBG'], default_width:480,  default_height:800},
+  ];
+  const devices = (Array.isArray(injected) && injected.length) ? injected : fallback;
+
+  function toast(msg, type='info') {
+    const id = 't'+Date.now()+Math.random().toString(16).slice(2);
+    const el = document.createElement('div');
+    el.id = id;
+    el.className = `toast align-items-center text-bg-${type} border-0 show`;
+    el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
+    (document.querySelector('#toast-area') || document.body).appendChild(el);
+    setTimeout(()=>el.remove(), 4000);
+  }
+
+  /** "800x480" → {width:800, height:480} */
+  function parseResolution(v){
+    const [w,h]=v.split('x').map(Number);
+    return {width:w, height:h};
+  }
+
+  /** 프리뷰 박스 비율 계산(회전 무시, 800×480만 세로 480:800로 고정) */
+  function getPreviewBoxDims(selW, selH){
+    // if (selW === 800 && selH === 480) return {pw:480, ph:800};
+    // return {pw:selW, ph:selH}; // 1200×1600 등은 그대로
+
+        // 800×480은 세로(480:800)로 고정, 1200×1600은 3:4로 깔끔히
+      if (selW === 800 && selH === 480)   return {pw:3, ph:5}; // 480:800
+      if (selW === 1200 && selH === 1600) return {pw:3, ph:4}; // 1200:1600
+      return {pw:selW, ph:selH};
+      }
+
+  /** 프리뷰 캔버스의 aspect-ratio를 '고정' 갱신 */
+  function applyPreviewAspect(card, s){
+    const surface = card.querySelector('.preview-surface');
+    if (!surface) return;
+    const {pw, ph} = getPreviewBoxDims(s.uiWidth, s.uiHeight);
+    surface.style.aspectRatio = `${pw} / ${ph}`;
+  }
+
+  // ---- 미리보기 (JSON) : UI 해상도 + 회전 전달 (서버는 그대로 PNG 생성) ----
+  async function updatePreviewFromJson(s, imgEl, raw=0){
+    if (!s.upload_id) return;
+    const body = {
+      upload_id: s.upload_id,
+      width:  s.uiWidth,
+      height: s.uiHeight,
+      mode: s.mode,            // ← 선택값 그대로 전달 (BWRYBG|BW|BWRY)
+      scale: s.scale,
+      percent: s.percent,
+      rotate: s.rotate,
+      raw
+    };
+    const r = await fetch('/bulletin/preview_blob', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('preview_blob json failed');
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    imgEl.src = url + '#t=' + Date.now();
+    if (s._prevUrl) URL.revokeObjectURL(s._prevUrl);
+    s._prevUrl = url;
+  }
+
+  // ---- 미리보기 (파일 업로드) : UI 해상도 + 회전 전달 ----
+  async function updatePreviewFromFile(file, s, imgEl){
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('width',  s.uiWidth);
+    fd.append('height', s.uiHeight);
+    fd.append('mode',   s.mode);      // ← 선택값 그대로 전달
+    fd.append('scale',  s.scale);
+    fd.append('percent', s.percent);
+    fd.append('rotate', s.rotate);
+    fd.append('raw', 0);
+
+    const r = await fetch('/bulletin/preview_blob', {method:'POST', body: fd});
+    if (!r.ok) throw new Error('preview_blob multipart failed');
+
+    const upid = r.headers.get('X-Upload-Id');
+    if (upid) s.upload_id = parseInt(upid, 10);
+
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    if (s._prevUrl) URL.revokeObjectURL(s._prevUrl);
+    s._prevUrl = url;
+    imgEl.src  = url + '#t=' + Date.now();
+  }
+
+  function bindTile(card){
+    const deviceNo = card.dataset.deviceNo;
+    const deviceId = card.dataset.deviceId;
+    const spec = devices.find(d=>d.device_no===deviceNo) || {};
+    const s = {
+      device_no: deviceNo,
+      device_id: deviceId,
+      upload_id: null,
+      file_name: '-',
+      pages: 1, page: 1,
+
+      // UI 프리뷰 기준 해상도
+      uiWidth:  spec.default_width  || 480,
+      uiHeight: spec.default_height || 800,
+
+      mode: 'BWRYBG',   // ← 기본값을 HTML 기본 선택(BWRYBG)과 일치시킴
+      scale: 'fit',
+      percent: 100,
+      rotate: 0,
+      view: 'processed',
+      _prevUrl: null
+    };
+
+    const $fileName   = card.querySelector('.file-name');
+    const $fileInput  = card.querySelector('.file-input');
+    const $btnChoose  = card.querySelector('.btn-choose');
+    const $selRes     = card.querySelector('.select-resolution');
+    const $selScale   = card.querySelector('.select-scale');
+    const $selMode    = card.querySelector('.select-mode');
+    const $percentRow = card.querySelector('.percent-row');
+    const $percent    = card.querySelector('.percent-input');
+    const $preview    = card.querySelector('.preview-img');
+    const $pageInd    = card.querySelector('.page-indicator');
+    const $btnSend    = card.querySelector('.btn-send');
+    const $btnOriginal= card.querySelector('.btn-original');
+    const $selRotate  = card.querySelector('.select-rotate');
+
+    // 🔑 select의 현재값을 상태에 즉시 반영 (초기 로드 시 불일치 방지)
+    s.mode = $selMode.value;
+
+    function refreshPercentRow(){ $percentRow.classList.toggle('d-none', s.scale!=='percent'); }
+    function redrawIndicators(){
+      $pageInd.textContent = `${s.page} / ${s.pages}`;
+      $fileName.textContent = s.file_name || '-';
+    }
+
+    // 파일 선택 → multipart로 미리보기(처리본) 생성
+    $btnChoose.addEventListener('click', ()=> $fileInput.click());
+    $fileInput.addEventListener('change', async (ev)=>{
+      const f = ev.target.files[0]; if(!f) return;
+      s.file_name = f.name; s.pages = 1; s.page = 1; s.view = 'processed';
+      try {
+        applyPreviewAspect(card, s);
+        await updatePreviewFromFile(f, s, $preview);  // mode는 s.mode(BWRYBG|BW|BWRY)
+        redrawIndicators();
+        toast(`[${deviceNo}] 미리보기 준비`, 'success');
+      } catch (e) {
+        toast(`[${deviceNo}] 미리보기 실패`, 'danger');
+      } finally {
+        $fileInput.value = '';
+      }
+    });
+
+    // 옵션 변경 시: 현재 뷰(view)에 맞춰 서버로 재랜더 요청
+    async function refreshPreviewByState(){
+      if (!s.upload_id) return;
+      try {
+        applyPreviewAspect(card, s);
+        await updatePreviewFromJson(s, $preview, s.view === 'original' ? 1 : 0); // mode 전달 포함
+        redrawIndicators();
+      } catch(e) {
+        toast(`[${deviceNo}] 미리보기 실패`, 'danger');
+      }
+    }
+
+    // 해상도 변경
+    $selRes.addEventListener('change', ()=>{
+      const {width,height}=parseResolution($selRes.value);
+      s.uiWidth  = width;
+      s.uiHeight = height;
+      applyPreviewAspect(card, s);   // ← 업로드 여부와 관계없이 프리뷰 박스 비율 바로 갱신
+      refreshPercentRow();
+      refreshPreviewByState();
+    });
+
+    $selScale.addEventListener('change', ()=>{
+      s.scale=$selScale.value;
+      refreshPercentRow();
+      refreshPreviewByState();
+    });
+
+    $percent.addEventListener('input', ()=>{
+      s.percent=parseInt($percent.value,10)||100;
+      if (s.scale==='percent') refreshPreviewByState();
+    });
+
+    // 🔑 컬러 모드 변경: s.mode ← select 값 그대로
+    $selMode.addEventListener('change', ()=>{
+      s.mode=$selMode.value;         // "BWRYBG" | "BW" | "BWRY"
+      refreshPreviewByState();
+    });
+
+    // 회전
+    $selRotate.addEventListener('change', ()=>{
+      s.rotate = parseInt($selRotate.value, 10) || 0;
+      applyPreviewAspect(card, s);   // 컨테이너는 항상 현재 해상도 기준 비율 유지
+      refreshPreviewByState();
+    });
+
+    // 페이지 이동
+    card.querySelector('.btn-prev').addEventListener('click', ()=>{
+      if(!s.upload_id) return; s.view='processed';
+      s.page=Math.max(1,(s.page||1)-1); refreshPreviewByState();
+    });
+    card.querySelector('.btn-next').addEventListener('click', ()=>{
+      if(!s.upload_id) return; s.view='processed';
+      s.page=Math.min(s.pages||1,(s.page||1)+1); refreshPreviewByState();
+    });
+
+    // 원본 토글
+    $btnOriginal.addEventListener('click', ()=>{
+      if (!s.upload_id) { toast(`[${deviceNo}] 파일을 먼저 선택하세요.`, 'warning'); return; }
+      s.view = (s.view === 'processed') ? 'original' : 'processed';
+      $btnOriginal.classList.toggle('active', s.view === 'original');
+      refreshPreviewByState();
+    });
+
+    // 해상도별 회전 매핑 (이전과 동일)
+    function mapRotateForWire(uiRotate){
+      const norm = ((uiRotate % 360) + 360) % 360;
+      const is1200x1600 = (s.uiWidth === 1200 && s.uiHeight === 1600);
+      const table = is1200x1600
+        ? { 0:0, 90:90, 180:180, 270:270 }
+        : { 0:270, 90:0, 180:90, 270:180 };
+      return table[norm] ?? 0;
+    }
+
+    $btnSend.addEventListener('click', async ()=>{
+      if (!s.upload_id) { toast(`[${deviceNo}] 전송할 파일이 없습니다.`, 'warning'); return; }
+      const body = {
+        upload_id: s.upload_id,
+        page: s.page || 1,
+        device_id: s.device_id,
+        mode: s.mode,             // ← 선택값 그대로 전달
+        scale: s.scale,
+        percent: s.percent,
+        rotate: mapRotateForWire(s.rotate),
+        width:  s.uiWidth,
+        height: s.uiHeight
+      };
+      try{
+        const r = await fetch('/bulletin/sendfile', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(body)
+        });
+        const js = await r.json();
+        toast(`[${deviceNo}] 전송 준비 완료 (job #${js.job_id})`, 'info');
+      }catch(e){ toast(`[${deviceNo}] 전송 실패`, 'danger'); }
+    });
+
+    // 초기 UI 상태
+    refreshPercentRow();
+    applyPreviewAspect(card, s);
+  }
+
+  // 모든 카드 바인딩
+  document.querySelectorAll('#tiles .card').forEach(bindTile);
+  document.getElementById('btn-send-all').addEventListener('click', ()=>{
+    document.querySelectorAll('#tiles .card .btn-send').forEach(btn=>btn.click());
+  });
+})();
+</script>
+{% endblock %}

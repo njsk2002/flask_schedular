@@ -1,0 +1,177 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="text-center mb-4">내 공유 명함 목록</h2>
+
+    {% if error_message %}
+        <div class="alert alert-danger" role="alert">
+            {{ error_message }}
+        </div>
+    {% endif %}
+
+    <div id="sharecard-container" class="row row-cols-1 row-cols-md-2 g-4">
+        {% for share in namecards %}
+        <div class="col">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    
+                    <!-- ✅ 제목 (크게 강조) -->
+                    <h4 class="card-title title-box">{{ share.title }}</h4>
+
+                    <!-- ✅ 인사말 -->
+                    <div class="message-box">
+                        <h6>💬 인사말</h6>
+                        <p>{{ share.introduce or '없음' }}</p>
+                    </div>
+
+                    <!-- ✅ 내용 -->
+                    <div class="content-box">
+                        <h6>📄 내용</h6>
+                        <p>{{ share.content }}</p>
+                    </div>
+
+                    <!-- ✅ 명함 정보 (스타일 추가) -->
+                    {% if share.namecard %}
+                        <div class="namecard-box mt-3 p-3">
+                            <h6>📌 명함 정보</h6>
+                            <div class="d-flex align-items-center">
+                                <!-- 프로필 사진 -->
+                                <img src="{{ share.namecard.selected_photo or '/static/default_profile.jpg' }}" 
+                                     class="rounded-circle profile-img me-3">
+                            
+                                <div>
+                                    <!-- 이름 및 직급 -->
+                                    <strong class="name-highlight">{{ share.namecard.username or '이름 없음' }}</strong> 
+                                    ({{ share.namecard.position or '직급 없음' }})<br>
+                                    
+                                    <!-- 회사명 -->
+                                    <span class="company-text">🏢 {{ share.namecard.company or '회사 없음' }}</span><br>
+                                    
+                                    <!-- 이메일 -->
+                                    📧 <a href="mailto:{{ share.namecard.email }}" class="email-text">
+                                        {{ share.namecard.email or '이메일 없음' }}
+                                    </a> <br>
+                                    
+                                    <!-- 스마트폰 전화번호 -->
+                                    📱 {{ share.namecard.phone or '전화 없음' }} <br>
+                                    
+                                    <!-- 대표 전화 & 직통 전화 -->
+                                    ☎ <span class="company-text">{{ share.namecard.tel_rep or '대표번호 없음' }} 
+                                        | 📞 {{ share.namecard.tel_dir or '직통번호 없음' }}
+                                    </span> <br>
+                            
+                                    <!-- 팩스 -->
+                                    📠 <span class="fax-text">{{ share.namecard.fax or '팩스 없음' }}</span><br>
+                            
+                                    <!-- 주소 -->
+                                    📍 <span class="address-text">{{ share.namecard.com_address or '주소 없음' }}</span><br>
+
+                                    <!-- 홈페이지 (클릭 가능하도록 변경) -->
+                                    🌐 <a href="http://{{ share.namecard.homepage }}" target="_blank" class="homepage-text">
+                                        {{ share.namecard.homepage or '홈페이지 없음' }}
+                                    </a>
+                                </div>
+                            </div>
+                            
+                        </div>
+                    {% else %}
+                        <p class="text-muted">명함 정보 없음</p>
+                    {% endif %}
+
+                    <!-- ✅ 공유된 파일 리스트 -->
+                    <div class="file-box mt-3 p-3">
+                        <h6>📂 공유할 파일</h6>
+                        {% if share.shared_files and share.shared_files|length > 0 %}
+                            <ul class="file-list">
+                                {% for file in share.shared_files %}
+                                    <li>
+                                        <i class="bi bi-file-earmark-text"></i> {{ file }}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="text-muted">공유된 파일이 없습니다.</p>
+                        {% endif %}
+                    </div>
+
+                    <p class="text-muted small">📅 작성일: {{ share.created_at or '날짜 없음' }}</p>
+                </div>
+
+                <!-- ✅ "선택" 버튼 (좌측 하단, 크기 확대) -->
+                <div class="select-button-container">
+                    <button type="button" class="btn btn-primary select-btn" 
+                            onclick="confirmSelection('{{ share.no }}', '{{ share.namecard_id }}')">
+                        선택
+                    </button>
+                </div>
+
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+
+
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/e_css/e_sharecard.css">
+{% endblock %}
+
+{% block script %}
+
+<script>
+    function confirmSelection(shareNo, namecardId) {
+        if (confirm("이 공유 명함을 선택하시겠습니까?")) {
+            // ✅ 서버에 POST 요청 보내기
+            fetch('/enamecard/gen_welcome', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    share_no: shareNo,
+                    namecard_id: namecardId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.qr_code) {
+                    // ✅ 팝업 메시지 생성
+                    showPopup(data.message, data.unique_id);
+                } else {
+                    alert("오류 발생: " + data.message);
+                }
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("서버 오류가 발생했습니다.");
+            });
+        }
+    }
+
+    function showPopup(message, uniqueId) {
+        // ✅ 동적으로 팝업 생성
+        let popup = document.createElement("div");
+        popup.classList.add("custom-popup");
+
+        popup.innerHTML = `
+            <div class="popup-content">
+                <p>${message}</p>
+                <button class="btn btn-secondary" onclick="closePopup()">확인</button>
+                <button class="btn btn-primary" onclick="window.location.href='/enamecard/welcome_page/${uniqueId}'">웰컴페이지 이동</button>
+            </div>
+        `;
+
+        document.body.appendChild(popup);
+    }
+
+    function closePopup() {
+        let popup = document.querySelector(".custom-popup");
+        if (popup) {
+            popup.remove();
+        }
+    }
+</script>
+{% endblock %}
+

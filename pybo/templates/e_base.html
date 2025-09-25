@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome ICETECH</title>
+
+    <!-- CSS 파일 참조 -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_base.css') }}">
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}"> -->
+    <!-- <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}"> -->
+    {% block extra_css %}{% endblock %}
+   
+    <style>
+        .content {
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 네비게이션 바 삽입 -->
+    <header>
+        {% include "e_navi.html" %}
+    </header>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 공통 JavaScript -->
+    <script src="{{ url_for('static', filename='jquery-3.7.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+
+    <!-- 개별 페이지 추가 JavaScript -->
+    {% block script %}{% endblock %}
+
+</body>
+</html>
