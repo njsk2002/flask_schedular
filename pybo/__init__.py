@@ -1,10 +1,12 @@
 import threading
 from flask import Flask
+from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData, text
 import config, os
 from flask_jwt_extended import JWTManager
+from .schedular import init_scheduler
 
 # ✅ 데이터베이스 설정
 naming_convention = {
@@ -20,6 +22,7 @@ migrate = Migrate()
 def create_app():
     app = Flask(__name__)
     app.config.from_object(config)
+    CORS(app)
 
     # ✅ 파일 업로드 폴더 설정
     UPLOAD_FILE_FOLDER = "C:/DavidProject/flask_project/uploads_files"
@@ -53,8 +56,9 @@ def create_app():
     from .views import (
         cal_user_controller, main_views, question_views, answer_views, auth_views,
         comment_views, vote_views, co2_controller, cal_schedular_controller,
-        openai_controller, ytube_voice_controller, naver_api_controller, e_namecard_controller
-    )
+        openai_controller, ytube_voice_controller, naver_api_controller, 
+        e_namecard_controller, e_device_controller, e_bulletin_controller, esp32_controller)
+
 
     app.register_blueprint(main_views.bp)
     app.register_blueprint(question_views.bp)
@@ -69,6 +73,9 @@ def create_app():
     app.register_blueprint(ytube_voice_controller.bp)
     app.register_blueprint(naver_api_controller.bp)
     app.register_blueprint(e_namecard_controller.bp)
+    app.register_blueprint(e_device_controller.bp)
+    app.register_blueprint(e_bulletin_controller.bp)
+    app.register_blueprint(esp32_controller.bp)
 
     # ✅ 필터 설정
     from .filter import format_datetime
@@ -79,5 +86,10 @@ def create_app():
     import threading
     cleanup_thread = threading.Thread(target=cleanup_expired_qr_codes, args=(app,), daemon=True)  # ✅ app 전달
     cleanup_thread.start()
+
+
+    # APScheduler 초기화
+    init_scheduler()
+    app.logger.info("[SCHEDULER] Cleanup job initialized")
 
     return app

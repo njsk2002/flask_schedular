@@ -22,18 +22,20 @@
         {% endif %}
 
         {% if user.photos %}
-        <h3>추가 사진</h3>
+        <!-- <h3>추가 사진</h3> -->
         <div id="photo-container">
             {% for photo in user.photos %}
                 {% if photo.url != "" %}
-                    <div class="form-group" id="{{ photo.name }}-container">
-                        <img src="{{ photo.url }}" alt="{{ photo.name }}" style="display: block;">
+                    <div class="photo-item" id="{{ photo.name }}-container">
+                        <img src="{{ photo.url }}" alt="{{ photo.name }}">
                         <input type="file" name="{{ photo.name }}" accept="image/*">
                     </div>
                 {% endif %}
             {% endfor %}
         </div>
-        {% endif %}
+    {% endif %}
+    
+    
 
         <h3>기본 정보</h3>
         <div class="form-group">

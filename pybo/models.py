@@ -465,14 +465,23 @@ class ImageData(db.Model):
     __tablename__ = 'ImageData'  # 테이블 이름 명시
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # 명시적으로 autoincrement 추가
     #user_id = db.Column(db.Integer, db.ForeignKey('user_authorization.id', ondelete='CASCADE'), nullable=False)
-    star_name = db.Column(db.String(100), nullable=False)
+    key_word = db.Column(db.String(100), nullable=False)
     type_image = db.Column(db.String(100), nullable=False)
     title_image = db.Column(db.String(300), nullable=False)
     
     json_file = db.Column(db.String(200), nullable=False)
     thumbnail = db.Column(db.String(500), nullable=False)
     url = db.Column(db.String(500), nullable=False)
-    bmp_file = db.Column(db.String(200), nullable=False)
+
+    bmp_42_mono = db.Column(db.String(200), nullable=True)
+    bmp_42_3color = db.Column(db.String(200), nullable=True)
+    bmp_37_4color = db.Column(db.String(200), nullable=True)
+    bmp_29_mono = db.Column(db.String(200), nullable=True)
+    bmp_29_3color = db.Column(db.String(200), nullable=True)
+    bmp_29_4color = db.Column(db.String(200), nullable=True)
+    bmp_file_1 = db.Column(db.String(200), nullable=True)
+    bmp_file_2 = db.Column(db.String(200), nullable=True)
+
     sizewidth = db.Column(db.String(100), nullable=False)
     sizeheight = db.Column(db.String(100), nullable=False)
     update_date = db.Column(db.String(150), nullable=False)
