@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>N‑Calendar — Responsive v5</title>
+
+  <!-- Tailwind (CDN for dev only). For production, build with CLI/PostCSS. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- FullCalendar bundle (core+daygrid+timegrid+interaction) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" />
+
+  <style>
+    /* ===== THEME (light/dark via CSS variables) ===== */
+    :root { /* light (default) */
+      --bg: #f7f7fb; --app: #ffffff; --card:#ffffff; --text:#0f172a;
+      --muted: rgba(15,23,42,.65); --ring: rgba(0,0,0,.12); --chip-bg: rgba(2,6,23,.06);
+      --today: rgba(124,58,237,.12); --border: rgba(0,0,0,.08);
+    }
+    body.theme-dark { /* dark */
+      --bg:#0b1220; --app:#0f172a; --card:#0b1220; --text:#ffffff;
+      --muted: rgba(255,255,255,.7); --ring: rgba(255,255,255,.12); --chip-bg: rgba(255,255,255,.1);
+      --today: rgba(124,58,237,.08); --border: rgba(255,255,255,.12);
+    }
+
+    /* app chrome */
+    body { background: var(--bg); color: var(--text); }
+    .app { background: var(--app); }
+    .card { background: var(--card); box-shadow: 0 10px 30px rgba(0,0,0,.08) }
+    .btn { border:1px solid var(--ring); border-radius:999px; padding:.5rem .75rem; font-size:.9rem; }
+    .btn:hover { background: rgba(0,0,0,.035); }
+    body.theme-dark .btn:hover { background: rgba(255,255,255,.06); }
+    .chip { display:inline-block; border-radius:999px; padding:.25rem .5rem; font-size:11px; background: var(--chip-bg); color: var(--text); opacity:.8; margin-top:.25rem }
+
+    /* FullCalendar tune */
+    .fc { --fc-border-color: var(--border); --fc-page-bg-color: transparent; --fc-neutral-bg-color: rgba(0,0,0,.03); --fc-today-bg-color: var(--today); }
+    body.theme-dark .fc { --fc-neutral-bg-color: rgba(255,255,255,.04); }
+    .fc .fc-daygrid-day.fc-day-today{ background: var(--today); }
+    .fc .fc-daygrid-event { border-radius: .5rem; padding: .125rem .25rem; }
+  </style>
+</head>
+<body class="text-[var(--text)]">
+  <!-- App Shell -->
+  <div class="app min-h-screen pb-24">
+    <!-- Top bar -->
+    <header class="sticky top-0 z-40 border-b" style="border-color:var(--border); background:var(--card); backdrop-filter:saturate(140%) blur(8px)">
+      <div class="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button id="btnSidebar" class="md:hidden btn" aria-label="사이드바 토글">☰</button>
+          <div class="flex items-center gap-2 font-semibold">
+            <span style="color:#7c3aed">N</span><span>Calendar</span>
+          </div>
+        </div>
+        <div class="hidden md:flex items-center gap-2">
+          <button class="btn" id="btnToday">오늘</button>
+          <button class="btn" id="btnPrev">◀</button>
+          <button class="btn" id="btnNext">▶</button>
+          <select class="btn" id="viewSelect">
+            <option value="dayGridMonth">월</option>
+            <option value="timeGridWeek">주</option>
+            <option value="timeGridDay">일</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnTheme" class="btn" title="테마 전환">🌓</button>
+          <button id="btnNew" class="btn" style="background:#7c3aed;border-color:#7c3aed;color:white">+ 새 항목</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-7xl mx-auto px-4 py-4 grid grid-cols-1 md:grid-cols-[1fr_320px] gap-4">
+      <!-- Calendar card -->
+      <section class="card rounded-2xl p-3">
+        <div id="title" class="px-2 pb-2 text-xl font-semibold opacity-90"></div>
+        <div id="calendar" class="rounded-xl overflow-hidden"></div>
+
+        <!-- Mobile controls under calendar -->
+        <div class="mt-3 flex md:hidden items-center gap-2">
+          <button class="btn" id="btnToday_m">오늘</button>
+          <button class="btn" id="btnPrev_m">◀</button>
+          <button class="btn" id="btnNext_m">▶</button>
+          <select class="btn" id="viewSelect_m">
+            <option value="dayGridMonth">월</option>
+            <option value="timeGridWeek">주</option>
+            <option value="timeGridDay">일</option>
+          </select>
+        </div>
+      </section>
+
+      <!-- Sidebar -->
+      <aside id="sidebar" class="card rounded-2xl p-3 md:block hidden">
+        <!-- Mini month calendar -->
+        <div class="rounded-xl overflow-hidden">
+          <div id="miniCal"></div>
+        </div>
+        <div class="mt-4">
+          <div class="text-sm opacity-70 mb-2">캘린더</div>
+          <label class="flex items-center gap-2 text-sm mb-2 cursor-pointer">
+            <input id="cal_my" type="checkbox" class="accent-current" checked>
+            <span class="inline-block w-3 h-3 rounded" style="background:#3b82f6"></span>
+            <span>내 캘린더</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input id="cal_team" type="checkbox" class="accent-current" checked>
+            <span class="inline-block w-3 h-3 rounded" style="background:#22c55e"></span>
+            <span>팀</span>
+          </label>
+          <div class="text-xs opacity-60 mt-3">날짜를 탭하면 메인 달력으로 이동합니다.</div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- FAB for mobile -->
+    <button id="fabNew" class="md:hidden fixed bottom-5 right-5 h-12 w-12 rounded-full shadow-lg" style="background:#7c3aed;color:#fff">＋</button>
+  </div>
+
+  <!-- FullCalendar Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/rrule@2.7.2/dist/es5/rrule.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/rrule@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.15/locales/ko.global.min.js"></script>
+
+  <!-- Create/Edit Modal (z‑top) -->
+  <div id="modal" class="fixed inset-0 hidden items-center justify-center p-4 z-[10000]" style="z-index:10000">
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)"></div>
+    <div class="relative w-full max-w-lg rounded-2xl card p-4">
+      <div class="text-lg font-semibold mb-3" id="modalTitle">새 항목</div>
+      <div class="grid grid-cols-1 gap-3">
+        <div>
+          <label class="block text-sm opacity-70 mb-1">제목</label>
+          <input id="f_title" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)" placeholder="회의, 약속 또는 할일" />
+        </div>
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input id="f_allday" type="checkbox" class="accent-current" />하루 종일
+        </label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm opacity-70 mb-1">시작</label>
+            <input id="f_start" type="datetime-local" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)" />
+          </div>
+          <div>
+            <label class="block text-sm opacity-70 mb-1">종료</label>
+            <input id="f_end" type="datetime-local" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)" />
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm opacity-70 mb-1">캘린더</label>
+            <select id="f_calendar" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)">
+              <option value="my">내 캘린더</option>
+              <option value="team">팀</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm opacity-70 mb-1">반복</label>
+            <select id="f_repeat" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)">
+              <option value="none">없음</option>
+              <option value="daily">매일</option>
+              <option value="weekly">매주</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm opacity-70 mb-1">유형</label>
+            <select id="f_kind" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)">
+              <option value="event">일정</option>
+              <option value="todo">할일</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm opacity-70 mb-1">중요도</label>
+            <select id="f_priority" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)">
+              <option value="normal">보통</option>
+              <option value="important">중요</option>
+              <option value="urgent">긴급</option>
+            </select>
+          </div>
+        </div>
+        <label class="inline-flex items-center gap-2 text-sm">
+          <input id="f_starred" type="checkbox" class="accent-current" />★ 즐겨찾기(중요 표시)
+        </label>
+        <div>
+          <label class="block text-sm opacity-70 mb-1">메모</label>
+          <textarea id="f_desc" rows="3" class="w-full rounded-xl border px-3 py-2" style="background:transparent;border-color:var(--ring)"></textarea>
+        </div>
+      </div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="btnCancel" class="btn">취소</button>
+        <button id="btnDelete" class="btn hidden" style="border-color:#ef444433;color:#ef4444">삭제</button>
+        <button id="btnSave" class="btn" style="background:#7c3aed;border-color:#7c3aed;color:white">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agenda Modal (day list) on top of everything -->
+  <div id="agendaModal" class="fixed inset-0 hidden items-center justify-center p-4 z-[10001]" style="z-index:10001">
+    <div class="absolute inset-0" style="background:rgba(0,0,0,.5)"></div>
+    <div class="relative w-full max-w-lg rounded-2xl card p-4">
+      <div class="flex items-center justify-between">
+        <div class="text-lg font-semibold" id="agendaTitle">일정</div>
+        <button id="agendaClose" class="btn">닫기</button>
+      </div>
+      <div id="agendaList" class="mt-3 space-y-2"></div>
+      <div class="mt-4 flex justify-end">
+        <button id="agendaNew" class="btn" style="background:#7c3aed;border-color:#7c3aed;color:white">+ 새 항목</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    // ===== Theme boot (persist) =====
+    const THEME_KEY = 'ncal_theme';
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    if (savedTheme === 'dark') document.body.classList.add('theme-dark');
+    else document.body.classList.remove('theme-dark');
+
+    // ===== Config =====
+    const API_BASE = "";           // same-origin API. 빈 문자열이면 서버 호출 안 함
+    const USE_API = !!API_BASE;     // 호출부 정리: false면 무조건 로컬 데이터 사용
+    let USE_LOCAL = !USE_API;       // 런타임 폴백 플래그
+    let SEQ = 3;
+
+    // ===== Data =====
+    const calendars = [
+      { id: "my",   name: "내 캘린더", color: "#3b82f6" },
+      { id: "team", name: "팀",       color: "#22c55e" },
+    ];
+    let localEvents = [
+      { id:"1", title:"개발 스탠드업",
+        start:new Date().toISOString().slice(0,10)+"T09:30:00",
+        end:new Date().toISOString().slice(0,10)+"T10:00:00",
+        calendarId:"team", kind:"event", priority:"normal", starred:false,
+        backgroundColor:"#22c55e", borderColor:"#22c55e" },
+      { id:"2", title:"헬스",
+        rrule:{freq:"weekly", byweekday:["mo","we","fr"], dtstart:new Date().toISOString()},
+        duration:"01:00",
+        calendarId:"my", kind:"event", priority:"important", starred:false,
+        backgroundColor:"#3b82f6", borderColor:"#3b82f6" }
+    ];
+
+    const selectedCalendars = new Set(["my","team"]);
+    const qs = (id)=>document.getElementById(id);
+    const colorOf = (id)=> calendars.find(c=>c.id===id)?.color || "#64748b";
+    const toLocalInput=(dt)=>{const d=new Date(dt),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`};
+    const durationHHMM=(s,e)=>{const ms=Math.max(0,new Date(e)-new Date(s));const m=Math.round(ms/60000),h=Math.floor(m/60),mm=m%60;return `${String(h).padStart(2,'0')}:${String(mm).padStart(2,'0')}`};
+
+    // ===== Mini calendar declared first to avoid TDZ =====
+    let mini = null;
+
+    // ===== Main Calendar =====
+    const calendarEl = qs('calendar');
+    const RRULE_PLUGINS = window.rrulePlugin ? [ window.rrulePlugin ] : [];
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      plugins: RRULE_PLUGINS,
+      locale: 'ko', timeZone: 'local', initialDate: new Date(), initialView: 'dayGridMonth',
+      headerToolbar: false, nowIndicator: true, navLinks: true, dayMaxEvents: 3,
+      firstDay: 0, selectable: true, selectMirror: true, expandRows: true,
+      slotMinTime: '06:00:00', slotMaxTime: '23:00:00',
+      events: async (info, success) => {
+        if (!USE_API) { success(localEvents.filter(e => selectedCalendars.has(e.calendarId || 'my'))); return; }
+        try{
+          const url = `${API_BASE}/api/events?start=${encodeURIComponent(info.startStr)}&end=${encodeURIComponent(info.endStr)}`;
+          const resp = await fetch(url);
+          if(!resp.ok) throw new Error('no api');
+          const data = await resp.json(); USE_LOCAL = false;
+          success(data.filter(e => selectedCalendars.has(e.calendarId || 'my')));
+        }catch(e){
+          USE_LOCAL = true;
+          success(localEvents.filter(e => selectedCalendars.has(e.calendarId || 'my')));
+        }
+      },
+      datesSet: () => {
+        qs('title').textContent = calendar.view.title;
+        if (mini) mini.gotoDate(calendar.getDate());
+      },
+      dateClick: (info) => { openModal({ start: info.dateStr+'T09:00:00', end: info.dateStr+'T10:00:00', allDay:false, calendarId:[...selectedCalendars][0] || 'my' }); },
+      select: (sel) => { openModal({ start: sel.startStr, end: sel.endStr, allDay: sel.allDay, calendarId:[...selectedCalendars][0] || 'my' }); },
+      eventClick: (clickInfo) => { const date = clickInfo.event.start || new Date(); openAgenda(date); },
+      editable: true, eventDrop: onMoveResize, eventResize: onMoveResize,
+      eventContent: (arg) => {
+        const e = arg.event, p = e.extendedProps || {}; const star = p.starred ? '★ ' : '';
+        const kindLabel = p.kind === 'todo' ? '할일' : '일정';
+        const priLabel = p.priority === 'urgent' ? '긴급' : (p.priority === 'important' ? '중요' : '보통');
+        const wrap = document.createElement('div'); const title = document.createElement('div'); title.textContent = star + e.title;
+        const chip = document.createElement('span'); chip.className='chip'; chip.textContent = `${priLabel}·${kindLabel}`;
+        wrap.appendChild(title); wrap.appendChild(chip); return { domNodes:[wrap] };
+      },
+      eventDidMount: (info) => { const calId = info.event.extendedProps.calendarId || 'my'; const color = colorOf(calId); info.el.style.backgroundColor = color; info.el.style.borderColor = color; }
+    });
+    calendar.render();
+
+    // ===== Mini Month in sidebar (navigates main) =====
+    mini = new FullCalendar.Calendar(document.getElementById('miniCal'), {
+      locale:'ko', initialView:'dayGridMonth', headerToolbar:false, height:'auto', fixedWeekCount:true,
+      dateClick:(i)=>{ calendar.gotoDate(i.date); },
+    });
+    mini.render();
+
+    // ===== Agenda helpers & modal =====
+    function fmtHM(d){ const x=new Date(d); const p=n=>String(n).padStart(2,'0'); return p(x.getHours())+":"+p(x.getMinutes()); }
+    function parseDurHHMM(s){ if(!s||typeof s!=='string') return 60*60000; const [h,m]=(s.split(":").map(Number)); return ((h||0)*60+(m||0))*60000; }
+    function openAgenda(date){
+      const dayStart = new Date(date); dayStart.setHours(0,0,0,0);
+      const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate()+1);
+      const listEl = document.getElementById('agendaList'); listEl.innerHTML='';
+      const titleEl = document.getElementById('agendaTitle');
+      titleEl.textContent = `${dayStart.getFullYear()}.${dayStart.getMonth()+1}.${dayStart.getDate()} 일정`;
+
+      const items = [];
+      const evs = calendar.getEvents();
+      evs.forEach(ev=>{
+        const p = ev.extendedProps || {}; const base = { id:ev.id, title:ev.title, calendarId:p.calendarId||'my', kind:p.kind||'event', priority:p.priority||'normal', starred:!!p.starred };
+        if(p.rrule){
+          try{
+            const R = window.RRule; if(!R) throw new Error('noRRule');
+            const rr = p.rrule; const opts = { freq: R[(rr.freq||'').toUpperCase()], dtstart: new Date(rr.dtstart) };
+            if(rr.byweekday){ opts.byweekday = rr.byweekday.map(w=> R[w.toUpperCase()]); }
+            const rule = new R(opts);
+            const occs = rule.between(dayStart, dayEnd, true);
+            occs.forEach(occ=>{ const dur = parseDurHHMM(p.duration||'01:00'); items.push({ ...base, start:occ, end:new Date(occ.getTime()+dur) }); });
+          }catch(_){ /* ignore */ }
+        } else if(ev.start){
+          const s = ev.start, e = ev.end || ev.start; if(s < dayEnd && e > dayStart){ items.push({ ...base, start:s, end:e }); }
+        }
+      });
+
+      items.sort((a,b)=> new Date(a.start)-new Date(b.start));
+
+      if(items.length===0){
+        const empty = document.createElement('div'); empty.className='text-sm opacity-70'; empty.textContent='등록된 일정이 없습니다.'; listEl.appendChild(empty);
+      } else {
+        items.forEach(item=>{
+          const row = document.createElement('div'); row.className='flex items-center justify-between rounded-xl border px-3 py-2'; row.style.borderColor='var(--ring)';
+          const left = document.createElement('div');
+          const time = document.createElement('div'); time.className='text-sm opacity-70';
+          const allday = false; // 간단화 (필요시 확장)
+          time.textContent = allday ? '종일' : `${fmtHM(item.start)}–${fmtHM(item.end)}`;
+          const title = document.createElement('div'); title.textContent = (item.starred?'★ ':'') + item.title; title.className='font-medium';
+          left.appendChild(time); left.appendChild(title);
+          const edit = document.createElement('button'); edit.className='btn'; edit.textContent='열기';
+          edit.onclick = ()=>{
+            const ev = evs.find(e=> e.id===item.id) || null;
+            if(ev){
+              const base = { id: ev.id, title: ev.title, allDay: ev.allDay, calendarId: (ev.extendedProps.calendarId||'my'), description: ev.extendedProps.description||'', kind: ev.extendedProps.kind||'event', priority: ev.extendedProps.priority||'normal', starred: !!ev.extendedProps.starred };
+              if(ev.extendedProps.rrule){ openModal({ ...base, rrule: ev.extendedProps.rrule, start: item.start, end: item.end }); }
+              else { openModal({ ...base, start: item.start, end: item.end }); }
+              closeAgenda();
+            }
+          };
+          row.appendChild(left); row.appendChild(edit); listEl.appendChild(row);
+        });
+      }
+      const m = document.getElementById('agendaModal'); m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function closeAgenda(){ const m = document.getElementById('agendaModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+    document.getElementById('agendaClose').onclick = closeAgenda;
+    document.getElementById('agendaNew').onclick = ()=>{
+      const t = document.getElementById('agendaTitle').textContent;
+      const parts = t.match(/(\d+)\.(\d+)\.(\d+)/); if(parts){ const y=+parts[1], m=+parts[2], d=+parts[3]; const dt = new Date(y, m-1, d); const iso = dt.toISOString().slice(0,10); openModal({ start: iso+"T09:00:00", end: iso+"T10:00:00", allDay:false, calendarId:[...selectedCalendars][0] || 'my' }); }
+      closeAgenda();
+    };
+
+    async function onMoveResize(changeInfo){
+      const e = changeInfo.event; const patch = e.allDay ? { start: e.startStr.slice(0,10), end: e.endStr ? e.endStr.slice(0,10) : null } : { start: e.start ? e.start.toISOString() : null, end: e.end ? e.end.toISOString() : null };
+      if(USE_LOCAL){ const i = localEvents.findIndex(x=>x.id===e.id); if(i>=0) localEvents[i] = { ...localEvents[i], ...patch }; }
+      else { await fetch(`${API_BASE}/api/events/${e.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(patch) }); }
+    }
+
+    // ===== Toolbar / Mobile controls =====
+    const bind = (id, fn) => { const el = qs(id); if(el) el.onclick = fn; };
+    bind('btnToday', ()=>calendar.today()); bind('btnPrev', ()=>calendar.prev()); bind('btnNext', ()=>calendar.next());
+    bind('btnToday_m', ()=>calendar.today()); bind('btnPrev_m', ()=>calendar.prev()); bind('btnNext_m', ()=>calendar.next());
+    const selView = (e)=>calendar.changeView(e.target.value);
+    const vs = qs('viewSelect'); if(vs) vs.onchange = selView; const vsm = qs('viewSelect_m'); if(vsm) vsm.onchange = selView;
+
+    // Sidebar drawer (mobile)
+    const sidebar = qs('sidebar');
+    bind('btnSidebar', ()=> sidebar.classList.toggle('hidden'));
+
+    // Legend
+    const toggleCal = (id, on)=>{ if(on) selectedCalendars.add(id); else selectedCalendars.delete(id); calendar.refetchEvents(); };
+    qs('cal_my').onchange = (e)=> toggleCal('my', e.target.checked);
+    qs('cal_team').onchange = (e)=> toggleCal('team', e.target.checked);
+
+    // ===== Modal =====
+    const modal = qs('modal'); let editing = null;
+    function openModal(initial){
+      editing = initial || {};
+      qs('modalTitle').textContent = editing.id ? '항목 수정' : '새 항목';
+      qs('f_title').value = editing.title || '';
+      qs('f_allday').checked = !!editing.allDay;
+      const start = editing.start ? new Date(editing.start) : new Date();
+      const end   = editing.end   ? new Date(editing.end)   : new Date(start.getTime()+60*60000);
+      qs('f_start').value = toLocalInput(start); qs('f_end').value = toLocalInput(end);
+      qs('f_calendar').value = editing.calendarId || 'my'; qs('f_repeat').value = editing.rrule ? 'weekly' : 'none';
+      qs('f_kind').value = editing.kind || 'event'; qs('f_priority').value = editing.priority || 'normal';
+      qs('f_starred').checked = !!editing.starred; qs('f_desc').value = editing.description || '';
+      qs('btnDelete').classList.toggle('hidden', !editing.id);
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+    function closeModal(){ modal.classList.add('hidden'); modal.classList.remove('flex'); editing = null; }
+    bind('btnCancel', closeModal);
+
+    bind('btnDelete', async ()=>{
+      if(!editing?.id) return; if(USE_LOCAL){ localEvents = localEvents.filter(e=> e.id !== editing.id); }
+      else { await fetch(`${API_BASE}/api/events/${editing.id}`, { method:'DELETE' }); }
+      closeModal(); calendar.refetchEvents();
+    });
+
+    const save = async ()=>{
+      const title = qs('f_title').value.trim(); if(!title){ alert('제목을 입력하세요.'); return; }
+      const allDay = qs('f_allday').checked; const start = qs('f_start').value; const end = qs('f_end').value;
+      const calendarId = qs('f_calendar').value; const repeat = qs('f_repeat').value; const description = qs('f_desc').value;
+      const kind = qs('f_kind').value; const priority = qs('f_priority').value; const starred = qs('f_starred').checked;
+      let payload = { title, allDay, calendarId, description, kind, priority, starred };
+      if(repeat !== 'none'){ payload.rrule = { freq: repeat, dtstart: new Date(start).toISOString() }; payload.duration = durationHHMM(start,end); }
+      else { payload.start = new Date(start).toISOString(); payload.end = new Date(end).toISOString(); }
+
+      if(editing && editing.id){
+        if(USE_LOCAL){ const i = localEvents.findIndex(e=> e.id===editing.id); if(i>=0){ const color = colorOf(calendarId); localEvents[i] = { ...localEvents[i], ...payload, id: editing.id, backgroundColor: color, borderColor: color }; } }
+        else { await fetch(`${API_BASE}/api/events/${editing.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); }
+      } else {
+        if(USE_LOCAL){ const id = String(SEQ++); const color = colorOf(calendarId); localEvents.push({ id, ...payload, backgroundColor: color, borderColor: color }); }
+        else { await fetch(`${API_BASE}/api/events`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }); }
+      }
+      closeModal(); calendar.refetchEvents();
+    };
+    bind('btnSave', save);
+    bind('btnNew', ()=>openModal()); bind('fabNew', ()=>openModal());
+
+    // ===== Theme toggle =====
+    qs('btnTheme').onclick = () => {
+      document.body.classList.toggle('theme-dark');
+      localStorage.setItem(THEME_KEY, document.body.classList.contains('theme-dark') ? 'dark' : 'light');
+    };
+  })();
+  </script>
+</body>
+</html>
