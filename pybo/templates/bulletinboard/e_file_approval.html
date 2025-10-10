@@ -1,0 +1,62 @@
+{% extends 'e_base.html' %}
+{% block content %}
+<div class="container py-3">
+  <h4 class="mb-3">결재 진행</h4>
+
+  <div class="mb-2">
+    <span class="badge text-bg-secondary">{{ device_id }}</span>
+    <span class="badge text-bg-info">{{ status }}</span>
+  </div>
+
+  <div class="border rounded p-2 d-flex justify-content-center align-items-center" style="max-width: 820px;">
+    <div style="width:600px; aspect-ratio: 3 / 4; background:#f8f9fa; display:flex; align-items:center; justify-content:center;">
+      <img src="{{ preview_url }}" alt="preview" style="max-width:100%; max-height:100%; object-fit:contain;">
+    </div>
+  </div>
+
+  <div class="mt-3 d-flex gap-2">
+    <!-- in_review 단계: 검토/반려만 활성 -->
+    <button id="btn-review" class="btn btn-success" {% if stage != 'review' %}disabled{% endif %}>검토</button>
+    <!-- in_check 단계: 승인/반려만 활성 -->
+    <button id="btn-approve" class="btn btn-primary" {% if stage != 'approve' %}disabled{% endif %}>승인</button>
+    <button id="btn-reject" class="btn btn-outline-danger">반려</button>
+    <a href="{{ url_for('bulletin.file_view') }}" class="btn btn-outline-secondary ms-auto">뒤로</a>
+  </div>
+
+  <input type="hidden" id="meta-path" value="{{ meta_path }}">
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+(function(){
+  const metaPath = document.getElementById('meta-path').value;
+
+  async function act(action){
+    try{
+      const r = await fetch('/bulletin/approval/act', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ meta_path: metaPath, action })
+      });
+      const js = await r.json();
+      if (!r.ok || !js.ok) throw new Error('fail');
+      alert('처리되었습니다.');
+      // 상태에 따라 돌아가거나 새 화면으로
+      location.href = "{{ url_for('bulletin.file_view') }}";
+    }catch(e){
+      alert('처리에 실패했습니다.');
+    }
+  }
+
+  const btnReview = document.getElementById('btn-review');
+  const btnApprove= document.getElementById('btn-approve');
+  const btnReject = document.getElementById('btn-reject');
+
+  btnReview && btnReview.addEventListener('click', ()=> act('review'));
+  btnApprove && btnApprove.addEventListener('click', ()=> act('approve'));
+  btnReject  && btnReject.addEventListener('click', ()=> {
+    if (confirm('반려하시겠습니까?')) act('reject');
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,362 @@
+{% extends 'e_base.html' %}
+
+{% block title %}E-Ink 체크시트 · Bootstrap Pure HTML{% endblock %}
+
+{% block extra_css %}
+  {{ super() }}
+  <style>
+    :root { --card-radius: 18px; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 20% -10%, #e6f0ff 0%, transparent 60%),
+        radial-gradient(900px 600px at 120% 10%, #e8fff3 0%, transparent 60%),
+        linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+    }
+    .app-card { border-radius: var(--card-radius); border: 1px solid rgba(15,23,42,.06); box-shadow: 0 10px 30px rgba(2,6,23,.06); }
+    .preview-frame {
+      position: relative; width: 100%; aspect-ratio: 3 / 4; background: #fff;
+      border: 1px solid #e5e7eb; border-radius: 14px; box-shadow: inset 0 2px 8px rgba(0,0,0,.04); overflow: hidden;
+    }
+    .hint-rect { position:absolute; border:2px solid rgba(16,185,129,.7); border-radius:8px; pointer-events:none; }
+    .table-grid .col-title { background: rgba(241,245,249,.7); border-top: 1px solid #d4dbe4; border-bottom: 1px solid #d4dbe4; }
+    .table-row { border-bottom: 1px solid #eef2f7; }
+    .chkbox {
+      width: 22px; height: 22px; border-radius: 6px; border: 1px solid #cbd5e1; display: grid; place-items: center; transition: all .15s ease;
+    }
+    .chkbox.checked { background:#0f172a; border-color:#0f172a; color:#fff; }
+    .coords-toast {
+      position: absolute; right: 12px; bottom: 12px; font-size: 11px; background: rgba(255,255,255,.85); backdrop-filter: blur(6px);
+      border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; max-height: 110px; overflow:auto; box-shadow: 0 6px 16px rgba(0,0,0,.08);
+    }
+    .toolbar-sticky { position: sticky; top: 0; z-index: 3; background: transparent; }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <main class="container py-4 py-md-5">
+    <div class="d-flex align-items-center justify-content-between mb-3 mb-md-4">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-grid-3x3-gap-fill fs-4 text-primary"></i>
+        <h1 class="h4 h3-md fw-bold mb-0">E-Ink 체크시트 · 폼 에디터 & 미리보기</h1>
+      </div>
+      <div class="d-flex gap-2">
+        <button id="btnCopy" class="btn btn-dark"><i class="bi bi-clipboard-check me-1"></i>스키마 복사</button>
+        <button id="btnJson" class="btn btn-outline-secondary"><i class="bi bi-download me-1"></i>JSON 다운로드</button>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <!-- 좌측: 에디터 -->
+      <section class="col-12 col-lg-6">
+        <div class="app-card p-3 p-md-4">
+          <div class="toolbar-sticky mb-3">
+            <div class="d-flex align-items-center justify-content-between">
+              <h2 class="h6 fw-semibold mb-0"><i class="bi bi-pencil-square me-2"></i>폼 에디터</h2>
+              <div class="d-flex gap-2">
+                <button id="btnSave" class="btn btn-primary"><i class="bi bi-save2 me-1"></i>저장</button>
+                <button id="btnToggleSchema" class="btn btn-light border">스키마 보기</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-12 col-md-7">
+              <label class="form-label small text-secondary">제목</label>
+              <input id="title" class="form-control" value="일일 점검표" placeholder="폼 제목"/>
+            </div>
+            <div class="col-12 col-md-5">
+              <label class="form-label small text-secondary">날짜</label>
+              <input id="date" type="date" class="form-control"/>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <i class="bi bi-people"></i>
+              <span class="small fw-semibold">접근 권한</span>
+            </div>
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label small text-secondary">그룹 (쉼표로 구분)</label>
+                <input id="groups" class="form-control" value="현장팀"/>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label small text-secondary">사용자 (쉼표로 구분)</label>
+                <input id="users" class="form-control" value="user01"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <h3 class="h6 fw-semibold mb-0">점검 항목</h3>
+              <span class="small text-secondary">(체크박스 좌표 자동 배치)</span>
+            </div>
+            <div class="d-flex gap-2">
+              <button id="btnAdd" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i>항목 추가</button>
+            </div>
+          </div>
+
+          <div class="table-responsive app-card p-0 overflow-hidden">
+            <table class="table table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:32%">항목</th>
+                  <th style="width:52%">세부내용</th>
+                  <th class="text-center" style="width:16%">확인란</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
+
+          <pre id="schemaView" class="mt-3 d-none small bg-dark text-white p-3 rounded" style="max-height: 240px; overflow:auto;"></pre>
+        </div>
+      </section>
+
+      <!-- 우측: 미리보기 -->
+      <section class="col-12 col-lg-6">
+        <div class="app-card p-3 p-md-4">
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 class="h6 fw-semibold mb-0"><i class="bi bi-eye me-2"></i>미리보기 <span class="text-secondary">(논리 600×800 → 실 1200×1600)</span></h2>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch" id="toggleHints" checked>
+              <label class="form-check-label small" for="toggleHints">좌표 힌트</label>
+            </div>
+          </div>
+
+          <div id="preview" class="preview-frame">
+            <div id="pvCanvas" class="position-absolute top-0 start-0 w-100 h-100">
+              <div class="px-4 px-md-5 pt-4">
+                <div id="pvTitle" class="h5 fw-bold">일일 점검표</div>
+                <div class="text-secondary small mt-1">날짜: <span id="pvDate">YYYY-MM-DD</span></div>
+              </div>
+
+              <div id="pvHeader" class="position-absolute start-0 end-0">
+                <div class="d-flex table-grid mx-4 mx-md-5 col-title" style="height:40px">
+                  <div id="pvHeadItem" class="d-flex align-items-center px-3">항목</div>
+                  <div id="pvHeadDetail" class="d-flex align-items-center px-3">세부내용</div>
+                  <div id="pvHeadCheck" class="d-flex align-items-center justify-content-center px-3">확인란</div>
+                </div>
+              </div>
+
+              <div id="rowsWrap" class="position-absolute start-0 end-0"></div>
+
+              <div class="coords-toast small">
+                <div class="fw-semibold">실좌표 미리보기</div>
+                <pre id="pvRects" class="mb-0"></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-3 small text-secondary">
+            • 미리보기는 반응형으로 크기가 변해도 정확한 실좌표(1200×1600)가 계산됩니다. 체크/서명 Dirty Rect는 8px 스냅·4px 패딩 적용.
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mt-4">
+      <button class="btn btn-indigo btn-primary"><i class="bi bi-save2 me-1"></i>폼 저장</button>
+      <button class="btn btn-outline-secondary"><i class="bi bi-person-plus me-1"></i>권한 부여</button>
+      <button class="btn btn-success"><i class="bi bi-box-arrow-up-right me-1"></i>발행 & 장치 미리보기</button>
+    </div>
+  </main>
+{% endblock %}
+
+{% block script %}
+  <script>
+    // ===== 동일 JS (부트스트랩 번들은 base에서 이미 로드되므로 여기선 중복 로드 불필요) =====
+    const EINK = { W: 1200, H: 1600 };
+    const BASE = { W: 600, H: 800 };
+    const layout = { margin: 24, titleH: 54, metaH: 40, headerH: 40, rowH: 44, col:{ item:.28, detail:.54, check:.18 }, checkBox:{ w:22, h:22 } };
+    const snap8 = n => Math.max(0, Math.round(n/8)*8);
+    const clamp = (n,min,max)=> Math.min(max, Math.max(min,n));
+    const uid = () => Math.random().toString(36).slice(2,9);
+
+    const state = {
+      rows: [
+        { id: uid(), item: '소화기 압력 확인', detail: '게이지 정상범위', checked: false },
+        { id: uid(), item: '비상구 장애물', detail: '통행로 확보', checked: false },
+        { id: uid(), item: '전기실 온도', detail: '25℃ 이하', checked: false },
+      ]
+    };
+
+    const tbody = document.getElementById('tbody');
+    const title = document.getElementById('title');
+    const date = document.getElementById('date');
+    const groups = document.getElementById('groups');
+    const users = document.getElementById('users');
+    const preview = document.getElementById('preview');
+    const pvTitle = document.getElementById('pvTitle');
+    const pvDate = document.getElementById('pvDate');
+    const rowsWrap = document.getElementById('rowsWrap');
+    const pvHeader = document.getElementById('pvHeader');
+    const pvRects = document.getElementById('pvRects');
+    const schemaView = document.getElementById('schemaView');
+    const toggleHints = document.getElementById('toggleHints');
+
+    date.valueAsNumber = Date.now();
+
+    function renderTable(){
+      tbody.innerHTML = '';
+      state.rows.forEach((r)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input class="form-control" value="${r.item}" placeholder="예) 소화기 압력 확인"></td>
+          <td><input class="form-control" value="${r.detail}" placeholder="예) 게이지 정상범위"></td>
+          <td>
+            <div class="d-flex justify-content-center align-items-center gap-2">
+              <button class="btn btn-sm ${r.checked? 'btn-dark':'btn-outline-secondary'}" title="미리보기 체크 토글">✓</button>
+              <button class="btn btn-sm btn-light border" title="행 삭제"><i class="bi bi-trash"></i></button>
+            </div>
+          </td>`;
+        const [inpItem, inpDetail] = tr.querySelectorAll('input');
+        const [btnToggle, btnDel] = tr.querySelectorAll('button');
+        inpItem.addEventListener('input', e=>{ r.item=e.target.value; syncPreview(); });
+        inpDetail.addEventListener('input', e=>{ r.detail=e.target.value; syncPreview(); });
+        btnToggle.addEventListener('click', ()=>{ r.checked=!r.checked; renderTable(); syncPreview(); });
+        btnDel.addEventListener('click', ()=>{ state.rows = state.rows.filter(x=>x!==r); renderTable(); syncPreview(); });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function computeLayout(){
+      const rect = preview.getBoundingClientRect();
+      const s = rect.height / BASE.H;
+      const m = layout.margin * s, titleH = layout.titleH * s, metaH = layout.metaH * s, headerH = layout.headerH * s, rowH = layout.rowH * s;
+      const checkW = layout.checkBox.w * s, checkH = layout.checkBox.h * s;
+      const wInner = rect.width - m*2;
+      const colW = { item: wInner*layout.col.item, detail: wInner*layout.col.detail, check: wInner*layout.col.check };
+      const x0 = m, x1 = x0 + colW.item, x2 = x1 + colW.detail;
+      const tableTop = m + titleH + metaH + headerH;
+      return { rect, s, m, titleH, metaH, headerH, rowH, checkW, checkH, colW, x0, x1, x2, tableTop };
+    }
+
+    function renderPreview(){
+      pvTitle.textContent = title.value || '폼 제목';
+      pvDate.textContent  = date.value || 'YYYY-MM-DD';
+
+      const L = computeLayout();
+
+      pvHeader.style.top = (L.m + L.titleH + L.metaH) + 'px';
+      const header = pvHeader.querySelector('.table-grid');
+      header.children[0].style.width = L.colW.item + 'px';
+      header.children[1].style.width = L.colW.detail + 'px';
+      header.children[2].style.width = L.colW.check + 'px';
+
+      rowsWrap.style.top = (L.tableTop) + 'px';
+      rowsWrap.innerHTML = '';
+      state.rows.forEach((r)=>{
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-stretch table-row';
+        row.style.height = L.rowH + 'px';
+        row.innerHTML = `
+          <div class="d-flex align-items-center px-3 small" style="width:${L.colW.item}px">${r.item || '<span class="text-secondary">항목…</span>'}</div>
+          <div class="d-flex align-items-center px-3 small" style="width:${L.colW.detail}px">${r.detail || '<span class="text-secondary">세부내용…</span>'}</div>
+          <div class="d-flex align-items-center justify-content-center" style="width:${L.colW.check}px">
+            <div class="chkbox ${r.checked? 'checked':''}" style="width:${L.checkW}px; height:${L.checkH}px">${r.checked? '✓':''}</div>
+          </div>`;
+        rowsWrap.appendChild(row);
+      });
+
+      document.querySelectorAll('.hint-rect').forEach(el=>el.remove());
+
+      const coords = computeCoords();
+      const lines = [];
+      coords.items.forEach((c)=>{
+        if (toggleHints.checked){
+          const el = document.createElement('div');
+          el.className = 'hint-rect';
+          el.style.left = (c.logical.left) + 'px';
+          el.style.top  = (c.logical.top) + 'px';
+          el.style.width  = (c.logical.width) + 'px';
+          el.style.height = (c.logical.height) + 'px';
+          preview.appendChild(el);
+        }
+        lines.push(`#${c.index} → x:${c.eink.x} y:${c.eink.y} w:${c.eink.w} h:${c.eink.h}`);
+      });
+      pvRects.textContent = lines.join('\\n');
+    }
+
+    function computeCoords(){
+      const L = computeLayout();
+      const pad = 4 * L.s;
+      const scaleX = EINK.W / L.rect.width;
+      const scaleY = EINK.H / L.rect.height;
+
+      const items = state.rows.map((row, i)=>{
+        const y = L.tableTop + i*L.rowH + (L.rowH - L.checkH)/2;
+        const x = L.x2 + (L.colW.check - L.checkW)/2;
+        const logical = { left: x - 4, top: y - 4, width: L.checkW + 8, height: L.checkH + 8 };
+        const rx = snap8((x - pad) * scaleX);
+        const ry = snap8((y - pad) * scaleY);
+        const rw = snap8((L.checkW + pad*2) * scaleX);
+        const rh = snap8((L.checkH + pad*2) * scaleY);
+        return {
+          index: i+1,
+          id: row.id,
+          logical,
+          eink: {
+            x: clamp(Math.round(rx), 0, EINK.W),
+            y: clamp(Math.round(ry), 0, EINK.H),
+            w: clamp(Math.round(rw), 0, EINK.W),
+            h: clamp(Math.round(rh), 0, EINK.H),
+          },
+          checked: row.checked,
+          label: row.item,
+          detail: row.detail,
+        };
+      });
+      return { items };
+    }
+
+    function schema(){
+      const coords = computeCoords();
+      return {
+        form: {
+          title: title.value, date: date.value,
+          logicalCanvas: { w: BASE.W, h: BASE.H }, einkCanvas: { w: EINK.W, h: EINK.H }
+        },
+        access: {
+          groups: (document.getElementById('groups').value||'').split(',').map(s=>s.trim()).filter(Boolean),
+          users: (document.getElementById('users').value||'').split(',').map(s=>s.trim()).filter(Boolean)
+        },
+        fields: coords.items.map(c => ({
+          id: c.id, type: 'check', label: c.label, detail: c.detail, checked: c.checked,
+          logicalRect: { x: c.logical.left+4, y: c.logical.top+4, w: c.logical.width-8, h: c.logical.height-8 },
+          einkRect: c.eink, palette: '6c_4bpp'
+        }))
+      };
+    }
+
+    const tbodyEl = document.getElementById('tbody');
+    function bindTableRowEvents(){
+      // 이벤트는 renderTable에서 이미 바인딩됨
+    }
+
+    function toast(msg){
+      const el = document.createElement('div');
+      el.className = 'position-fixed bottom-0 end-0 p-3';
+      el.style.zIndex = 1080;
+      el.innerHTML = '<div class="toast align-items-center text-bg-dark border-0 show" role="alert"><div class="d-flex"><div class="toast-body">'+msg+'</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>';
+      document.body.appendChild(el);
+      setTimeout(()=> el.remove(), 2200);
+    }
+
+    document.getElementById('btnAdd').addEventListener('click', ()=>{ state.rows.push({ id: uid(), item:'', detail:'', checked:false }); renderTable(); syncPreview(); });
+    document.getElementById('btnCopy').addEventListener('click', async ()=>{ await navigator.clipboard.writeText(JSON.stringify(schema(), null, 2)); toast('JSON 스키마를 복사했습니다.'); });
+    document.getElementById('btnJson').addEventListener('click', ()=>{ const blob = new Blob([JSON.stringify(schema(), null, 2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='form_schema_'+Date.now()+'.json'; a.click(); URL.revokeObjectURL(url); });
+    document.getElementById('btnToggleSchema').addEventListener('click', ()=>{ const v = document.getElementById('schemaView'); v.classList.toggle('d-none'); if (!v.classList.contains('d-none')) v.textContent = JSON.stringify(schema(), null, 2); });
+    document.getElementById('toggleHints').addEventListener('change', syncPreview);
+    document.getElementById('title').addEventListener('input', syncPreview);
+    document.getElementById('date').addEventListener('input', syncPreview);
+
+    const ro = new ResizeObserver(()=> syncPreview());
+    ro.observe(document.getElementById('preview'));
+
+    renderTable(); 
+    function syncPreview(){ renderPreview(); const v = document.getElementById('schemaView'); if (v && !v.classList.contains('d-none')) v.textContent = JSON.stringify(schema(), null, 2); }
+    syncPreview();
+  </script>
+{% endblock %}
