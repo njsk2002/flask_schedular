@@ -193,47 +193,133 @@ class NaverAPI:
         return     
    
 
-    @staticmethod
-    def requestNaverAPI(type, key_word):
-        jsonResult = []
-        output_file = f"{type}_{key_word}.json"  # JSON 파일 이름
-        cnt = 0
+    # @staticmethod
+    # def requestNaverAPI(type, key_word):
+    #     jsonResult = []
+    #     output_file = f"{type}_{key_word}.json"  # JSON 파일 이름
+    #     cnt = 0
         
-        start_points = [1, 51]  # 2번 요청하여 최대 200개 가져오기
-        for start in start_points:
-            jsonResponse = NaverAPI.getNaverSearch(type, key_word, start, 50)
+    #     start_points = [1, 51]  # 2번 요청하여 최대 200개 가져오기
+    #     for start in start_points:
+    #         jsonResponse = NaverAPI.getNaverSearch(type, key_word, start, 50)
             
-            if jsonResponse is None or jsonResponse['display'] == 0:
-                break  # 더 이상 결과가 없으면 종료
+    #         if jsonResponse is None or jsonResponse['display'] == 0:
+    #             break  # 더 이상 결과가 없으면 종료
             
-            for post in jsonResponse['items']:
-                cnt += 1
-                json_file = None  # 기본값
+    #         for post in jsonResponse['items']:
+    #             cnt += 1
+    #             json_file = None  # 기본값
                 
-                if type == 'news':
-                    json_file = NaverAPI.get_json_news(post, cnt)    
-                elif type == 'image':
-                    try:
-                        json_file = NaverAPI.get_json_image(post, cnt,key_word)
-                        if json_file is not None:
-                            RepositoryNaverData.insert_image_data(key_word, type, output_file, json_file)
-                        else:
-                            print(f"JSON 파일 생성 실패: post={post}, cnt={cnt}")
-                    except Exception as e:
-                        print(f"오류 발생: {e}")
-                elif type == 'blog':
-                    json_file = NaverAPI.get_json_blog(post, jsonResult, cnt)
+    #             if type == 'news':
+    #                 json_file = NaverAPI.get_json_news(post, cnt)    
+    #             elif type == 'image':
+    #                 try:
+    #                     json_file = NaverAPI.get_json_image(post, cnt,key_word)
+    #                     if json_file is not None:
+    #                         RepositoryNaverData.insert_image_data(key_word, type, output_file, json_file)
+    #                     else:
+    #                         print(f"JSON 파일 생성 실패: post={post}, cnt={cnt}")
+    #                 except Exception as e:
+    #                     print(f"오류 발생: {e}")
+    #             elif type == 'blog':
+    #                 json_file = NaverAPI.get_json_blog(post, jsonResult, cnt)
                 
-                if json_file is not None:
-                    jsonResult.append(json_file)
+    #             if json_file is not None:
+    #                 jsonResult.append(json_file)
         
-        # JSON 파일 저장
-        with open(output_file, 'w', encoding='utf8') as outfile:
-            json_data = json.dumps(jsonResult, indent=4, sort_keys=True, ensure_ascii=False)
-            outfile.write(json_data)
+    #     # JSON 파일 저장
+    #     with open(output_file, 'w', encoding='utf8') as outfile:
+    #         json_data = json.dumps(jsonResult, indent=4, sort_keys=True, ensure_ascii=False)
+    #         outfile.write(json_data)
 
-        print(f"전체 검색 결과: {cnt}건 저장 완료")
-        print(f"{output_file} 파일이 저장되었습니다.")
-        return True
+    #     print(f"전체 검색 결과: {cnt}건 저장 완료")
+    #     print(f"{output_file} 파일이 저장되었습니다.")
+    #     return True
+
+
+
+    @staticmethod
+    def requestNaverAPI(type, key_word, max_items=30):
+        """
+        NAVER 검색을 수행하고 (image/news/blog) 결과를 최대 max_items개까지 처리.
+        image의 경우 BMP 생성이 실패하면 DB insert를 하지 않음(스킵).
+        반환: (True/False, stats)
+        """
+        jsonResult = []
+        output_file = f"{type}_{key_word}.json"
+
+        cnt = 0                 # 수집 시도 개수(성공/실패 포함)
+        saved = 0               # DB insert 성공 건수
+        skipped = 0             # BMP 실패 등으로 저장 생략
+        errors = 0              # 예외 발생 수
+        api_calls = 0           # NAVER API 호출 횟수
+
+        # ✅ 30개만 원하므로 1페이지만 + display=min(30, 50)
+        start_points = [1]
+        display = min(max_items, 50)
+
+        for start in start_points:
+            if cnt >= max_items:
+                break
+
+            jsonResponse = NaverAPI.getNaverSearch(type, key_word, start, display)
+            api_calls += 1
+
+            if not jsonResponse or jsonResponse.get('display', 0) == 0:
+                break
+
+            for post in jsonResponse.get('items', []):
+                if cnt >= max_items:
+                    break
+
+                cnt += 1
+                try:
+                    json_file = None
+
+                    if type == 'news':
+                        # 원래 시그니처 오류 주의: get_json_news(post, jsonResult, cnt)
+                        json_file = NaverAPI.get_json_news(post, jsonResult, cnt)
+
+                    elif type == 'image':
+                        json_file = NaverAPI.get_json_image(post, cnt, key_word)
+                        if json_file is None:
+                            skipped += 1  # BMP 실패 등
+                        else:
+                            # DB 저장
+                            res = RepositoryNaverData.insert_image_data(
+                                key_word=key_word,
+                                type_image=type,
+                                json_file=output_file,
+                                json_data=json_file
+                            )
+                            # insert 결과 체크 및 로깅
+                            if isinstance(res, dict) and res.get("status") == "success":
+                                saved += 1
+                            else:
+                                errors += 1
+                                print("[DB] insert 실패:", res)
+
+                    elif type == 'blog':
+                        json_file = NaverAPI.get_json_blog(post, jsonResult, cnt)
+
+                    if json_file is not None:
+                        jsonResult.append(json_file)
+
+                except Exception as e:
+                    errors += 1
+                    print(f"[오류] post 처리 중 예외: {e}")
+
+        # JSON 파일 저장
+        try:
+            with open(output_file, 'w', encoding='utf8') as outfile:
+                outfile.write(json.dumps(jsonResult, indent=4, sort_keys=True, ensure_ascii=False))
+        except Exception as e:
+            print("[WARN] JSON 파일 저장 실패:", e)
+
+        stats = {"total": cnt, "saved": saved, "skipped": skipped, "errors": errors, "api_calls": api_calls}
+        print(f"[NAVER] type={type}, keyword={key_word}, stats={stats}")
+
+        return True, stats
+
 
 
