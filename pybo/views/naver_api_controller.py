@@ -1,5 +1,5 @@
 #import torch
-from flask import Flask, request, jsonify, Blueprint,render_template, redirect, url_for, send_file, send_from_directory, Response
+from flask import Flask, request, jsonify, Blueprint,render_template, redirect, url_for, send_file, send_from_directory, Response, current_app
 from yt_dlp import YoutubeDL
 from moviepy.audio.io.AudioFileClip import AudioFileClip
 import os, base64
@@ -107,21 +107,54 @@ def admin_image():
 
 
 # NAVER 이미지 가져오기 및 정보 저장
-@bp.route('/generate_image', methods=['GET', 'POST'])
-def generate_image():
-    type = request.json.get("request_type") # 검색할 종류 news,blog,image
-    key_word = request.json.get('key_word') # 검색 키워드
-    print(type, key_word)
-    if not key_word:
-        return jsonify({"error": "검색할 키워드를 제공해주세요."}), 400
+# @bp.route('/generate_image', methods=['GET', 'POST'])
+# def generate_image():
+#     type = request.json.get("request_type") # 검색할 종류 news,blog,image
+#     key_word = request.json.get('key_word') # 검색 키워드
+#     print(type, key_word)
+#     if not key_word:
+#         return jsonify({"error": "검색할 키워드를 제공해주세요."}), 400
     
-    result = NaverAPI.requestNaverAPI(type, key_word)
+#     result = NaverAPI.requestNaverAPI(type, key_word)
           
-    #video_urls = RepositoryNaverData.read_image_data(utube_video, sort_by=sort_by, max_videos=max_video)   
-    # if video_urls is not None:
-    #     result = YoutubeAudio.summarize_videos(video_urls)
-    if result is not None: 
-       return redirect(url_for('naverapi.admin_image'))
+#     #video_urls = RepositoryNaverData.read_image_data(utube_video, sort_by=sort_by, max_videos=max_video)   
+#     # if video_urls is not None:
+#     #     result = YoutubeAudio.summarize_videos(video_urls)
+#     if result is not None: 
+#        return redirect(url_for('naverapi.admin_image'))
+
+
+
+
+@bp.route('/generate_image', methods=['POST'])  # ← GET 제거: 의도치 않은 재요청 차단
+def generate_image():
+    payload = request.get_json(silent=True) or {}
+    req_type = payload.get("request_type")  # news, blog, image
+    key_word = payload.get('key_word')
+
+    if not key_word or not req_type:
+        return jsonify({"error": "request_type / key_word가 필요합니다."}), 400
+
+    try:
+        # ← 최대 30개만 가져오도록 limit 전달
+        ok, stats = NaverAPI.requestNaverAPI(req_type, key_word, max_items=30)
+
+        # 디버깅/운영 로그
+        current_app.logger.info(
+            "[NAVER %s] keyword=%s total_requests=%s saved=%s skipped=%s errors=%s",
+            req_type, key_word, stats["api_calls"], stats["saved"], stats["skipped"], stats["errors"]
+        )
+
+        if ok:
+            # 결과 페이지로 이동(여기서 다시 API 안 부르게 해줘야 함!)
+            return redirect(url_for('naverapi.admin_image'))
+        else:
+            return jsonify({"error": "NAVER 요청 실패", "stats": stats}), 500
+
+    except Exception as e:
+        current_app.logger.exception("NAVER 처리 중 오류: %s", e)
+        return jsonify({"error": str(e)}), 500
+
 
 
 
