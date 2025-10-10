@@ -26,7 +26,7 @@
 
     /* 카드 오버레이(표시용, 편집은 모달에서만) */
     .overlay-layers, .modal-overlay { position:absolute; inset:0; }
-    .overlay-stage { position:absolute; }
+    .overlay-stage { position:absolute; /* 크기/좌표는 JS에서 실제 이미지 뷰포트에 맞게 설정 */ }
 
     .layer-item {
       position:absolute; border:1px dashed #0d6efd; background:rgba(13,110,253,.05);
@@ -38,12 +38,15 @@
       position:absolute; left:4px; top:4px; font-size:12px; line-height:1;
       color:#0d6efd; background:rgba(255,255,255,.7); padding:2px 4px; border-radius:3px;
     }
-    .slot-baseline { position:absolute; left:0; height:1px; background:#0d6efd; }
+    .slot-baseline {
+      position:absolute; left:0; height:1px; background:#0d6efd;
+    }
     .layer-stamp img, .layer-valid img { display:block; width:100%; height:100%; object-fit:contain; }
 
     /* ===== 모달 전용 ===== */
     .modal-preview-wrap {
       width:100%; max-height:80vh; background:#f8f9fa; border-radius:.375rem; overflow:hidden;
+      /* aspect-ratio는 JS에서 modalState.uiWidth:uiHeight로 동적으로 조정 */
       position:relative; display:flex; align-items:center; justify-content:center;
     }
     .modal-preview-img { width:100%; height:100%; object-fit:contain; }
@@ -55,9 +58,12 @@
     .modal-slot { position:absolute; border:1px solid rgba(25,135,84,.6); background:rgba(25,135,84,.05); }
     .modal-slot-label {
       position:absolute; left:6px; top:6px; font-size:14px; line-height:1;
-      color:#14532d; background:rgba(255,255,255,.8); padding:2px 6px; border-radius:3px; font-weight:600;
+      color:#14532d; background:rgba(255,255,255,.8); padding:2px 6px; border-radius:3px;
+      font-weight:600;
     }
-    .modal-slot-baseline { position:absolute; left:0; height:2px; background:#198754; }
+    .modal-slot-baseline {
+      position:absolute; left:0; height:2px; background:#198754;
+    }
     .modal-layer-stamp img, .modal-layer-valid img { display:block; width:100%; height:100%; object-fit:contain; }
   </style>
 
@@ -115,54 +121,6 @@
             <div class="col-12 percent-row d-none">
               <label class="form-label mb-1 small">배율(%)</label>
               <input type="range" class="form-range percent-input" min="50" max="200" step="1" value="100">
-            </div>
-          </div>
-
-          <!-- 결재 옵션 (signbox 있을 때만 표시) -->
-          <div class="approval-panel border rounded p-2 bg-light-subtle d-flex flex-column gap-2 d-none">
-            <div class="d-flex align-items-center gap-3 flex-wrap">
-              <div class="form-check form-switch">
-                <input class="form-check-input ck-need-approval" type="checkbox">
-                <label class="form-check-label small">결재 필요</label>
-              </div>
-              <div class="form-check form-switch">
-                <input class="form-check-input ck-auto-author-sign" type="checkbox" checked>
-                <label class="form-check-label small">작성자 자동 서명</label>
-              </div>
-              <div class="form-check form-switch">
-                <input class="form-check-input ck-final-approval" type="checkbox">
-                <label class="form-check-label small">전결(결재 없이 즉시 업로드)</label>
-              </div>
-            </div>
-
-            <div class="row g-2 align-items-end">
-              <div class="col-sm-6">
-                <label class="form-label mb-1 small">결재선</label>
-                <select class="form-select form-select-sm sel-route" title="결재선 목록을 주입하지 않으면 비활성화됩니다." disabled>
-                  <option value="">(선택하세요)</option>
-                </select>
-              </div>
-
-              <!-- 부서/사용자 선택 -->
-              <div class="col-sm-6">
-                <label class="form-label mb-1 small">부서</label>
-                <select class="form-select form-select-sm sel-department" disabled>
-                  <option value="">(부서 선택)</option>
-                </select>
-              </div>
-
-              <div class="col-sm-6">
-                <label class="form-label mb-1 small">검토자</label>
-                <select class="form-select form-select-sm sel-review-user" disabled>
-                  <option value="">(검토자 선택)</option>
-                </select>
-              </div>
-              <div class="col-sm-6">
-                <label class="form-label mb-1 small">승인자</label>
-                <select class="form-select form-select-sm sel-approve-user" disabled>
-                  <option value="">(승인자 선택)</option>
-                </select>
-              </div>
             </div>
           </div>
 
@@ -261,57 +219,24 @@
 {% endblock %}
 
 {% block script %}
-<!-- 서버에서 주입 (없으면 빈 객체/배열 처리) -->
 <script type="application/json" id="devices-json">
   {{ devices|default([], true)|tojson }}
-</script>
-<script type="application/json" id="me-json">
-  {{ current_user|default({}, true)|tojson }}
-</script>
-<script type="application/json" id="routes-json">
-  {{ approval_routes|default([], true)|tojson }}
 </script>
 
 <script>
 (() => {
   /* ---------- 공통 유틸 ---------- */
-  const toJSON = (id) => { try{ const t=document.getElementById(id); return t && t.textContent.trim()? JSON.parse(t.textContent):null; }catch(e){ return null; } };
-  const injectedDevices = toJSON('devices-json') || [];
-  const injectedMe = toJSON('me-json') || {};
-  let injectedRoutes = toJSON('routes-json') || [];
-
-  // Dept / Users 캐시
-  let _departmentsCache = null;
-  const _usersByDept = new Map();
-
-  async function fetchDepartments(){
-    if (_departmentsCache) return _departmentsCache;
-    try {
-      const r = await fetch('/bulletin/departments');
-      if (!r.ok) throw new Error('dept http');
-      const js = await r.json();
-      _departmentsCache = Array.isArray(js.departments) ? js.departments : [];
-    } catch(e) {
-      _departmentsCache = [];
-    }
-    return _departmentsCache;
-  }
-
-  async function fetchUsersByDepartment(dept){
-    if (_usersByDept.has(dept||'')) return _usersByDept.get(dept||'');
-    try {
-      const q = new URLSearchParams(); if (dept) q.set('department', dept);
-      const r = await fetch('/bulletin/users?'+q.toString());
-      if (!r.ok) throw new Error('users http');
-      const js = await r.json();
-      const arr = Array.isArray(js.users) ? js.users : [];
-      _usersByDept.set(dept||'', arr);
-      return arr;
-    } catch(e) {
-      _usersByDept.set(dept||'', []);
-      return [];
-    }
-  }
+  const toJSON = (id) => { try{ const t=document.getElementById(id); return t && t.textContent.trim()? JSON.parse(t.textContent):[]; }catch(e){ return []; } };
+  const injected = toJSON('devices-json');
+  const fallback = [
+    {device_no:'01', device_id:'E01', supports:['BW','BWRY','BWRYBG'], default_width:1200, default_height:1600},
+    {device_no:'02', device_id:'E02', supports:['BW','BWRY','BWRYBG'], default_width:1200, default_height:1600},
+    {device_no:'03', device_id:'E03', supports:['BW','BWRY','BWRYBG'], default_width:1200, default_height:1600},
+    {device_no:'04', device_id:'E04', supports:['BW','BWRY','BWRYBG'], default_width:1200, default_height:1600},
+    {device_no:'05', device_id:'E05', supports:['BW','BWRY','BWRYBG'], default_width:1200, default_height:1600},
+    {device_no:'06', device_id:'E06', supports:['BW','BWRY','BWRYBG'], default_width:1200, default_height:1600},
+  ];
+  const devices = (Array.isArray(injected) && injected.length)? injected : fallback;
 
   function toast(msg, type='info'){
     const id = 't'+Date.now()+Math.random().toString(16).slice(2);
@@ -336,7 +261,6 @@
     surface.style.aspectRatio = `${pw} / ${ph}`;
   }
 
-  /* ---------- 프리뷰 ---------- */
   async function previewJSON(s, imgEl, raw=0){
     const body = {
       upload_id:s.upload_id, width:s.uiWidth, height:s.uiHeight,
@@ -369,25 +293,35 @@
 
   /* ---------- 좌표/슬롯 도우미 ---------- */
   const BASE_W = 1200, BASE_H = 1600; // 내부 저장 좌표계(절대)
+  const n2px = (n, total)=> Math.round(n*total);
 
+  // 결재란(3칸/5칸 공용) 레이아웃 & 스타일 파라미터
   function buildFiveSlotsTemplate(){
     return {
-      label_ratio: 0.01,
-      gap_ratio: 0.01,
-      left3_ratio: [0.33, 0.33, 0.33],
-      right2_ratio: [],
-      vpad_ratio: 0.06,
-      outer_hpad_ratio: 0.004,
-      line_pos_ratio: 0.72,
-      line_hpad_ratio: 0.08,
-      line_thickness_px: 2,
-      font_size_px: 28,
-      font_color: '#14312d',
-      line_color: '#198754',
-      border_color: '#198754'
+      // ----- 레이아웃 비율(필요시 조정) -----
+      label_ratio: 0.01,               // 좌/우 라벨 폭 (부모 w 대비)
+      gap_ratio: 0.01,                 // 슬롯 사이 간격
+      left3_ratio: [0.33, 0.33, 0.33], // [작성,검토,승인]
+      right2_ratio: [],                // 5칸 쓰면 [0.28,0.28] 처럼 지정 (빈 배열이면 3칸 모드)
+      vpad_ratio: 0.06,                // 상/하 여백 비율
+
+      // ----- 바깥쪽 가로 패딩(슬롯묶음 vs modal-layer) -----
+      outer_hpad_ratio: 0.004,          // ← 좌우 각각 0.4%만 남김(원하면 0)
+
+      // ----- 서명선(baseline) 파라미터 -----
+      line_pos_ratio: 0.72,            // 슬롯 높이 대비 Y 위치 (0~1)
+      line_hpad_ratio: 0.08,           // 좌우 여백 (0~0.5)
+      line_thickness_px: 2,            // 선 두께(px) - 서버/모달에서 스케일 적용
+
+      // ----- [신규] 서버 렌더 스타일 힌트 -----
+      font_size_px: 28,                // 라벨 글자 크기(px)
+      font_color: '#14312d',           // 라벨 글자색
+      line_color: '#198754',           // 서명선 색
+      border_color: '#198754'          // 슬롯/박스 테두리 색
     };
   }
 
+  // 부모(px, BASE_W×BASE_H 기준) + 템플릿 → 슬롯 상대좌표
   function makeSlotsFromTemplate(parent, tpl){
     const {x,y,w,h} = parent;
     const lr = tpl.label_ratio, gap = tpl.gap_ratio, vp = tpl.vpad_ratio;
@@ -398,7 +332,8 @@
     const right2 = Array.isArray(tpl.right2_ratio) ? tpl.right2_ratio : [];
 
     if (!right2.length) {
-      const usableW = w*(1 - lr - 3*gap);
+      // ===== 3칸(작성/검토/승인) 모드 =====
+      const usableW = w*(1 - lr - 3*gap); // 라벨 1개 + 슬롯간격 2개
       const x0 = x + w*lr;
       const x1 = x0 + usableW*left3[0] + w*gap;
       const x2 = x1 + usableW*left3[1] + w*gap;
@@ -408,9 +343,13 @@
         {x:x1, y:top, w:usableW*left3[1], h:usableH, role:'review',  label:'검토'},
         {x:x2, y:top, w:usableW*left3[2], h:usableH, role:'approve', label:'승인'},
       ];
-      return slotsPx.map(r=>({ role:r.role, label:r.label, x_rel:(r.x-x)/w, y_rel:(r.y-y)/h, w_rel:r.w/w, h_rel:r.h/h }));
+      return slotsPx.map(r=>({
+        role:r.role, label:r.label,
+        x_rel:(r.x-x)/w, y_rel:(r.y-y)/h, w_rel:r.w/w, h_rel:r.h/h
+      }));
     }
 
+    // ===== 5칸(좌3+우2) 모드 (기존) =====
     const usableW = w*(1 - 2*lr - 5*gap);
     const x0 = x + w*lr;
     const x1 = x0 + usableW*left3[0] + w*gap;
@@ -420,14 +359,18 @@
     const x4 = x3 + usableW*right2[0] + w*gap;
 
     const slots5 = [
-      {x:x0, y:top, w:usableW*left3[0],  h:usableH, role:'author',   label:'작성'},
-      {x:x1, y:top, w:usableW*left3[1],  h:usableH, role:'review',   label:'검토'},
-      {x:x2, y:top, w:usableW*left3[2],  h:usableH, role:'approve',  label:'승인'},
-      {x:x3, y:top, w:usableW*right2[0], h:usableH, role:'review2',  label:'검토'},
-      {x:x4, y:top, w:usableW*right2[1], h:usableH, role:'approve2', label:'승인'},
+      {x:x0, y:top, w:usableW*left3[0], h:usableH, role:'author',   label:'작성'},
+      {x:x1, y:top, w:usableW*left3[1], h:usableH, role:'review',   label:'검토'},
+      {x:x2, y:top, w:usableW*left3[2], h:usableH, role:'approve',  label:'승인'},
+      {x:x3, y:top, w:usableW*right2[0], h:usableH, role:'review2', label:'검토'},
+      {x:x4, y:top, w:usableW*right2[1], h:usableH, role:'approve2',label:'승인'},
     ];
-    return slots5.map(r=>({ role:r.role, label:r.label, x_rel:(r.x-x)/w, y_rel:(r.y-y)/h, w_rel:r.w/w, h_rel:r.h/h }));
+    return slots5.map(r=>({
+      role:r.role, label:r.label,
+      x_rel:(r.x-x)/w, y_rel:(r.y-y)/h, w_rel:r.w/w, h_rel:r.h/h
+    }));
   }
+
 
   function createSignboxLayerDefault(){
     const parent = { x:Math.round(BASE_W*0.05), y:Math.round(BASE_H*0.72),
@@ -437,69 +380,11 @@
     return { id:'signbox-1', type:'signbox', parent, tpl, slots, z:2 };
   }
 
-  /* ---------- 결재/서명 유틸 ---------- */
-  function fillRouteOptions(selectEl, routes){
-    const cur = selectEl.value;
-    selectEl.innerHTML = `<option value="">(선택하세요)</option>`;
-    (routes||[]).forEach(rt=>{
-      const opt = document.createElement('option');
-      opt.value = rt.id; opt.textContent = rt.name || `Route #${rt.id}`;
-      selectEl.appendChild(opt);
-    });
-    selectEl.disabled = !(routes && routes.length);
-    selectEl.title = selectEl.disabled ? '결재선 목록이 주입되지 않았습니다.' : '';
-    if (cur) selectEl.value = cur;
-  }
-
-  function applyRouteDefaultAssignees(routeId, $selReviewUser, $selApproveUser){
-    const rt = (injectedRoutes||[]).find(r=> String(r.id)===String(routeId));
-    if (!rt) return;
-    const rev = (rt.steps||[]).find(s=> s.role==='review');
-    const app = (rt.steps||[]).find(s=> s.role==='approve');
-    const reviewUserId  = rev?.assignee_userid || '';
-    const approveUserId = app?.assignee_userid || '';
-    if (reviewUserId) {
-      const opt = [...$selReviewUser.options].find(o=>o.value===reviewUserId);
-      if (opt) $selReviewUser.value = reviewUserId;
-    }
-    if (approveUserId) {
-      const opt = [...$selApproveUser.options].find(o=>o.value===approveUserId);
-      if (opt) $selApproveUser.value = approveUserId;
-    }
-  }
-
-  function ensureAuthorSignLayer(state){
-    if (!state || !Array.isArray(state.layers)) return;
-    const meId = injectedMe?.no;
-    if (!meId) return;
-
-    const signbox = state.layers.find(L=> L.type==='signbox' && Array.isArray(L.slots));
-    if (!signbox) return;
-    const authorSlot = signbox.slots.find(s=> s.role==='author');
-    if (!authorSlot) return;
-
-    const px = signbox.parent.x + Math.round(authorSlot.x_rel * signbox.parent.w);
-    const py = signbox.parent.y + Math.round(authorSlot.y_rel * signbox.parent.h);
-    const pw = Math.round(authorSlot.w_rel * signbox.parent.w);
-    const ph = Math.round(authorSlot.h_rel * signbox.parent.h);
-
-    let L = state.layers.find(l => l.type==='sign' && l.role==='author');
-    if (!L){
-      L = { id:'sign-author', type:'sign', role:'author', user_id: meId, x:px, y:py, w:pw, h:ph, z:3 };
-      state.layers.push(L);
-    }else{
-      L.x = px; L.y = py; L.w = pw; L.h = ph; L.user_id = meId; L.role='author';
-    }
-  }
-  function normalizeApprovalSwitches(state){
-    if (state.finalApproval){ state.needApproval = false; }
-  }
-  const hasSignbox = (s)=> Array.isArray(s.layers) && s.layers.some(L=>L.type==='signbox');
-
   /* ---------- 모달(전역 싱글톤) ---------- */
   const modalEl = document.getElementById('previewModal');
   const modalWrap = document.getElementById('modalPreviewWrap');
   const modalImg = document.getElementById('modalPreviewImg');
+  const modalOverlay = document.getElementById('modalOverlay');
   const modalPage = document.getElementById('modalPage');
   const modalRotate = document.getElementById('modalRotate');
   const modalPrev = document.getElementById('modalPrev');
@@ -511,27 +396,30 @@
   const modalLayerFile = document.getElementById('modalLayerFile');
   const bsModal = new bootstrap.Modal(modalEl);
 
-  let modalState = null;
-  let modalCurrentCard = null;
-  let modalEditMode = 'none';
+  let modalState = null;          // 현재 편집 중인 카드 상태
+  let modalCurrentCard = null;    // 카드 DOM
+  let modalEditMode = 'none';     // 'signbox'|'stamp'|'validity'
 
   function setModalEditActive(on){
     modalEl.querySelector('.modal-preview-wrap')?.classList.toggle('modal-edit-active', !!on);
   }
 
+  // 모달 aspect-ratio를 선택 해상도에 맞게 설정
   function applyModalAspect(){
     if(!modalState) return;
     const w = modalState.uiWidth || BASE_W;
     const h = modalState.uiHeight || BASE_H;
+    // 480×800은 3/5, 1200×1600은 3/4 등 실제 비율 사용
     modalWrap.style.aspectRatio = `${w} / ${h}`;
   }
 
+  // 선택 해상도(모달의 s.uiWidth/s.uiHeight)로 서버 프리뷰 생성
   async function refreshModalPreview(){
     if(!modalState || !modalState.upload_id){ toast('편집할 파일이 없습니다.','warning'); return; }
     applyModalAspect();
     const body = {
       upload_id: modalState.upload_id,
-      width: modalState.uiWidth || BASE_W,
+      width: modalState.uiWidth || BASE_W,   // ← 모달은 선택된 해상도 사용
       height: modalState.uiHeight || BASE_H,
       mode: modalState.mode, scale: modalState.scale, percent: modalState.percent,
       rotate: modalState.rotate, raw: (modalState.view==='original')?1:0,
@@ -568,113 +456,104 @@
     });
   }
 
-  function computeImageViewport(containerEl, imgTargetW, imgTargetH){
-    const r = containerEl.getBoundingClientRect();
-    const cw = r.width, ch = r.height;
-    const scale = Math.min(cw / imgTargetW, ch / imgTargetH);
-    const vw = imgTargetW * scale;
-    const vh = imgTargetH * scale;
-    const left = (cw - vw) / 2;
-    const top  = (ch - vh) / 2;
-    return { left, top, width: vw, height: vh, scaleX: vw / imgTargetW, scaleY: vh / imgTargetH };
-  }
+  // 모달 오버레이 렌더 (스케일 적용: BASE→현재 미리보기 픽셀)
+    function renderLayersModal(){
+      if(!modalState) return;
+      const stage = document.getElementById('modalOverlayStage');
+      const vp = computeImageViewport(document.getElementById('modalPreviewWrap'),
+                                      modalState.uiWidth||BASE_W, modalState.uiHeight||BASE_H);
+      stage.style.left = `${vp.left}px`;
+      stage.style.top = `${vp.top}px`;
+      stage.style.width = `${vp.width}px`;
+      stage.style.height= `${vp.height}px`;
 
-  function renderLayersModal(){
-    if(!modalState) return;
-    const stage = document.getElementById('modalOverlayStage');
-    const vp = computeImageViewport(document.getElementById('modalPreviewWrap'),
-                                    modalState.uiWidth||BASE_W, modalState.uiHeight||BASE_H);
-    stage.style.left = `${vp.left}px`;
-    stage.style.top = `${vp.top}px`;
-    stage.style.width = `${vp.width}px`;
-    stage.style.height= `${vp.height}px`;
+      const kx = vp.width / BASE_W, ky = vp.height / BASE_H;
+      stage.innerHTML = '';
 
-    const kx = vp.width / BASE_W, ky = vp.height / BASE_H;
-    stage.innerHTML = '';
+      (modalState.layers||[]).forEach(L=>{
+        if(L.type==='signbox'){
+          const el=document.createElement('div');
+          el.className='modal-layer'; el.dataset.id=L.id;
+          el.innerHTML=`<div class="title">결재란</div><div class="handle"></div>`;
+          stage.appendChild(el); // ←★★ stage에 붙임
 
-    (modalState.layers||[]).forEach(L=>{
-      if(L.type==='signbox'){
-        const el=document.createElement('div');
-        el.className='modal-layer'; el.dataset.id=L.id;
-        el.innerHTML=`<div class="title">결재란</div><div class="handle"></div>`;
-        stage.appendChild(el);
+          const left=L.parent.x*kx, top=L.parent.y*ky, wid=L.parent.w*kx, hei=L.parent.h*ky;
+          el.style.left=`${left}px`; el.style.top=`${top}px`; el.style.width=`${wid}px`; el.style.height=`${hei}px`;
 
-        const left=L.parent.x*kx, top=L.parent.y*ky, wid=L.parent.w*kx, hei=L.parent.h*ky;
-        el.style.left=`${left}px`; el.style.top=`${top}px`; el.style.width=`${wid}px`; el.style.height=`${hei}px`;
+          const tpl = L.tpl || buildFiveSlotsTemplate();
+          const baselineY = (tpl.line_pos_ratio ?? 0.72);
+          const hpad = (tpl.line_hpad_ratio ?? 0.08);
+          // 모달은 확대 기준이라 두께도 스케일 반영
+          const thick = Math.max(1, Math.round((tpl.line_thickness_px ?? 2) * Math.min(kx,ky)));
 
-        const tpl = L.tpl || buildFiveSlotsTemplate();
-        const baselineY = (tpl.line_pos_ratio ?? 0.72);
-        const hpad = (tpl.line_hpad_ratio ?? 0.08);
-        const thick = Math.max(1, Math.round((tpl.line_thickness_px ?? 2) * Math.min(kx,ky)));
+          (L.slots||[]).forEach(S=>{
+            const sdiv=document.createElement('div'); sdiv.className='modal-slot';
+            const sx = Math.round(S.x_rel*wid), sy=Math.round(S.y_rel*hei);
+            const sw = Math.round(S.w_rel*wid), sh=Math.round(S.h_rel*hei);
+            sdiv.style.left=`${sx}px`; sdiv.style.top=`${sy}px`;
+            sdiv.style.width=`${sw}px`; sdiv.style.height=`${sh}px`;
+            // 테두리/라벨 색
+            if (tpl.border_color) sdiv.style.borderColor = tpl.border_color;
 
-        (L.slots||[]).forEach(S=>{
-          const sdiv=document.createElement('div'); sdiv.className='modal-slot';
-          const sx = Math.round(S.x_rel*wid), sy=Math.round(S.y_rel*hei);
-          const sw = Math.round(S.w_rel*wid), sh = Math.round(S.h_rel*hei);
-          sdiv.style.left=`${sx}px`; sdiv.style.top=`${sy}px`;
-          sdiv.style.width=`${sw}px`; sdiv.style.height=`${sh}px`;
-          if (tpl.border_color) sdiv.style.borderColor = tpl.border_color;
+            const lab=document.createElement('div');
+            lab.className='modal-slot-label';
+            lab.textContent = S.label || S.role || '';
+            if (tpl.font_color) lab.style.color = tpl.font_color;
+            sdiv.appendChild(lab);
 
-          const lab=document.createElement('div');
-          lab.className='modal-slot-label';
-          lab.textContent = S.label || S.role || '';
-          if (tpl.font_color) lab.style.color = tpl.font_color;
-          sdiv.appendChild(lab);
+            const line=document.createElement('div');
+            line.className='modal-slot-baseline';
+            const lineY = Math.round(sh * baselineY);
+            const lineLeft = Math.round(sw * hpad);
+            const lineRight= Math.round(sw * (1 - hpad));
+            line.style.top = `${lineY}px`;
+            line.style.left = `${lineLeft}px`;
+            line.style.width= `${Math.max(0, lineRight - lineLeft)}px`;
+            line.style.height= `${thick}px`;
+            if (tpl.line_color) line.style.background = tpl.line_color;
+            sdiv.appendChild(line);
 
-          const line=document.createElement('div');
-          line.className='modal-slot-baseline';
-          const lineY = Math.round(sh * baselineY);
-          const lineLeft = Math.round(sw * hpad);
-          const lineRight= Math.round(sw * (1 - hpad));
-          line.style.top = `${lineY}px`;
-          line.style.left = `${lineLeft}px`;
-          line.style.width= `${Math.max(0, lineRight - lineLeft)}px`;
-          line.style.height= `${thick}px`;
-          if (tpl.line_color) line.style.background = tpl.line_color;
-          sdiv.appendChild(line);
+            el.appendChild(sdiv);
+          });
 
-          el.appendChild(sdiv);
-        });
+          // 드래그/리사이즈 컨테이너도 stage로 변경
+          makeDragResize(el, stage, (nx,ny,nw,nh, orect)=>{
+            const kx0 = orect.width/BASE_W, ky0 = orect.height/BASE_H;
+            L.parent={ x:Math.round(nx/kx0), y:Math.round(ny/ky0),
+                      w:Math.round(nw/kx0), h:Math.round(nh/ky0) };
+            L.slots = makeSlotsFromTemplate(L.parent, L.tpl);
+            renderLayersModal();
+            modalCurrentCard?._renderLayers?.();
+            refreshModalPreview();
+          });
+        }
 
-        makeDragResize(el, stage, (nx,ny,nw,nh, orect)=>{
-          const kx0 = orect.width/BASE_W, ky0 = orect.height/BASE_H;
-          L.parent={ x:Math.round(nx/kx0), y:Math.round(ny/ky0),
-                    w:Math.round(nw/kx0), h:Math.round(nh/ky0) };
-          L.slots = makeSlotsFromTemplate(L.parent, L.tpl);
-          ensureAuthorSignLayer(modalState);
-          renderLayersModal();
-          modalCurrentCard?._renderLayers?.();
-          modalCurrentCard?._onStateChanged?.();
-          refreshModalPreview();
-        });
-      }
+        if(L.type==='stamp' || L.type==='validity'){
+          const el=document.createElement('div');
+          el.className='modal-layer '+(L.type==='stamp'?'modal-layer-stamp':'modal-layer-valid');
+          el.dataset.id=L.id;
+          el.innerHTML=`<div class="title">${L.type==='stamp'?'직인':'유효기간'}</div><div class="handle"></div><img alt="">`;
+          stage.appendChild(el); // ←★★ stage에 붙임
 
-      if(L.type==='stamp' || L.type==='validity'){
-        const el=document.createElement('div');
-        el.className='modal-layer '+(L.type==='stamp'?'modal-layer-stamp':'modal-layer-valid');
-        el.dataset.id=L.id;
-        el.innerHTML=`<div class="title">${L.type==='stamp'?'직인':'유효기간'}</div><div class="handle"></div><img alt="">`;
-        stage.appendChild(el);
+          const left=L.x*kx, top=L.y*ky, wid=L.w*kx, hei=L.h*ky;
+          el.style.left=`${left}px`; el.style.top=`${top}px`; el.style.width=`${wid}px`; el.style.height=`${hei}px`;
+          const img=el.querySelector('img'); if(L.preview_url) img.src=L.preview_url;
 
-        const left=L.x*kx, top=L.y*ky, wid=L.w*kx, hei=L.h*ky;
-        el.style.left=`${left}px`; el.style.top=`${top}px`; el.style.width=`${wid}px`; el.style.height=`${hei}px`;
-        const img=el.querySelector('img'); if(L.preview_url) img.src=L.preview_url;
+          makeDragResize(el, stage, (nx,ny,nw,nh, orect)=>{
+            const kx0 = orect.width/BASE_W, ky0 = orect.height/BASE_H;
+            L.x=Math.round(nx/kx0); L.y=Math.round(ny/ky0);
+            L.w=Math.round(nw/kx0); L.h=Math.round(nh/ky0);
+            modalCurrentCard?._renderLayers?.();
+            refreshModalPreview();
+          });
+        }
+      });
 
-        makeDragResize(el, stage, (nx,ny,nw,nh, orect)=>{
-          const kx0 = orect.width/BASE_W, ky0 = orect.height/BASE_H;
-          L.x=Math.round(nx/kx0); L.y=Math.round(ny/ky0);
-          L.w=Math.round(nw/kx0); L.h=Math.round(nh/ky0);
-          modalCurrentCard?._renderLayers?.();
-          modalCurrentCard?._onStateChanged?.();
-          refreshModalPreview();
-        });
-      }
-    });
+      setModalEditActive(modalEditMode!=='none');
+    }
 
-    setModalEditActive(modalEditMode!=='none');
-  }
 
-  // 모달 네비/회전/새로고침
+  // 모달 네비/회전/새로고침 (전역 1회 바인딩)
   modalPrev.onclick = async ()=>{
     if(!modalState || !modalState.upload_id) return toast('편집할 파일이 없습니다.','warning');
     modalState.view='processed'; modalState.page=Math.max(1,(modalState.page||1)-1);
@@ -696,12 +575,7 @@
   modalEditSignbox.onclick = ()=>{
     if(!modalState) return toast('모달 상태가 없습니다.','warning');
     modalEditMode = (modalEditMode==='signbox')?'none':'signbox';
-    if(!modalState.layers.find(L=>L.type==='signbox')) {
-      modalState.layers.push(createSignboxLayerDefault());
-      // 결재 사용 시작: 카드 쪽도 즉시 반영
-      modalCurrentCard?._onStateChanged?.();
-    }
-    ensureAuthorSignLayer(modalState);
+    if(!modalState.layers.find(L=>L.type==='signbox')) modalState.layers.push(createSignboxLayerDefault());
     renderLayersModal(); modalCurrentCard?._renderLayers?.();
   };
   modalEditStamp.onclick = ()=>{
@@ -731,7 +605,7 @@
                   x:Math.round(BASE_W*0.70), y:Math.round(BASE_H*0.10),
                   w:Math.round(BASE_W*0.20), h:Math.round(BASE_H*0.20), z:3 };
       modalState.layers.push(L);
-      renderLayersModal(); modalCurrentCard?._renderLayers?.(); modalCurrentCard?._onStateChanged?.(); await refreshModalPreview();
+      renderLayersModal(); modalCurrentCard?._renderLayers?.(); await refreshModalPreview();
       toast('레이어 추가 완료','success');
     }catch(e){ toast('레이어 업로드 실패','danger'); }
     finally{ ev.target.value=''; }
@@ -742,28 +616,20 @@
     modalState = null;
     modalCurrentCard = null;
     modalEditMode = 'none';
-    document.getElementById('modalOverlayStage').innerHTML = '';
+    modalOverlay.innerHTML = '';
   });
 
   /* ---------- 카드 바인딩 ---------- */
   function bindTile(card){
     const deviceNo = card.dataset.deviceNo;
     const deviceId = card.dataset.deviceId;
-    const spec = injectedDevices.find(d=>d.device_no===deviceNo) || {};
+    const spec = devices.find(d=>d.device_no===deviceNo) || {};
     const s = {
       device_no: deviceNo, device_id: deviceId,
       upload_id:null, file_name:'-', pages:1, page:1,
       uiWidth: spec.default_width||480, uiHeight: spec.default_height||800,
       mode:'BWRYBG', scale:'fit', percent:100, rotate:0, view:'processed',
-      layers:[], _prevUrl:null,
-
-      // approval meta (초기엔 결재 미사용)
-      needApproval: false,
-      finalApproval: false,
-      autoAuthorSign: true,
-      routeId: "",
-      department: "",
-      assignees: { review:"", approve:"" }
+      layers:[], _prevUrl:null
     };
 
     const $fileName=card.querySelector('.file-name');
@@ -782,147 +648,16 @@
     const $overlay=card.querySelector('.overlay-layers');
     const $btnEnlarge=card.querySelector('.btn-enlarge');
 
-    // approval UI
-    const $approvalPanel = card.querySelector('.approval-panel');
-    const $selRoute = card.querySelector('.sel-route');
-    const $ckNeed   = card.querySelector('.ck-need-approval');
-    const $ckFinal  = card.querySelector('.ck-final-approval');
-    const $ckAuto   = card.querySelector('.ck-auto-author-sign');
-    const $selDept  = card.querySelector('.sel-department');
-    const $selReview= card.querySelector('.sel-review-user');
-    const $selApprove=card.querySelector('.sel-approve-user');
-
     s.mode = $selMode.value;
     function refreshPercentRow(){ $percentRow.classList.toggle('d-none', s.scale!=='percent'); }
     function redraw() { $pageInd.textContent=`${s.page} / ${s.pages}`; $fileName.textContent=s.file_name||'-'; }
-
-    // 결재선: 서버 주입 사용(패널 열릴 때 활성화)
-    function setupRoutes(){
-      const routes = injectedRoutes || [];
-      fillRouteOptions($selRoute, routes);
-    }
-
-    function setApprovalControlsEnabled(enabled){
-      [$selDept, $selReview, $selApprove, $selRoute, $ckNeed, $ckFinal].forEach(el=>{
-        if (el) el.disabled = !enabled;
-      });
-    }
-
-    function clearUserSelects(){
-      $selReview.innerHTML = `<option value="">(검토자 선택)</option>`;
-      $selApprove.innerHTML = `<option value="">(승인자 선택)</option>`;
-      s.assignees.review = ""; s.assignees.approve = "";
-    }
-
-    async function populateDepartmentsIfNeeded(){
-      const depts = await fetchDepartments();
-      $selDept.innerHTML = `<option value="">(부서 선택)</option>`;
-      depts.forEach(d=>{
-        const opt=document.createElement('option');
-        opt.value=d; opt.textContent=d;
-        $selDept.appendChild(opt);
-      });
-      $selDept.disabled = !(s.needApproval && !s.finalApproval && depts.length>0);
-    }
-
-    async function populateUsersByDept(dept){
-      const users = await fetchUsersByDepartment(dept||"");
-      const toLabel = (u)=> (u.username?`${u.username}`: (u.userid||`${u.id}`)) + (u.userid?` (${u.userid})`:'');
-      const build = (sel, placeholder) => {
-        sel.innerHTML = `<option value="">(${placeholder})</option>`;
-        users.forEach(u=>{
-          const opt = document.createElement('option');
-          opt.value = u.userid || (u.id!=null?String(u.id):"");
-          opt.textContent = toLabel(u);
-          sel.appendChild(opt);
-        });
-        sel.disabled = !(s.needApproval && !s.finalApproval && users.length>0);
-      };
-      build($selReview, '검토자 선택');
-      build($selApprove, '승인자 선택');
-    }
-
-    // signbox 유무에 따른 패널 표시/초기화
-    async function updateApprovalPanelVisibility(){
-      const on = hasSignbox(s);
-      $approvalPanel.classList.toggle('d-none', !on);
-      if (!on){
-        // 결재 미사용 상태로 초기화
-        s.needApproval = false; s.finalApproval = false;
-        $ckNeed.checked = false; $ckFinal.checked = false;
-        setApprovalControlsEnabled(false);
-        $selDept.value=""; clearUserSelects();
-        return;
-      }
-      // 결재 사용 시작: 기본값 on
-      if (!s.needApproval && !s.finalApproval){
-        s.needApproval = true; $ckNeed.checked = true; $ckFinal.checked = false;
-      }
-      setApprovalControlsEnabled(true);
-      // 결재선 옵션/부서 목록 준비
-      setupRoutes();
-      await populateDepartmentsIfNeeded();
-      if (s.department) {
-        await populateUsersByDept(s.department);
-      }
-    }
-
-    // 결재 스위치/입력
-    $ckNeed.addEventListener('change', async ()=>{
-      s.needApproval = $ckNeed.checked;
-      if (s.needApproval){ s.finalApproval = false; $ckFinal.checked = false; }
-      setApprovalControlsEnabled(s.needApproval && !s.finalApproval);
-      if (s.needApproval && !s.finalApproval){
-        await populateDepartmentsIfNeeded();
-      } else {
-        $selDept.value=""; clearUserSelects();
-      }
-    });
-    $ckFinal.addEventListener('change', ()=>{
-      s.finalApproval = $ckFinal.checked;
-      if (s.finalApproval){ s.needApproval = false; $ckNeed.checked = false; }
-      setApprovalControlsEnabled(s.needApproval && !s.finalApproval);
-      if (s.finalApproval){ $selDept.value=""; clearUserSelects(); }
-    });
-    $ckAuto.addEventListener('change', ()=>{
-      s.autoAuthorSign = $ckAuto.checked;
-      if (s.autoAuthorSign) { ensureAuthorSignLayer(s); card._renderLayers?.(); }
-    });
-
-    $selRoute.addEventListener('change', ()=>{
-      s.routeId = $selRoute.value || "";
-      applyRouteDefaultAssignees(s.routeId, $selReview, $selApprove);
-      s.assignees.review  = $selReview.value || '';
-      s.assignees.approve = $selApprove.value || '';
-    });
-
-    $selDept.addEventListener('change', async ()=>{
-      s.department = $selDept.value || "";
-      clearUserSelects();
-      await populateUsersByDept(s.department);
-      if (s.routeId) applyRouteDefaultAssignees(s.routeId, $selReview, $selApprove);
-      s.assignees.review  = $selReview.value || '';
-      s.assignees.approve = $selApprove.value || '';
-    });
-
-    $selReview.addEventListener('change', ()=>{ s.assignees.review = $selReview.value || ''; });
-    $selApprove.addEventListener('change', ()=>{ s.assignees.approve = $selApprove.value || ''; });
 
     // 파일 선택
     $btnChoose.addEventListener('click', ()=> $fileInput.click());
     $fileInput.addEventListener('change', async (ev)=>{
       const f=ev.target.files[0]; if(!f) return;
       s.file_name=f.name; s.pages=1; s.page=1; s.view='processed';
-      try {
-        applyPreviewAspect(card,s);
-        await previewFile(f,s,$preview);
-        // signbox가 이미 있다면 author 자동 서명 보장
-        if (hasSignbox(s) && s.autoAuthorSign) ensureAuthorSignLayer(s);
-        redraw(); toast(`[${deviceNo}] 미리보기 준비`,'success');
-        // signbox 유무에 따라 패널 표시
-        await updateApprovalPanelVisibility();
-        card._renderLayers?.();
-      }
+      try { applyPreviewAspect(card,s); await previewFile(f,s,$preview); redraw(); toast(`[${deviceNo}] 미리보기 준비`,'success'); }
       catch(e){ toast(`[${deviceNo}] 미리보기 실패`,'danger'); }
       finally{ $fileInput.value=''; }
     });
@@ -945,8 +680,7 @@
     card.querySelector('.btn-next').addEventListener('click', ()=>{ if(!s.upload_id) return; s.view='processed'; s.page=Math.min(s.pages||1,(s.page||1)+1); refreshPreview(); });
 
     // 원본 ↔ BMP 토글
-    const btnOriginal = card.querySelector('.btn-original');
-    btnOriginal.addEventListener('click', ()=>{
+    $btnOriginal.addEventListener('click', ()=>{ 
       if(!s.upload_id) return toast(`[${deviceNo}] 파일을 먼저 선택`, 'warning');
       s.view = (s.view==='processed') ? 'original' : 'processed';
       $btnOriginal.classList.toggle('active', s.view==='original');
@@ -959,43 +693,20 @@
       const table=is12?{0:0,90:90,180:180,270:270}:{0:270,90:0,180:90,270:180}; return table[n]??0; }
     $btnSend.addEventListener('click', async ()=>{
       if(!s.upload_id) return toast(`[${deviceNo}] 전송할 파일이 없습니다.`,'warning');
-      normalizeApprovalSwitches(s);
-
-      // 결재 패널이 열려 있고 결재 필요인데 사용자 미선택 방지
-      if (hasSignbox(s) && s.needApproval && !s.finalApproval) {
-        if (!$selDept.value) return toast(`[${deviceNo}] 부서를 선택하세요.`,'warning');
-        if (!$selReview.value || !$selApprove.value) return toast(`[${deviceNo}] 검토/승인 사용자를 선택하세요.`,'warning');
-      }
-
-      const body={
-        upload_id:s.upload_id, page:s.page||1, device_id:s.device_id, mode:s.mode, scale:s.scale,
-        percent:s.percent, rotate:mapRotateForWire(s.rotate), width:s.uiWidth, height:s.uiHeight, layers:s.layers,
-
-        // 결재 메타
-        need_approval: hasSignbox(s) ? s.needApproval : false,
-        final_approval: hasSignbox(s) ? s.finalApproval : false,
-        route_id: hasSignbox(s) ? (s.routeId || null) : null,
-        assignees: hasSignbox(s) ? s.assignees : { },
-        layout_snapshot: { canvas:{w:BASE_W,h:BASE_H}, layers: s.layers }
-      };
-      try{
-        const r=await fetch('/bulletin/sendfile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        const js=await r.json(); toast(`[${deviceNo}] 전송 준비 완료 (job #${js.job_id})`,'info');
-      }
+      const body={ upload_id:s.upload_id, page:s.page||1, device_id:s.device_id, mode:s.mode, scale:s.scale,
+        percent:s.percent, rotate:mapRotateForWire(s.rotate), width:s.uiWidth, height:s.uiHeight, layers:s.layers };
+      try{ const r=await fetch('/bulletin/sendfile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const js=await r.json(); toast(`[${deviceNo}] 전송 준비 완료 (job #${js.job_id})`,'info'); }
       catch(e){ toast(`[${deviceNo}] 전송 실패`,'danger'); }
     });
 
-    /* ---------- 카드 오버레이(표시용) ---------- */
-    function computeImageViewport(surface, w, h){
-      const r = surface.getBoundingClientRect();
-      const scale = Math.min(r.width / w, r.height / h);
-      const vw = w * scale, vh = h * scale;
-      return { left:(r.width-vw)/2, top:(r.height-vh)/2, width:vw, height:vh };
-    }
+    /* ---------- 카드 오버레이(표시용) : 라벨/서명선 표시 ---------- */
     function renderLayersCard(){
       const stage = $overlay.querySelector('.overlay-stage');
       const surface = $overlay.closest('.preview-surface');
+      // 현재 카드 해상도(s.uiWidth/s.uiHeight) 기준으로 이미지 뷰포트 계산
       const vp = computeImageViewport(surface, s.uiWidth, s.uiHeight);
+      // 스테이지를 실제 이미지 영역에 정확히 맞춤
       stage.style.left = `${vp.left}px`;
       stage.style.top = `${vp.top}px`;
       stage.style.width = `${vp.width}px`;
@@ -1016,78 +727,76 @@
           el.style.width = `${L.parent.w * kx}px`;
           el.style.height= `${L.parent.h * ky}px`;
 
-          const tpl = L.tpl || buildFiveSlotsTemplate();
-          const baselineY = tpl.line_pos_ratio ?? 0.72;
-          const hpad      = tpl.line_hpad_ratio ?? 0.08;
-          const thick = 1;
-          const wid = L.parent.w * kx, hei = L.parent.h * ky;
+          // 슬롯 + 라벨 + 서명선
+          // 슬롯 + 라벨 + 서명선
+      const tpl = L.tpl || buildFiveSlotsTemplate();
+      const baselineY = tpl.line_pos_ratio ?? 0.72;
+      const hpad      = tpl.line_hpad_ratio ?? 0.08;
+      // 카드(축소 프리뷰)에서는 얇게 보이도록 1px 고정 또는 약간 스케일
+      const thick = 1;
+      const wid = L.parent.w * kx, hei = L.parent.h * ky;
 
-          (L.slots||[]).forEach(S=>{
-            const d=document.createElement('div');
-            d.className='slot-rect';
-            const sw = Math.round(S.w_rel*wid), sh = Math.round(S.h_rel*hei);
-            d.style.left = `${Math.round(S.x_rel*wid)}px`;
-            d.style.top  = `${Math.round(S.y_rel*hei)}px`;
-            d.style.width= `${sw}px`;
-            d.style.height= `${sh}px`;
-            d.style.borderColor = tpl.border_color || '#0d6efd';
+      (L.slots||[]).forEach(S=>{
+        const d=document.createElement('div');
+        d.className='slot-rect';
+        const sw = Math.round(S.w_rel*wid), sh = Math.round(S.h_rel*hei);
+        d.style.left = `${Math.round(S.x_rel*wid)}px`;
+        d.style.top  = `${Math.round(S.y_rel*hei)}px`;
+        d.style.width= `${sw}px`;
+        d.style.height=`${sh}px`;
+        // 테두리 색상(서버 동일) 반영
+        d.style.borderColor = tpl.border_color || '#0d6efd';
 
-            const lab=document.createElement('div');
-            lab.className='slot-label';
-            lab.textContent = S.label || S.role || '';
-            if (tpl.font_color) lab.style.color = tpl.font_color;
-            d.appendChild(lab);
+        // 라벨
+        const lab=document.createElement('div');
+        lab.className='slot-label';
+        lab.textContent = S.label || S.role || '';
+        if (tpl.font_color) lab.style.color = tpl.font_color;
+        d.appendChild(lab);
 
-            const line=document.createElement('div');
-            line.className='slot-baseline';
-            const lineY = Math.round(sh * baselineY);
-            const lineLeft = Math.round(sw * hpad);
-            const lineRight= Math.round(sw * (1 - hpad));
-            line.style.top = `${lineY}px`;
-            line.style.left= `${lineLeft}px`;
-            line.style.width=`${Math.max(0, lineRight - lineLeft)}px`;
-            line.style.height=`${thick}px`;
-            if (tpl.line_color) line.style.background = tpl.line_color;
-            d.appendChild(line);
+        // 서명선
+        const line=document.createElement('div');
+        line.className='slot-baseline';
+        const lineY = Math.round(sh * baselineY);
+        const lineLeft = Math.round(sw * hpad);
+        const lineRight= Math.round(sw * (1 - hpad));
+        line.style.top = `${lineY}px`;
+        line.style.left= `${lineLeft}px`;
+        line.style.width=`${Math.max(0, lineRight - lineLeft)}px`;
+        line.style.height=`${thick}px`;
+        if (tpl.line_color) line.style.background = tpl.line_color;
+        d.appendChild(line);
 
-            el.appendChild(d);
-          });
-        }
+        el.appendChild(d);
+      });
 
-        if(L.type==='stamp' || L.type==='validity' || L.type==='sign'){
+      }
+        // stamp/validity도 stage 기준으로 동일하게 배치
+        if(L.type==='stamp' || L.type==='validity'){
           const el=document.createElement('div');
-          const cls = (L.type==='stamp')?'layer-stamp':(L.type==='validity'?'layer-valid':'layer-sign');
-          el.className='layer-item '+cls;
+          el.className='layer-item '+(L.type==='stamp'?'layer-stamp':'layer-valid');
           el.dataset.id=L.id;
-          el.innerHTML=`<div class="title">${L.type==='stamp'?'직인':(L.type==='validity'?'유효기간':'서명')}</div><img alt="">`;
+          el.innerHTML=`<div class="title">${L.type==='stamp'?'직인':'유효기간'}</div><img alt="">`;
           stage.appendChild(el);
           el.style.left  = `${L.x * kx}px`;
           el.style.top   = `${L.y * ky}px`;
           el.style.width = `${L.w * kx}px`;
           el.style.height= `${L.h * ky}px`;
-          const img=el.querySelector('img');
-          if (L.preview_url) img.src=L.preview_url;
+          const img=el.querySelector('img'); if(L.preview_url) img.src=L.preview_url;
         }
       });
-      // 오버레이 그린 뒤 패널 표시 상태 동기화
-      updateApprovalPanelVisibility();
     }
 
-    function init(){
-      refreshPercentRow(); applyPreviewAspect(card,s);
-      setApprovalControlsEnabled(false);
-      updateApprovalPanelVisibility(); // 초기: signbox 없음 → 패널 숨김
-    }
+
+    // 초기
+    function init(){ refreshPercentRow(); applyPreviewAspect(card,s); }
     init();
 
+    // 외부에서 레이아웃 저장 시 이 카드 포함
     card._state = s;
     card._renderLayers = renderLayersCard;
-    // 모달에서 변경된 레이어/상태를 카드가 반영할 수 있도록 훅 제공
-    card._onStateChanged = async () => {
-      if (hasSignbox(s) && s.autoAuthorSign) ensureAuthorSignLayer(s);
-      await updateApprovalPanelVisibility();
-    };
 
+    // 카드 버튼: 파일 수정(모달 열기)
     $btnEnlarge.addEventListener('click', async ()=>{
       if(!s.upload_id) return toast(`[${deviceNo}] 파일을 먼저 선택하세요.`,'warning');
       modalState = s;
@@ -1110,27 +819,29 @@
   // 레이아웃 저장(모든 카드 상태 취합)
   document.getElementById('btn-save-layouts').addEventListener('click', async ()=>{
     const cards=[...document.querySelectorAll('#tiles .card')];
-    const payload = cards.map(c=>{
-      const st = c._state || {};
-      normalizeApprovalSwitches(st);
-      return {
-        device_id: c.dataset.deviceId,
-        upload_id: st.upload_id || null,
-        layout: { canvas:{w:BASE_W,h:BASE_H}, layers: st.layers || [] },
-        approval_meta: {
-          need_approval: hasSignbox(st) ? !!st.needApproval : false,
-          final_approval: hasSignbox(st) ? !!st.finalApproval : false,
-          route_id: hasSignbox(st) ? (st.routeId || null) : null,
-          department: hasSignbox(st) ? (st.department || "") : "",
-          assignees: hasSignbox(st) ? (st.assignees || {}) : {}
-        }
-      };
-    });
+    const payload = cards.map(c=>({
+      device_id: c.dataset.deviceId,
+      upload_id: c._state?.upload_id || null,
+      layout: { canvas:{w:BASE_W,h:BASE_H}, layers: c._state?.layers || [] }
+    }));
     try{
       await fetch('/bulletin/sign_layout/save_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:payload})});
       toast('레이아웃 저장 완료','success');
     }catch(e){ toast('레이아웃 저장 실패','danger'); }
   });
+
+  // 컨테이너 안에서 실제 이미지가 차지하는 뷰포트(픽셀) 계산
+  function computeImageViewport(containerEl, imgTargetW, imgTargetH){
+    const r = containerEl.getBoundingClientRect();
+    const cw = r.width, ch = r.height;
+    const scale = Math.min(cw / imgTargetW, ch / imgTargetH);
+    const vw = imgTargetW * scale;
+    const vh = imgTargetH * scale;
+    const left = (cw - vw) / 2;
+    const top  = (ch - vh) / 2;
+    return { left, top, width: vw, height: vh, scaleX: vw / imgTargetW, scaleY: vh / imgTargetH };
+  }
+
 
 })();
 </script>

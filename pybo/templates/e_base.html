@@ -4,17 +4,18 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome ICETECH</title>
-
+    <title>{% block title %}Welcome ICETECH{% endblock %}</title>
+ {% block extra_css %}
     <!-- CSS 파일 참조 -->
     <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
     <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='bootstrap-icons.css') }}">
     <!-- <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}"> -->
     <!-- <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_signup.css') }}"> -->
-    {% block extra_css %}{% endblock %}
+   {% endblock %}
    
     <style>
         .content {
@@ -39,10 +40,42 @@
     <script src="{{ url_for('static', filename='bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
 
-    <!-- 개별 페이지 추가 JavaScript -->
+    <!-- ✅ 항상 실행 -->
+    {% if not session.get('approval_checked') %}
+        <script>
+        (async () => {
+        try {
+            const r = await fetch('/bulletin/approval/pending', { cache: 'no-store' });
+            if (!r.ok) return;
+            const js = await r.json();
+
+            // 팝업 노출은 이 세션에서 단 1회만 시도하므로,
+            // 성공/실패와 관계없이 끝나면 서버에 '봤다'로 마킹합니다.
+            if (js.has) {
+            if (confirm('결재할 파일이 있습니다. 이동하시겠습니까?')) {
+                // 먼저 마킹하고 이동 (여러 탭에서도 중복 노출 방지)
+                await fetch('/bulletin/approval/mark_checked', { method: 'POST' });
+                location.href = js.goto;
+                return;
+            }
+            }
+
+            // 팝업이 없거나 사용자가 취소해도, 이번 세션에서는 더 이상 묻지 않음
+            await fetch('/bulletin/approval/mark_checked', { method: 'POST' });
+        } catch (e) {
+            console.warn('approval check failed', e);
+            // 에러가 나도 무한 반복을 막고 싶다면 아래 줄을 유지
+            await fetch('/bulletin/approval/mark_checked', { method: 'POST' });
+        }
+        })();
+        </script>
+    {% endif %}
+
+
+    <!-- 하위 페이지 전용 스크립트 영역 -->
     {% block script %}{% endblock %}
+
 
 </body>
 </html>
