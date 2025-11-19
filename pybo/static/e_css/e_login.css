@@ -1,6 +1,7 @@
 body {
     background-color: #f8f9fa;
 }
+
 .container {
     max-width: 400px;
     margin: 50px auto;
@@ -10,43 +11,65 @@ body {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     text-align: center;
 }
+
+/* 로고 */
 .logo img {
     max-width: 150px;
     height: auto;
     margin-bottom: 20px;
 }
+
+/* 입력 필드 */
 .form-group {
     margin-bottom: 15px;
     text-align: left;
 }
+
+/* 공통 버튼 */
 .btn-custom {
-    width: 100%;
     font-size: 16px;
     font-weight: bold;
     padding: 12px;
     border-radius: 6px;
     border: none;
     cursor: pointer;
+    transition: all 0.2s ease;
 }
-/* ✅ 네이버 스타일 버튼 */
+
+/* ✅ 로그인 버튼 (네이버 스타일) */
 .btn-login {
     background-color: #03C75A;
     color: #fff;
+    border: 2px solid #03C75A;
 }
 .btn-login:hover {
     background-color: #028a41;
+    border-color: #028a41;
 }
+
+/* ✅ 회원가입 버튼 (투명형) */
 .btn-register {
     background-color: transparent;
     color: #03C75A;
     border: 2px solid #03C75A;
-    margin-top: 10px; /* 로그인과 회원가입 간격 */
 }
 .btn-register:hover {
     background-color: #03C75A;
     color: #fff;
 }
-/* ✅ 아이디 찾기, 비밀번호 찾기 */
+
+/* ✅ 버튼들을 수평 정렬 */
+.form-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+}
+.form-buttons .btn-custom {
+    flex: 1;
+}
+
+/* ✅ 아이디/비밀번호 찾기 */
 .find-links {
     text-align: right;
     font-size: 14px;
@@ -60,7 +83,8 @@ body {
 .find-links a:hover {
     text-decoration: underline;
 }
-/* ✅ 소셜 로그인 스타일 */
+
+/* ✅ 소셜 로그인 영역 */
 .social-login-wrapper {
     text-align: center;
     margin-top: 20px;
@@ -97,7 +121,13 @@ body {
     height: 24px;
     margin-right: 10px;
 }
-/* ✅ 소셜 로그인 버튼 호버 효과 */
 .naver:hover { background-color: #DFF5E3; }
 .google:hover { background-color: #F8D7DA; }
 .daum:hover { background-color: #D9EFFF; }
+
+/* ✅ 반응형 (모바일) */
+@media (max-width: 600px) {
+    .form-buttons {
+        flex-direction: column;
+    }
+}

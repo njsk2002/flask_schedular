@@ -24,7 +24,7 @@ from ..models import (
 
 # (프로젝트 내 다른 기능 호환용: 없으면 무시)
 try:
-    from ..models import ImageData
+    from ..models import ImageData, EInkDevice, User, kst_now_naive as now_kst
 except Exception:
     ImageData = None
 
@@ -64,10 +64,10 @@ def _json_passthrough(obj: Any) -> Any:
 
 def _coerce_target_dir(v: Optional[str]) -> str:
     """
-    서버 플로우 확장: proceed(검토 대기) → checked(승인 대기) → updates(승인 완료)
+    서버 플로우 확장: in_review(검토 대기) → checked(승인 대기) → updates(승인 완료)
     uploads: 전결 또는 결재 불필요
     """
-    out = v if v in ("uploads", "proceed", "checked", "updates") else "proceed"
+    out = v if v in ("uploads", "in_review", "checked", "updates") else "in_review"
     _dbg("coerce_target_dir", input=v, output=out)
     return out
 
@@ -80,7 +80,7 @@ def _coerce_status(v: Optional[str]) -> str:
     return out
 
 def _role_is_valid(role: Optional[str]) -> bool:
-    valid = role in ("author", "review", "approve", "review2", "approve2")
+    valid = role in ("author", "in_review", "checked", "approved", "review2", "approve2")
     _dbg("role_is_valid", role=role, valid=valid)
     return valid
 
@@ -241,7 +241,7 @@ class RepositoryEINK:
         device_id: Optional[str],
         orig_filename: str,
         stored_path: str,
-        target_dir: str,               # 'uploads' | 'proceed' | 'checked' | 'updates'
+        target_dir: str,               # 'uploads' | 'in_review' | 'checked' | 'updates'
         need_approval: bool,
         status: str,                   # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected'
         pages: int = 1,
@@ -306,7 +306,7 @@ class RepositoryEINK:
         upload_id: int,
         *,
         status: Optional[str] = None,          # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected'
-        target_dir: Optional[str] = None,      # 'uploads' | 'proceed' | 'checked' | 'updates'
+        target_dir: Optional[str] = None,      # 'uploads' | 'in_review' | 'checked' | 'updates'
         route_id: Optional[int] = None,
         sign_layout_id: Optional[int] = None,
         route_snapshot: Optional[Dict[str, Any]] = None,
@@ -324,9 +324,9 @@ class RepositoryEINK:
                 _dbg("update_upload_status:not_found", upload_id=upload_id)
                 return False
 
-            if status in ("draft", "in_review", "checked", "approved", "rejected"):
+            if status in ('draft','in_review','checked','approved','rejected','uploads'):
                 row.status = status
-            if target_dir in ("uploads", "proceed", "checked", "updates"):
+            if target_dir in ('in_review','checked','approved','uploads'):
                 row.target_dir = target_dir
             if route_id is not None:
                 row.route_id = route_id
@@ -350,7 +350,7 @@ class RepositoryEINK:
             return False
 
     # ------------------------------------------------------------------
-    # (옵션) 결재 단계 전진 헬퍼: proceed -> checked -> updates
+    # (옵션) 결재 단계 전진 헬퍼: in_review -> checked -> updates
     # ------------------------------------------------------------------
     @staticmethod
     def advance_upload_stage(upload_id: int, stage: str) -> bool:
@@ -367,7 +367,7 @@ class RepositoryEINK:
                 _dbg("advance_upload_stage:not_found", upload_id=upload_id)
                 return False
 
-            if stage == "review":
+            if stage == "in_review":
                 row.status = "checked"
                 row.target_dir = "checked"
             elif stage == "approve":
@@ -568,14 +568,14 @@ class RepositoryEINK:
         """
         userid가 검토(review) 또는 승인(approve) 담당인 최신 1건 리턴.
         DB status는 'in_review' 또는 'checked'를 대상으로 검색.
-        target_dir는 'proceed' 또는 'checked'가 정상.
+        target_dir는 'in_review' 또는 'checked'가 정상.
         """
         _dbg("get_latest_pending_for_user:start", userid=userid)
         try:
             q = (
                 db.session.query(UploadModel)
                 .filter(UploadModel.status.in_(["in_review", "checked"]))
-                .filter(UploadModel.target_dir.in_(["proceed", "checked"]))
+                .filter(UploadModel.target_dir.in_(["in_review", "checked"]))
                 .order_by(desc(UploadModel.id))
             )
             rows = q.all()
@@ -587,8 +587,17 @@ class RepositoryEINK:
                 except Exception:
                     assignees = {}
 
-                is_review = (row.status == "in_review" and row.target_dir == "proceed" and assignees.get("review") == userid)
-                is_approve = (row.status == "checked" and row.target_dir == "checked" and assignees.get("approve") == userid)
+                is_review = (
+                    row.status == "in_review" 
+                    and row.target_dir == "in_review" 
+                    and assignees.get("review") == userid
+                    )  
+                #uploads table의 metadata_json에는 {"assignees": {"review": "njsk2006", "approve": "njsk2003"}}게 review로 저장되기 때문에 assignees.get("review") == userid 작성 필요
+                is_approve = (
+                    row.status == "checked" 
+                    and row.target_dir == "checked" 
+                    and assignees.get("approve") == userid
+                    )
                 if not (is_review or is_approve):
                     continue
 
@@ -666,7 +675,7 @@ class RepositoryEINK:
     def update_upload_status_by_meta(*, old_meta_path: str, new_dir: str, new_status: str, note: Optional[str] = None) -> bool:
         """
         파일 번들을 이동한 뒤, 해당 건의 DB status/dir/stored_path 갱신.
-        - new_dir: 'uploads' | 'proceed' | 'checked' | 'updates'
+        - new_dir: 'uploads' | 'in_review' | 'checked' | 'updates'
         - new_status: 'in_review' | 'checked' | 'approved' | 'rejected' | 'draft'
         - old_meta_path: 이동 전/후 어느 쪽이든 OK (아래에서 새 경로를 추정해본다)
         """
@@ -711,7 +720,7 @@ class RepositoryEINK:
             # 4) 상태/디렉터리 갱신
             if new_status in ("draft", "in_review", "checked", "approved", "rejected"):
                 row.status = new_status
-            if new_dir in ("uploads", "proceed", "checked", "updates"):
+            if new_dir in ("uploads", "in_review", "checked", "updates"):
                 row.target_dir = new_dir
 
             # 5) stored_path도 이동 후 실제 경로로 동기화
@@ -739,3 +748,166 @@ class RepositoryEINK:
             db.session.rollback()
             return False
 
+
+    # ===== USERID별 디바이스 등록 =====
+    @staticmethod
+    def upsert_device_for_user(
+        *,
+        user_no: int,
+        device_id: str,
+        panel_res: str,
+        cap: str = "BWR",
+        bpp: int = 4,
+        device_name: str | None = None,
+        supports_partial: bool = True,
+        supports_rle: bool = True,
+        supports_zlib: bool = True,
+    ) -> int:
+        """
+        (1) 클라이언트/관리자에서 호출: 특정 사용자(user_no)에게 device_id를 등록/갱신.
+            - 옵션 A 설계: FK는 user_no 한 가닥만 유지
+            - user_userid(캐시)는 User 조인으로 채워줌 (경로 생성 시 사용)
+            - (user_no, device_id) UNIQUE 제약 준수
+
+        반환: upsert 된 EInkDevice.id
+        """
+        _dbg("upsert_device_for_user:start",
+             user_no=user_no, device_id=device_id, panel_res=panel_res, cap=cap, bpp=bpp)
+
+        if not user_no or not device_id or not panel_res:
+            raise ValueError("user_no, device_id, panel_res 는 필수입니다.")
+
+        try:
+            # 1) 사용자 조회 (userid 캐시용)
+            u = db.session.get(User, int(user_no))
+            if not u:
+                _dbg("upsert_device_for_user:user_not_found", user_no=user_no)
+                raise ValueError("user_no에 해당하는 User가 없습니다.")
+            userid_cache = (u.userid or "").strip() or None
+
+            # 2) (user_no, device_id)로 기존 행 조회
+            row = (
+                db.session.query(EInkDevice)
+                .filter(EInkDevice.user_no == user_no,
+                        EInkDevice.device_id == device_id)
+                .first()
+            )
+
+            now = now_kst()
+
+            if row:
+                # === UPDATE 경로 ===
+                row.panel_res = panel_res
+                row.cap = cap or row.cap
+                row.bpp = int(bpp or row.bpp or 4)
+                if device_name is not None:
+                    row.device_name = device_name
+                row.supports_partial = bool(supports_partial)
+                row.supports_rle = bool(supports_rle)
+                row.supports_zlib = bool(supports_zlib)
+                # userid 캐시 최신화
+                row.user_userid = userid_cache
+                row.updated_at = now
+                db.session.commit()
+                _dbg("upsert_device_for_user:updated", id=row.id)
+                return int(row.id)
+
+            # === INSERT 경로 ===
+            row = EInkDevice(
+                user_no=int(user_no),
+                user_userid=userid_cache,   # ★ 옵션 A: 경로 생성을 위해 캐시
+                device_id=device_id.strip(),
+                device_name=(device_name or None),
+                panel_res=panel_res.strip(),
+                bpp=int(bpp or 4),
+                cap=(cap or "BWR"),
+                supports_partial=bool(supports_partial),
+                supports_rle=bool(supports_rle),
+                supports_zlib=bool(supports_zlib),
+                current_ver=0,
+                last_seen=None,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(row)
+            db.session.commit()
+            _dbg("upsert_device_for_user:inserted", id=row.id)
+            return int(row.id)
+
+        except Exception:
+            _logger().debug("[upsert_device_for_user] error", exc_info=True)
+            db.session.rollback()
+            raise
+
+    @staticmethod
+    def touch_device_seen_and_version(
+        *,
+        device_id: str,
+        new_version: int | None = None,
+        last_seen_ts=None,
+    ) -> bool:
+        """
+        (2) 디바이스 폴링(/device/info, /device/bmp 성공 등) 시 상태 갱신:
+            - current_ver, last_seen 업데이트 (부분 업데이트 허용)
+            - device_id 는 전역 유니크가 아닐 수 있으므로 "최근 등록된" 1건 기준으로 갱신
+              (필요시 user_no 컨텍스트를 받아 더 좁혀도 됨)
+        """
+        _dbg("touch_device_seen_and_version:start", device_id=device_id, new_ver=new_version)
+
+        try:
+            q = (
+                db.session.query(EInkDevice)
+                .filter(EInkDevice.device_id == device_id)
+                .order_by(EInkDevice.id.desc())
+            )
+            row = q.first()
+            if not row:
+                _dbg("touch_device_seen_and_version:not_found", device_id=device_id)
+                return False
+
+            if new_version is not None:
+                try:
+                    row.current_ver = int(new_version)
+                except Exception:
+                    pass
+
+            # last_seen 기본값: now_kst()
+            row.last_seen = last_seen_ts or now_kst()
+            row.updated_at = now_kst()
+            db.session.commit()
+            _dbg("touch_device_seen_and_version:done", id=row.id, current_ver=row.current_ver)
+            return True
+
+        except Exception:
+            _logger().debug("[touch_device_seen_and_version] error", exc_info=True)
+            db.session.rollback()
+            return False
+
+    @staticmethod
+    def get_userid_by_device_id(device_id: str) -> str | None:
+        """
+        device_id → userid 문자열(경로용) 해석
+        우선순위:
+          1) 캐시 컬럼(EInkDevice.user_userid)이 있으면 그대로 사용
+          2) 없으면 user_no로 User 조인하여 userid 획득
+        """
+        _dbg("get_userid_by_device_id:start", device_id=device_id)
+        try:
+            row = (
+                db.session.query(EInkDevice)
+                .filter(EInkDevice.device_id == device_id)
+                .order_by(EInkDevice.id.desc())
+                .first()
+            )
+            if not row:
+                _dbg("get_userid_by_device_id:not_found", device_id=device_id)
+                return None
+
+            if getattr(row, "user_userid", None):
+                return str(row.user_userid)
+
+            u = db.session.get(User, row.user_no)
+            return str(u.userid) if (u and u.userid) else None
+        except Exception:
+            _logger().debug("[get_userid_by_device_id] error", exc_info=True)
+            return None
