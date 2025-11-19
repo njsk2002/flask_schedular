@@ -1,8 +1,10 @@
 {% extends 'e_base.html' %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}">
+  {{ super() }}  {# ← 부모의 CSS 링크들을 먼저 포함 #}
+  <link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_login.css') }}">
 {% endblock %}
+
 
 {% block content %}
 
@@ -17,7 +19,7 @@
 
     <!-- 로그인 폼 -->
     <form id="login-form">
-        {{ form.csrf_token }}  <!-- ✅ CSRF 토큰 추가 -->
+        {{ form.csrf_token }}
 
         <div class="form-group">
             <input type="text" id="userid" name="userid" class="form-control" placeholder="아이디를 입력해주세요" required>
@@ -27,17 +29,20 @@
             <input type="password" id="password" name="password" class="form-control" placeholder="비밀번호를 입력해주세요" required>
         </div>
 
-        <!-- ✅ 아이디 찾기 & 비밀번호 찾기 -->
         <div class="find-links">
             <a href="/auth/find-id">아이디 찾기</a> | 
             <a href="/auth/find-password">비밀번호 찾기</a>
         </div>
 
-        <button type="submit" class="btn btn-custom btn-login">로그인</button>
+        <!-- ✅ 수평 버튼 영역 -->
+        <div class="form-buttons">
+            <button type="button" onclick="location.href='/auth/signup'" class="btn btn-custom btn-register">회원가입</button>
+            <button type="submit" class="btn btn-custom btn-login">로그인</button>
+        </div>
     </form>
 
     <!-- ✅ 소셜 로그인 섹션 -->
-    <div class="social-login-wrapper">
+    <!-- <div class="social-login-wrapper">
         <div class="social-login-title">소셜 로그인</div>
         <div class="social-login">
             <button class="social-btn naver" onclick="location.href='/auth/naver-login'">
@@ -50,10 +55,9 @@
                 <img src="{{ url_for('static', filename='images/daum.png') }}" alt="다음 로고"> 다음 로그인
             </button>
         </div>
-    </div>
+    </div> -->
 
-    <!-- ✅ 회원가입 버튼 -->
-    <button onclick="location.href='/auth/signup'" class="btn btn-custom btn-register">회원가입</button>
+
 </div>
 
 {% endblock %}
