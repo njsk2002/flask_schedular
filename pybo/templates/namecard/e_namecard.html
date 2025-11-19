@@ -66,6 +66,7 @@
 {% endblock %}
 
 {% block extra_css %}
+ {{ super() }}  {# ← 부모의 CSS 링크들을 먼저 포함 #}
 <style>
     .namecard {
         width: 600px;

@@ -10,10 +10,10 @@ select * from approval_route_steps;
 
 
 select * from sign_layouts;
-DELETE FROM sign_layouts WHERE id < 28;
+DELETE FROM sign_layouts WHERE id < 100;
 
-select * from uploads;
-DELETE FROM uploads WHERE id < 50;
+SELECT * FROM uploads;
+DELETE FROM uploads WHERE id < 100;
 
 
 SHOW COLUMNS FROM uploads LIKE 'target_dir';
