@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Blueprint, url_for, render_template, flash, request, session, g , jsonify, current_app, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import redirect, secure_filename
-
+from flask_login import login_user, logout_user, login_required, current_user
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
 from pybo.models import User,FileUpload
@@ -25,33 +25,47 @@ def get_csrf_token():
 ###########################  로그인 유무 ####################################
 ###########################################################################
 #=== 로그인 되었는지 먼저 확인하는 함수 @login_required 어노테이션으로 사용 가능 ====
-import functools
-from flask import redirect, url_for, session, g
-from pybo.models import User
-from pybo import db
+# import functools
+# from flask import redirect, url_for, session, g
+# from pybo.models import User
+# from pybo import db
 
-def login_required(view):
-    @functools.wraps(view)
-    def wrapped_view(**kwargs):
-        if g.user is None:
-            print("[DEBUG] @login_required: g.user is None, redirecting to login")
-            return redirect(url_for('auth.login'))
-        print(f"[DEBUG] @login_required: g.user is present: {g.user}")
-        return view(**kwargs)
-    return wrapped_view
+# def login_required(view):
+#     @functools.wraps(view)
+#     def wrapped_view(**kwargs):
+#         if g.user is None:
+#             print("[DEBUG] @login_required: g.user is None, redirecting to login")
+#             return redirect(url_for('auth.login'))
+#         print(f"[DEBUG] @login_required: g.user is present: {g.user}")
+#         return view(**kwargs)
+#     return wrapped_view
+
+# @bp.before_app_request
+# def load_logged_in_user():
+#     user_id = session.get('user_id')
+#     if user_id is None:
+#         g.user = None
+#         print("[DEBUG] load_logged_in_user: No user_id found in session")
+#     else:
+#         g.user = db.session.query(User).filter_by(userid=user_id).first()
+#         print(f"[DEBUG] load_logged_in_user: Retrieved user: {g.user}")
+#         if g.user is None:
+#             session.pop('user_id', None)
+#             print("[DEBUG] load_logged_in_user: Invalid user_id removed from session")
+
+# 🔥 기존 login_required, load_logged_in_user 삭제하고 이걸로 교체
 
 @bp.before_app_request
 def load_logged_in_user():
-    user_id = session.get('user_id')
-    if user_id is None:
-        g.user = None
-        print("[DEBUG] load_logged_in_user: No user_id found in session")
+    """
+    Flask-Login의 current_user를 g.user에 그대로 매핑.
+    기존 코드(g.user)를 최대한 안 깨고 가져가기 위한 브리지.
+    """
+    if current_user.is_authenticated:
+        g.user = current_user
     else:
-        g.user = db.session.query(User).filter_by(userid=user_id).first()
-        print(f"[DEBUG] load_logged_in_user: Retrieved user: {g.user}")
-        if g.user is None:
-            session.pop('user_id', None)
-            print("[DEBUG] load_logged_in_user: Invalid user_id removed from session")
+        g.user = None
+
 
 
 ###########################################################################
@@ -128,7 +142,7 @@ def signup():
             existing_user = User.query.filter_by(userid=userid).first()
             if existing_user:
                 flash('이미 존재하는 사용자입니다.', 'error')
-                return render_template('auth/signup.html')
+                return render_template('auth/e_signup.html')
 
             # 📌 파일 처리 (사진 업로드)
 
@@ -223,7 +237,8 @@ def signup():
 @bp.route('/mypage', methods=['GET', 'POST'])
 @login_required
 def mypage():
-    user = g.user  # 이미 @login_required 적용됨
+    # user = g.user  # 이미 @login_required 적용됨
+    user = current_user  # 또는 g.user (둘 다 동일)
 
     print("login한 사용자:", user)  # 디버깅 확인
 
@@ -232,7 +247,9 @@ def mypage():
             "no": user.no,
             "userid": user.userid,
             "username": user.username,
-            "userimage": url_for('uploaded_file', filename=user.userimage) if user.userimage else "",
+            # "userimage": url_for('uploaded_file', filename=user.userimage) if user.userimage else "",
+            "userimage": url_for('auth.uploaded_file', filename=user.userimage) if user.userimage else "",
+
             "email": user.email,
             "phone": user.phone,
             "photos": [
@@ -269,7 +286,8 @@ def mypage():
 def file_upload():
     """ 📂 파일 업로드 API (최대 10개만 저장 후 초과 파일 반환) """
 
-    user = g.user  # 로그인한 사용자 정보
+    # user = g.user  # 로그인한 사용자 정보
+    user = current_user
     if not user:
         return jsonify({"success": False, "message": "로그인이 필요합니다."}), 401
 
@@ -364,14 +382,17 @@ def safe_filename_korean(filename):
 
 ################## 업데이트 #########################################
 @bp.route('/update', methods=['GET', 'POST'])
+@login_required
 def update():
     # 로그인 체크
-    if 'user_id' not in session:
-        flash('로그인이 필요합니다.', 'error')
-        return redirect(url_for('auth.login'))
+    # if 'user_id' not in session:
+    #     flash('로그인이 필요합니다.', 'error')
+    #     return redirect(url_for('auth.login'))
 
-    # 현재 로그인된 사용자 정보 가져오기
-    user = User.query.filter_by(id=session['user_id']).first()
+    # # 현재 로그인된 사용자 정보 가져오기
+    # user = User.query.filter_by(id=session['user_id']).first()
+
+    user = current_user  # 또는 g.user
 
     if request.method == 'POST':
         try:
@@ -418,15 +439,14 @@ def update():
             flash("업데이트 중 오류가 발생했습니다.", "error")
             print(f"❌ [업데이트 오류] {e}")
 
-    return render_template('auth/mypage.html', user=user)
+    return render_template('auth/e_mypage.html', user=user)
 
-#############  LOGIN  로그인 #######################3
+############  LOGIN  로그인 #######################3
 @bp.route('/login', methods=('GET', 'POST'))
 def login():
     form = UserLoginForm()
     print("login 시도")
 
-    # if request.method == 'POST' and form.validate_on_submit():
     if request.method == 'POST':
         if not form.validate_on_submit():
             print("유효성 검사 실패:", form.errors)
@@ -438,19 +458,44 @@ def login():
             error = '존재하지 않는 사용자입니다.'
         elif not check_password_hash(user.password, form.password.data):
             error = '비밀번호가 올바르지 않습니다.'
-
         if error is None:
+            # 1) 예전 세션 비우고
             session.clear()
-            session['user_no'] = user.no
-            session['user_id'] = user.userid  # 사용자 ID 저장
-            return jsonify({'success': True, 'user_id': user.userid})  # 로그인 성공 시 JSON 반환
 
-        return jsonify({'success': False, 'error': error})  # 🚨 로그인 실패 시 JSON에 오류 포함
+            # 2) Flask-Login 세션 생성
+            login_user(user)
+
+            # 3) 추가로 쓰고 싶은 값만 세션에 넣기
+            session['user_no']   = user.no
+            session['user_id']   = user.userid
+            session['user_name'] = getattr(user, 'username', None)
+            # session['dept']      = getattr(user, 'dept', None)
+            session['dept'] = getattr(user, 'department', None)
+
+            session['position']  = getattr(user, 'position', None)
+
+            return jsonify({
+                'success': True,
+                'user': {
+                    'no':        user.no,
+                    'userid':    user.userid,
+                    'username':  user.username,
+                    'email':     getattr(user, 'email', None),
+                    # 'dept':      getattr(user, 'dept', None),
+                    'dept':      getattr(user, 'department', None),
+                    'position':  getattr(user, 'position', None),
+                }
+            })
+
+        return jsonify({'success': False, 'error': error})
 
     return render_template('auth/e_login.html', form=form)
 
+
 @bp.route('/logout/')
+@login_required
 def logout():
-    session.clear()
+    logout_user()      # 🔹 Flask-Login 세션 종료
+    session.clear()    # 🔹 기존 커스텀 세션도 같이 정리
     return redirect(url_for('main.index'))
 

@@ -1,10 +1,16 @@
 # repository/repository_eink.py
-from typing import Optional, Dict, Any, List
+from __future__ import annotations
+
+from typing import Optional, Dict, Any, List, Tuple
+from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import desc
+from sqlalchemy import desc, or_, and_
+from sqlalchemy.orm import joinedload
 from pybo import db
-import json, os
+import json
+import os
 import logging
+
 
 try:
     # Flask 컨텍스트가 있으면 current_app 로거 사용
@@ -15,18 +21,21 @@ except Exception:  # pragma: no cover
 # === 모델 임포트 (형이 준 models.py 기준) ===
 from ..models import (
     User,
-    Upload as UploadModel,
+    DocumentInfo as DocumentInfoModel,
     SignLayout as SignLayoutModel,
-    ApprovalRoute as ApprovalRouteModel,
-    ApprovalRouteStep as ApprovalRouteStepModel,
+    # ApprovalRoute as ApprovalRouteModel,
+    # ApprovalRouteStep as ApprovalRouteStepModel,
+    SignSlot as SignSlotModel,
+    DocumentApprovalStep as DocumentApprovalStepModel,
     kst_now_naive as now_kst,
 )
 
 # (프로젝트 내 다른 기능 호환용: 없으면 무시)
 try:
-    from ..models import ImageData, EInkDevice, User, kst_now_naive as now_kst
-except Exception:
-    ImageData = None
+    from ..models import ImageData, EInkDevice, User, kst_now_naive as now_kst  # type: ignore[assignment]
+except Exception:  # pragma: no cover
+    ImageData = None            # type: ignore[assignment]
+    EInkDevice = None           # type: ignore[assignment]
 
 
 # --------------------------------------------
@@ -38,6 +47,7 @@ def _logger():
         return current_app.logger
     return logging.getLogger(__name__)
 
+
 def _dump_json(obj: Any, max_len: int = 800) -> str:
     try:
         s = json.dumps(obj, ensure_ascii=False, default=str)
@@ -45,12 +55,14 @@ def _dump_json(obj: Any, max_len: int = 800) -> str:
     except Exception:
         return str(obj)
 
+
 def _dbg(tag: str, **kw):
     try:
         parts = [f"{k}={_dump_json(v)}" for k, v in kw.items()]
         _logger().debug(f"[RepositoryEINK:{tag}] " + " ".join(parts))
     except Exception:
         _logger().debug(f"[RepositoryEINK:{tag}] <log-failed>")
+
 
 # --------------------------------------------
 # 내부 유틸 (비즈니스)
@@ -62,27 +74,43 @@ def _json_passthrough(obj: Any) -> Any:
     """
     return obj
 
+
 def _coerce_target_dir(v: Optional[str]) -> str:
     """
-    서버 플로우 확장: in_review(검토 대기) → checked(승인 대기) → updates(승인 완료)
-    uploads: 전결 또는 결재 불필요
+    DocumentInfo.target_dir 허용값:
+      - 'in_review'     : 결재 진행 중
+      - 'checked'       : 검토 완료 / 최종 승인 대기
+      - 'approved'      : 결재 완료(게시 후보)
+      - 'bulletin_files': 결재 없이 게시용으로 복사된 문서
+      - 'uploads'       : 즉시배포/특수 플로우용
     """
-    out = v if v in ("uploads", "in_review", "checked", "updates") else "in_review"
+    allowed = ("uploads", "in_review", "checked", "approved", "bulletin_files")
+    out = v if v in allowed else "in_review"
     _dbg("coerce_target_dir", input=v, output=out)
     return out
 
+
 def _coerce_status(v: Optional[str]) -> str:
     """
-    in_review (검토 대기), checked (검토 완료/승인 대기), approved, rejected, draft
+    DocumentInfo.status 허용값:
+      - 'draft'      : 초안
+      - 'in_review'  : 결재 진행 중
+      - 'checked'    : 결재 일부 완료, 최종 승인 대기
+      - 'approved'   : 결재 완료
+      - 'rejected'   : 반려
+      - 'uploads'    : 디바이스 송출용/즉시 배포 플로우
     """
-    out = v if v in ("draft", "in_review", "checked", "approved", "rejected") else "draft"
+    allowed = ("draft", "in_review", "checked", "approved", "rejected", "uploads")
+    out = v if v in allowed else "draft"
     _dbg("coerce_status", input=v, output=out)
     return out
 
+
 def _role_is_valid(role: Optional[str]) -> bool:
-    valid = role in ("author", "in_review", "checked", "approved", "review2", "approve2")
+    valid = role in ("author", "review", "approve", "review2", "approve2")
     _dbg("role_is_valid", role=role, valid=valid)
     return valid
+
 
 def _user_display_string(user: Optional[User]) -> Optional[str]:
     """
@@ -102,19 +130,230 @@ def _user_display_string(user: Optional[User]) -> Optional[str]:
 
 class RepositoryEINK:
     """
-    E-INK 업로드/결재/레이아웃 레포지토리 (models.py 최신 스키마 대응)
+    E-INK 문서/레이아웃/결재 레포지토리 (DocumentInfo 기반).
+    컨트롤러에서 사용하는 것 위주 + 향후 DocumentInfo 확장 대응.
     """
+
+    # ================== 결재선 목록 (임시 스텁 구현) ==================
+    @staticmethod
+    def get_approval_routes() -> List[Dict[str, Any]]:
+        """
+        컨트롤러와의 호환을 위한 임시 구현.
+        - 현재 ApprovalRouteModel을 사용하지 않으므로 빈 리스트를 반환하고,
+          컨트롤러에서 default_routes()로 폴백하게 둔다.
+        - 나중에 ApprovalRoute 테이블을 도입하면, 이 함수 내부 구현만 교체하면 된다.
+        """
+        _dbg("get_approval_routes:start (stub)")
+        return []
+
+
+    @staticmethod
+    def register_document(
+        *,
+        user_id: Optional[int],
+        device_id: Optional[str],
+        doc_name: str,
+        source_ext: str,
+        original_relpath: str,
+        pdf_relpath: str,
+        page_count: int,
+        need_approval: bool,
+        route_id: Optional[int],
+        layout_snapshot: Dict[str, Any],
+        metadata: Dict[str, Any],
+        render_params: Dict[str, Any],
+        target_type: str,   # 'approval' | 'bulletin'
+    ) -> int:
+        """
+        /document/register 엔드포인트용 DocumentInfo 생성 함수.
+
+        - original_relpath / pdf_relpath 는 메타데이터에 함께 저장
+        - stored_path 는 우선 pdf_relpath 를 그대로 넣어둔다 (상대경로 허용)
+        - need_approval / target_type 에 따라 status / target_dir 기본값 결정
+        """
+        _dbg(
+            "register_document:start",
+            user_id=user_id,
+            device_id=device_id,
+            doc_name=doc_name,
+            source_ext=source_ext,
+            original_relpath=original_relpath,
+            pdf_relpath=pdf_relpath,
+            page_count=page_count,
+            need_approval=need_approval,
+            route_id=route_id,
+            target_type=target_type,
+        )
+
+        # 1) status / target_dir 기본값 결정
+        target_type = (target_type or "approval").lower()
+        if need_approval:
+            # 결재가 필요한 문서: 기본적으로 in_review에 올려 둔다
+            status = "in_review"
+            target_dir = "in_review"
+        else:
+            # 결재 없이 게시용: bulletin_files + uploads 상태로 취급
+            if target_type == "bulletin":
+                status = "uploads"
+                target_dir = "bulletin_files"
+            else:
+                # 그 외는 업로드 전용
+                status = "uploads"
+                target_dir = "uploads"
+
+        status = _coerce_status(status)
+        target_dir = _coerce_target_dir(target_dir)
+
+        # 2) 렌더링 파라미터 파싱
+        width = int(render_params.get("width", 0) or 0)
+        height = int(render_params.get("height", 0) or 0)
+        mode = render_params.get("mode")
+        scale = render_params.get("scale")
+        percent = int(render_params.get("percent", 0) or 0)
+        rotate = int(render_params.get("rotate", 0) or 0)
+
+        # 3) 파일 이름 및 stored_path 결정
+        orig_filename = os.path.basename(original_relpath) if original_relpath else doc_name
+        stored_path = pdf_relpath or original_relpath or ""
+
+        # 4) metadata 확장 (원본/표준화 경로 등 포함)
+        meta_full: Dict[str, Any] = {}
+        meta_full.update(metadata or {})
+        meta_full.setdefault("file_info", {})
+        meta_full["file_info"].update(
+            {
+                "source_ext": source_ext,
+                "original_relpath": original_relpath,
+                "pdf_relpath": pdf_relpath,
+                "target_type": target_type,
+            }
+        )
+
+        # 5) route_snapshot 는 간단하게 route_id만 넣어두고,
+        route_snapshot = {"route_id": route_id} if route_id else None
+
+        row = DocumentInfoModel(
+            user_id=user_id,
+            device_id=(device_id or None),
+            doc_name=doc_name or orig_filename,
+            orig_filename=orig_filename,
+            stored_path=stored_path,
+            target_dir=target_dir,
+            need_approval=bool(need_approval),
+            need_stamp=False,
+            status=status,
+            expire_time=None,
+            pages=page_count or 1,
+            width=width or None,
+            height=height or None,
+            mode=mode,
+            scale=scale,
+            percent=percent or None,
+            rotate=rotate or None,
+            route_id=route_id,
+            sign_layout_id=None,
+            route_snapshot_json=_json_passthrough(route_snapshot),
+            layout_snapshot_json=_json_passthrough(layout_snapshot or {}),
+            metadata_json=_json_passthrough(meta_full),
+            final_doc_relpath=pdf_relpath or None,
+            created_at=now_kst(),
+            updated_at=now_kst(),
+        )
+
+        try:
+            db.session.add(row)
+            db.session.commit()
+            _dbg("register_document:committed", document_info_id=int(row.id))
+            return int(row.id)
+        except SQLAlchemyError as e:
+            _logger().debug("[register_document] DB error, rollback", exc_info=True)
+            db.session.rollback()
+            raise e
+        
+
+    @staticmethod
+    def get_document_preview_source(document_info_id: int) -> Optional[Dict[str, Any]]:
+        """
+        /bmp_preview 에서 document_info_id로 미리보기 소스 찾을 때 사용.
+
+        - 현재 구현:
+          * DocumentInfo.stored_path 를 abs_path 로 그대로 사용
+          * pages 는 DocumentInfo.pages 또는 1
+          * name 은 doc_name → orig_filename 순으로 사용
+
+        - 나중에:
+          * stored_path 를 BMP, final_doc_relpath 를 normalized.pdf 로 구분해서,
+            상황에 따라 어떤 경로를 쓸지 여기서 결정하도록 확장 가능.
+        """
+        _dbg("get_document_preview_source:start", document_info_id=document_info_id)
+        try:
+            row = db.session.get(DocumentInfoModel, int(document_info_id))
+            if not row:
+                _dbg("get_document_preview_source:not_found", document_info_id=document_info_id)
+                return None
+
+            abs_path = row.stored_path
+            if not abs_path:
+                _dbg("get_document_preview_source:no_stored_path", document_info_id=document_info_id)
+                return None
+
+            # 이름은 doc_name -> orig_filename 우선
+            name = row.doc_name or row.orig_filename or os.path.basename(abs_path)
+            pages = int(row.pages or 1)
+
+            out = {
+                "abs_path": abs_path,
+                "pages": pages,
+                "name": name,
+            }
+            _dbg("get_document_preview_source:done", out=out)
+            return out
+        except SQLAlchemyError:
+            _logger().debug("[get_document_preview_source] DB error", exc_info=True)
+            return None
+        except Exception:
+            _logger().debug("[get_document_preview_source] error", exc_info=True)
+            return None
+        
 
     # ================== 대시보드 장비 목록 ==================
     @staticmethod
     def get_devices_for_dashboard() -> Optional[List[Dict[str, Any]]]:
         """
-        현재 Device 모델이 없으므로 컨트롤러의 _default_devices() 를 쓰게 하려면 None을 반환.
-        추후 Device 테이블 추가 시 여기서 실제 목록 리턴.
+        현재 EInkDevice 모델을 쓰지 않도록 컨트롤러 폴백을 유지.
+        추후 Device 테이블 구현 시 여기서 실제 목록 리턴.
         """
         _dbg("get_devices_for_dashboard:start")
-        _dbg("get_devices_for_dashboard:return", value=None)
-        return None  # 컨트롤러 폴백 사용
+        if EInkDevice is None:
+            _dbg("get_devices_for_dashboard:return", value=None)
+            return None
+
+        try:
+            rows = (
+                db.session.query(EInkDevice)
+                .order_by(EInkDevice.id.desc())
+                .all()
+            )
+            devices: List[Dict[str, Any]] = []
+            for r in rows:
+                devices.append(
+                    {
+                        "id": r.id,
+                        "device_id": r.device_id,
+                        "name": getattr(r, "device_name", None),
+                        "panel_res": r.panel_res,
+                        "cap": getattr(r, "cap", None),
+                        "bpp": getattr(r, "bpp", None),
+                        "supports_partial": getattr(r, "supports_partial", True),
+                        "supports_rle": getattr(r, "supports_rle", True),
+                        "supports_zlib": getattr(r, "supports_zlib", True),
+                    }
+                )
+            _dbg("get_devices_for_dashboard:return", count=len(devices))
+            return devices or None
+        except SQLAlchemyError:
+            _logger().debug("[get_devices_for_dashboard] DB error", exc_info=True)
+            return None
 
     # ================== 부서 목록 & 부서별 사용자 ==================
     @staticmethod
@@ -122,11 +361,17 @@ class RepositoryEINK:
         """
         User.department의 DISTINCT 목록 반환.
         """
+        print("REPO ENGINE:", db.engine.url)
         _dbg("list_departments:start")
         try:
-            rows = db.session.query(User.department).filter(User.department.isnot(None)).distinct().all()
+            rows = (
+                db.session.query(User.department)
+                .filter(User.department.isnot(None))
+                .distinct()
+                .all()
+            )
             depts = [r[0] for r in rows if r and r[0]]
-            _dbg("list_departments:done", count=len(depts), depts=depts[:10])  # 최대 10개만 미리보기
+            _dbg("list_departments:done", count=len(depts), depts=depts[:10])
             return depts
         except SQLAlchemyError:
             _logger().debug("[list_departments] DB error", exc_info=True)
@@ -140,7 +385,12 @@ class RepositoryEINK:
         _dbg("list_users_by_department:start", department=department)
         try:
             q = db.session.query(
-                User.no, User.userid, User.username, User.department, User.position, User.photo_1
+                User.no,
+                User.userid,
+                User.username,
+                User.department,
+                User.position,
+                User.photo_1,
             )
             if department:
                 q = q.filter(User.department == department)
@@ -148,15 +398,17 @@ class RepositoryEINK:
             rows = q.all()
             users: List[Dict[str, Any]] = []
             for (no, userid, username, dept, position, photo_1) in rows:
-                users.append({
-                    "id": no,
-                    "userid": userid or "",
-                    "username": username or "",
-                    "department": dept or "",
-                    "position": position or "",
-                    "photo_1": photo_1 or "",
-                    "display": username or userid or str(no),
-                })
+                users.append(
+                    {
+                        "id": no,
+                        "userid": userid or "",
+                        "username": username or "",
+                        "department": dept or "",
+                        "position": position or "",
+                        "photo_1": photo_1 or "",
+                        "display": username or userid or str(no),
+                    }
+                )
             _dbg("list_users_by_department:done", count=len(users), sample=users[:3])
             return users
         except SQLAlchemyError:
@@ -164,75 +416,103 @@ class RepositoryEINK:
             return []
 
     # ================== 결재선 목록 ==================
-    @staticmethod
-    def get_approval_routes() -> List[Dict[str, Any]]:
-        """
-        ApprovalRoute 및 steps를 프런트가 기대하는 구조로 직렬화.
-        - 작성자(creator) 최신 필드 포함
-        - 각 step의 최신 assignee 필드 + 스냅샷 동시 제공
-        """
-        _dbg("get_approval_routes:start")
-        try:
-            routes: List[Dict[str, Any]] = []
-            route_rows = (
-                db.session.query(ApprovalRouteModel)
-                .order_by(ApprovalRouteModel.id.desc())
-                .all()
-            )
-            _dbg("get_approval_routes:rows", count=len(route_rows))
-            for r in route_rows:
-                creator = r.creator
-                creator_info = {
-                    "id": getattr(creator, "no", None),
-                    "userid": getattr(creator, "userid", None),
-                    "username": getattr(creator, "username", None),
-                    "department": getattr(creator, "department", None),
-                    "position": getattr(creator, "position", None),
-                    "photo_1": getattr(creator, "photo_1", None),
-                } if creator else None
+    # @staticmethod
+    # def get_approval_routes() -> List[Dict[str, Any]]:
+    #     """
+    #     ApprovalRoute 및 steps를 프런트가 기대하는 구조로 직렬화.
+    #     - creator 정보 포함
+    #     - 각 step의 assignee + 스냅샷 동시 제공
+    #     """
+    #     _dbg("get_approval_routes:start")
+    #     try:
+    #         routes: List[Dict[str, Any]] = []
+    #         route_rows = (
+    #             db.session.query(ApprovalRouteModel)
+    #             .order_by(ApprovalRouteModel.id.desc())
+    #             .all()
+    #         )
+    #         _dbg("get_approval_routes:rows", count=len(route_rows))
+    #         for r in route_rows:
+    #             creator = r.creator
+    #             creator_info = (
+    #                 {
+    #                     "id": getattr(creator, "no", None),
+    #                     "userid": getattr(creator, "userid", None),
+    #                     "username": getattr(creator, "username", None),
+    #                     "department": getattr(creator, "department", None),
+    #                     "position": getattr(creator, "position", None),
+    #                     "photo_1": getattr(creator, "photo_1", None),
+    #                 }
+    #                 if creator
+    #                 else None
+    #             )
 
-                steps_out: List[Dict[str, Any]] = []
-                for st in (r.steps or []):
-                    assignee = st.assignee
-                    steps_out.append({
-                        "id": int(st.id),
-                        "step_order": int(st.step_order),
-                        "role": st.role,  # 'author' | 'review' | 'approve' | 'review2' | 'approve2'
-                        "sign_required": bool(st.sign_required),
-                        "assignee": {
-                            "id": getattr(assignee, "no", None) if assignee else None,
-                            "userid": getattr(assignee, "userid", None) if assignee else None,
-                            "username": getattr(assignee, "username", None) if assignee else None,
-                            "department": getattr(assignee, "department", None) if assignee else None,
-                            "position": getattr(assignee, "position", None) if assignee else None,
-                            "photo_1": getattr(assignee, "photo_1", None) if assignee else None,
-                            "display": _user_display_string(assignee),
-                        },
-                        "assignee_snapshot": {
-                            "userid": getattr(st, "assignee_userid_snapshot", None),
-                            "username": getattr(st, "assignee_username_snapshot", None),
-                            "department": getattr(st, "assignee_department_snapshot", None),
-                            "position": getattr(st, "assignee_position_snapshot", None),
-                            "photo_1": getattr(st, "assignee_photo_1_snapshot", None),
-                        },
-                        "assignee_group_id": getattr(st, "assignee_group_id", None),
-                    })
-                routes.append({
-                    "id": int(r.id),
-                    "name": r.name,
-                    "created_by": r.created_by,
-                    "created_at": r.created_at,
-                    "creator": creator_info,
-                    "steps": steps_out,
-                })
-            _dbg("get_approval_routes:done", count=len(routes))
-            return routes
-        except SQLAlchemyError:
-            _logger().debug("[get_approval_routes] DB error", exc_info=True)
-            return []
+    #             steps_out: List[Dict[str, Any]] = []
+    #             for st in (r.steps or []):
+    #                 assignee = st.assignee
+    #                 steps_out.append(
+    #                     {
+    #                         "id": int(st.id),
+    #                         "step_order": int(st.step_order),
+    #                         "role": st.role,
+    #                         "sign_required": bool(st.sign_required),
+    #                         "assignee": {
+    #                             "id": getattr(assignee, "no", None) if assignee else None,
+    #                             "userid": getattr(assignee, "userid", None)
+    #                             if assignee
+    #                             else None,
+    #                             "username": getattr(assignee, "username", None)
+    #                             if assignee
+    #                             else None,
+    #                             "department": getattr(assignee, "department", None)
+    #                             if assignee
+    #                             else None,
+    #                             "position": getattr(assignee, "position", None)
+    #                             if assignee
+    #                             else None,
+    #                             "photo_1": getattr(assignee, "photo_1", None)
+    #                             if assignee
+    #                             else None,
+    #                             "display": _user_display_string(assignee),
+    #                         },
+    #                         "assignee_snapshot": {
+    #                             "userid": getattr(
+    #                                 st, "assignee_userid_snapshot", None
+    #                             ),
+    #                             "username": getattr(
+    #                                 st, "assignee_username_snapshot", None
+    #                             ),
+    #                             "department": getattr(
+    #                                 st, "assignee_department_snapshot", None
+    #                             ),
+    #                             "position": getattr(
+    #                                 st, "assignee_position_snapshot", None
+    #                             ),
+    #                             "photo_1": getattr(
+    #                                 st, "assignee_photo_1_snapshot", None
+    #                             ),
+    #                         },
+    #                         "assignee_group_id": getattr(st, "assignee_group_id", None),
+    #                     }
+    #                 )
+    #             routes.append(
+    #                 {
+    #                     "id": int(r.id),
+    #                     "name": r.name,
+    #                     "created_by": r.created_by,
+    #                     "created_at": r.created_at,
+    #                     "creator": creator_info,
+    #                     "steps": steps_out,
+    #                 }
+    #             )
+    #         _dbg("get_approval_routes:done", count=len(routes))
+    #         return routes
+    #     except SQLAlchemyError:
+    #         _logger().debug("[get_approval_routes] DB error", exc_info=True)
+    #         return []
 
     # ------------------------------------------------------------------
-    # 업로드 레코드 생성
+    # DocumentInfo 레코드 생성 (컨트롤러 send_file_route에서 사용)
     # ------------------------------------------------------------------
     @staticmethod
     def create_upload_record(
@@ -241,14 +521,14 @@ class RepositoryEINK:
         device_id: Optional[str],
         orig_filename: str,
         stored_path: str,
-        target_dir: str,               # 'uploads' | 'in_review' | 'checked' | 'updates'
+        target_dir: str,  # 'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
         need_approval: bool,
-        status: str,                   # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected'
+        status: str,  # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
         pages: int = 1,
         width: Optional[int] = None,
         height: Optional[int] = None,
-        mode: Optional[str] = None,    # 'BW' | 'BWRY' | 'BWRYBG'
-        scale: Optional[str] = None,   # 'fit' | 'fill' | 'percent'
+        mode: Optional[str] = None,  # 'BW' | 'BWRY' | 'BWRYBG'
+        scale: Optional[str] = None,  # 'fit' | 'fill' | 'percent'
         percent: Optional[int] = None,
         rotate: Optional[int] = None,
         route_id: Optional[int] = None,
@@ -256,23 +536,40 @@ class RepositoryEINK:
         route_snapshot: Optional[Dict[str, Any]] = None,
         layout_snapshot: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        expire_time: Optional[datetime] = None,
+        final_doc_relpath: Optional[str] = None,
     ) -> int:
         """
-        uploads 테이블에 1건 생성.
-        - Enum 필드 값 검증을 가볍게 하고, 불일치 시 안전한 기본값으로 치환.
+        DocumentInfo 1건 생성.
+        - 현재는 BMP/메타 번들 기준으로 stored_path=bmp_path 를 저장하지만,
+          필드 구조는 정식 DocumentInfo 설계(원본/normalized.pdf/레이아웃 스냅샷)를 그대로 사용.
         - JSON 컬럼은 dict/list 그대로 저장.
         """
-        _dbg("create_upload_record:start", device_id=device_id, target_dir=target_dir, status=status,
-             width=width, height=height, mode=mode, scale=scale, percent=percent, rotate=rotate,
-             route_id=route_id, sign_layout_id=sign_layout_id)
-        row = UploadModel(
+        _dbg(
+            "create_upload_record:start",
+            device_id=device_id,
+            target_dir=target_dir,
+            status=status,
+            width=width,
+            height=height,
+            mode=mode,
+            scale=scale,
+            percent=percent,
+            rotate=rotate,
+            route_id=route_id,
+            sign_layout_id=sign_layout_id,
+        )
+        row = DocumentInfoModel(
             user_id=user_id,
-            device_id=device_id or None,
+            device_id=(device_id or None),
+            doc_name=orig_filename,  # 화면용 제목은 orig_filename으로 초기화
             orig_filename=orig_filename,
             stored_path=stored_path,
             target_dir=_coerce_target_dir(target_dir),
             need_approval=bool(need_approval),
+            need_stamp=False,
             status=_coerce_status(status),
+            expire_time=expire_time,
             pages=pages,
             width=width,
             height=height,
@@ -285,6 +582,7 @@ class RepositoryEINK:
             route_snapshot_json=_json_passthrough(route_snapshot),
             layout_snapshot_json=_json_passthrough(layout_snapshot),
             metadata_json=_json_passthrough(metadata),
+            final_doc_relpath=final_doc_relpath,
             created_at=now_kst(),
             updated_at=now_kst(),
         )
@@ -294,39 +592,49 @@ class RepositoryEINK:
             _dbg("create_upload_record:committed", upload_id=int(row.id))
             return int(row.id)
         except SQLAlchemyError as e:
-            _logger().debug("[create_upload_record] DB error, rollback", exc_info=True)
+            _logger().debug(
+                "[create_upload_record] DB error, rollback", exc_info=True
+            )
             db.session.rollback()
             raise e
 
     # ------------------------------------------------------------------
-    # 업로드 상태/디렉터리 업데이트
+    # DocumentInfo 상태/디렉터리 업데이트
     # ------------------------------------------------------------------
     @staticmethod
     def update_upload_status(
         upload_id: int,
         *,
-        status: Optional[str] = None,          # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected'
-        target_dir: Optional[str] = None,      # 'uploads' | 'in_review' | 'checked' | 'updates'
+        status: Optional[str] = None,  # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
+        target_dir: Optional[str] = None,  # 'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
         route_id: Optional[int] = None,
         sign_layout_id: Optional[int] = None,
         route_snapshot: Optional[Dict[str, Any]] = None,
         layout_snapshot: Optional[Dict[str, Any]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        expire_time: Optional[datetime] = None,
+        final_doc_relpath: Optional[str] = None,
     ) -> bool:
-        _dbg("update_upload_status:start", upload_id=upload_id, status=status, target_dir=target_dir,
-             route_id=route_id, sign_layout_id=sign_layout_id)
+        _dbg(
+            "update_upload_status:start",
+            upload_id=upload_id,
+            status=status,
+            target_dir=target_dir,
+            route_id=route_id,
+            sign_layout_id=sign_layout_id,
+        )
         if not upload_id:
             _dbg("update_upload_status:invalid_id")
             return False
         try:
-            row = db.session.get(UploadModel, upload_id)
+            row = db.session.get(DocumentInfoModel, upload_id)
             if not row:
                 _dbg("update_upload_status:not_found", upload_id=upload_id)
                 return False
 
-            if status in ('draft','in_review','checked','approved','rejected','uploads'):
+            if status in ("draft", "in_review", "checked", "approved", "rejected", "uploads"):
                 row.status = status
-            if target_dir in ('in_review','checked','approved','uploads'):
+            if target_dir in ("in_review", "checked", "approved", "uploads", "bulletin_files"):
                 row.target_dir = target_dir
             if route_id is not None:
                 row.route_id = route_id
@@ -338,52 +646,68 @@ class RepositoryEINK:
                 row.layout_snapshot_json = _json_passthrough(layout_snapshot)
             if metadata is not None:
                 row.metadata_json = _json_passthrough(metadata)
+            if expire_time is not None:
+                row.expire_time = expire_time
+            if final_doc_relpath is not None:
+                row.final_doc_relpath = final_doc_relpath
 
             row.updated_at = now_kst()
             db.session.commit()
-            _dbg("update_upload_status:committed", upload_id=upload_id,
-                 status=row.status, target_dir=row.target_dir)
+            _dbg(
+                "update_upload_status:committed",
+                upload_id=upload_id,
+                status=row.status,
+                target_dir=row.target_dir,
+            )
             return True
         except SQLAlchemyError:
-            _logger().debug("[update_upload_status] DB error, rollback", exc_info=True)
+            _logger().debug(
+                "[update_upload_status] DB error, rollback", exc_info=True
+            )
             db.session.rollback()
             return False
 
     # ------------------------------------------------------------------
-    # (옵션) 결재 단계 전진 헬퍼: in_review -> checked -> updates
+    # (옵션) 결재 단계 전진 헬퍼: in_review -> checked -> approved
     # ------------------------------------------------------------------
     @staticmethod
     def advance_upload_stage(upload_id: int, stage: str) -> bool:
         """
         stage:
-          - 'review'  : 검토 완료 → checked / status='checked'
-          - 'approve' : 승인 완료 → updates / status='approved'
+        - 'review'  : 검토 완료 → checked / status='checked'
+        - 'approve' : 승인 완료 → approved / status='approved'
         """
         _dbg("advance_upload_stage:start", upload_id=upload_id, stage=stage)
         stage = (stage or "").lower()
         try:
-            row = db.session.get(UploadModel, upload_id)
+            row = db.session.get(DocumentInfoModel, upload_id)
             if not row:
                 _dbg("advance_upload_stage:not_found", upload_id=upload_id)
                 return False
 
-            if stage == "in_review":
+            if stage == "review":
                 row.status = "checked"
                 row.target_dir = "checked"
             elif stage == "approve":
                 row.status = "approved"
-                row.target_dir = "updates"
+                row.target_dir = "approved"
             else:
                 _dbg("advance_upload_stage:invalid_stage", stage=stage)
                 return False
 
             row.updated_at = now_kst()
             db.session.commit()
-            _dbg("advance_upload_stage:committed", upload_id=upload_id,
-                 status=row.status, target_dir=row.target_dir)
+            _dbg(
+                "advance_upload_stage:committed",
+                upload_id=upload_id,
+                status=row.status,
+                target_dir=row.target_dir,
+            )
             return True
         except SQLAlchemyError:
-            _logger().debug("[advance_upload_stage] DB error, rollback", exc_info=True)
+            _logger().debug(
+                "[advance_upload_stage] DB error, rollback", exc_info=True
+            )
             db.session.rollback()
             return False
 
@@ -405,65 +729,78 @@ class RepositoryEINK:
     # ------------------------------------------------------------------
     # 결재 라우트 생성 (ApprovalRoute + ApprovalRouteStep[])
     # ------------------------------------------------------------------
-    @staticmethod
-    def create_approval_route(
-        *,
-        name: str,
-        created_by: Optional[int],
-        steps: List[Dict[str, Any]],  # [{step_order, role, assignee_user_id, sign_required(True/False), assignee_group_id(optional)}]
-    ) -> int:
-        """
-        예:
-          steps = [
-            {"step_order":1, "role":"review",  "assignee_user_id":101, "sign_required":True},
-            {"step_order":2, "role":"approve", "assignee_user_id":202, "sign_required":True},
-          ]
-        role은 'author' | 'review' | 'approve' | 'review2' | 'approve2'
-        """
-        _dbg("create_approval_route:start", name=name, created_by=created_by, steps=_dump_json(steps, 400))
-        route = ApprovalRouteModel(
-            name=name,
-            created_by=created_by,
-            created_at=now_kst(),
-        )
-        try:
-            db.session.add(route)
-            db.session.flush()  # route.id 확보
+    # @staticmethod
+    # def create_approval_route(
+    #     *,
+    #     name: str,
+    #     created_by: Optional[int],
+    #     steps: List[Dict[str, Any]],
+    # ) -> int:
+    #     """
+    #     예:
+    #       steps = [
+    #         {"step_order":1, "role":"review",  "assignee_user_id":101, "sign_required":True},
+    #         {"step_order":2, "role":"approve", "assignee_user_id":202, "sign_required":True},
+    #       ]
+    #     role은 'author' | 'review' | 'approve' | 'review2' | 'approve2'
+    #     """
+    #     _dbg(
+    #         "create_approval_route:start",
+    #         name=name,
+    #         created_by=created_by,
+    #         steps=_dump_json(steps, 400),
+    #     )
+    #     route = ApprovalRouteModel(
+    #         name=name,
+    #         created_by=created_by,
+    #         created_at=now_kst(),
+    #     )
+    #     try:
+    #         db.session.add(route)
+    #         db.session.flush()  # route.id 확보
 
-            normalized = []
-            for st in steps or []:
-                role = st.get("role")
-                if not _role_is_valid(role):
-                    _dbg("create_approval_route:skip_invalid_role", role=role)
-                    continue
-                normalized.append({
-                    "step_order": int(st.get("step_order", 0)),
-                    "role": role,
-                    "assignee_user_id": st.get("assignee_user_id"),
-                    "assignee_group_id": st.get("assignee_group_id"),
-                    "sign_required": bool(st.get("sign_required", True)),
-                })
-            normalized.sort(key=lambda x: x["step_order"] or 0)
-            _dbg("create_approval_route:normalized", steps=normalized)
+    #         normalized: List[Dict[str, Any]] = []
+    #         for st in steps or []:
+    #             role = st.get("role")
+    #             if not _role_is_valid(role):
+    #                 _dbg("create_approval_route:skip_invalid_role", role=role)
+    #                 continue
+    #             normalized.append(
+    #                 {
+    #                     "step_order": int(st.get("step_order", 0)),
+    #                     "role": role,
+    #                     "assignee_user_id": st.get("assignee_user_id"),
+    #                     "assignee_group_id": st.get("assignee_group_id"),
+    #                     "sign_required": bool(st.get("sign_required", True)),
+    #                 }
+    #             )
+    #         normalized.sort(key=lambda x: x["step_order"] or 0)
+    #         _dbg("create_approval_route:normalized", steps=normalized)
 
-            for i, st in enumerate(normalized, start=1):
-                row = ApprovalRouteStepModel(
-                    route_id=route.id,
-                    step_order=i,
-                    role=st["role"],
-                    assignee_user_id=st["assignee_user_id"],
-                    assignee_group_id=st["assignee_group_id"],
-                    sign_required=st["sign_required"],
-                )
-                db.session.add(row)
+    #         for i, st in enumerate(normalized, start=1):
+    #             row = ApprovalRouteStepModel(
+    #                 route_id=route.id,
+    #                 step_order=i,
+    #                 role=st["role"],
+    #                 assignee_user_id=st["assignee_user_id"],
+    #                 assignee_group_id=st["assignee_group_id"],
+    #                 sign_required=st["sign_required"],
+    #             )
+    #             db.session.add(row)
 
-            db.session.commit()
-            _dbg("create_approval_route:committed", route_id=int(route.id), step_count=len(normalized))
-            return int(route.id)
-        except SQLAlchemyError as e:
-            _logger().debug("[create_approval_route] DB error, rollback", exc_info=True)
-            db.session.rollback()
-            raise e
+    #         db.session.commit()
+    #         _dbg(
+    #             "create_approval_route:committed",
+    #             route_id=int(route.id),
+    #             step_count=len(normalized),
+    #         )
+    #         return int(route.id)
+    #     except SQLAlchemyError as e:
+    #         _logger().debug(
+    #             "[create_approval_route] DB error, rollback", exc_info=True
+    #         )
+    #         db.session.rollback()
+    #         raise e
 
     # ------------------------------------------------------------------
     # 레이아웃 저장 (SignLayout INSERT – 버전업 개념으로 누적 저장 권장)
@@ -475,18 +812,24 @@ class RepositoryEINK:
         owner_user_id: Optional[int],
         canvas_w: int,
         canvas_h: int,
-        parent_box: Dict[str, int],     # {x,y,w,h}
+        parent_box: Dict[str, int],  # {x,y,w,h}
         tpl_json: Dict[str, Any],
-        slots_json: List[Dict[str, Any]],
-        layers_json: Optional[Dict[str, Any]] = None,
+        slots_json: Dict[str, Any],      # ✅ dict 로 수정
+        layers_json: Optional[List[Dict[str, Any]]] = None,  # ✅ list 로 수정
         version: int = 1,
     ) -> int:
         """
         프론트의 layout 스냅샷을 DB형식에 맞춰 저장.
         - parent_box는 절대좌표(BASE 1200x1600 기준)여야 함.
         """
-        _dbg("insert_sign_layout:start", name=name, owner_user_id=owner_user_id,
-             canvas=f"{canvas_w}x{canvas_h}", parent_box=parent_box, version=version)
+        _dbg(
+            "insert_sign_layout:start",
+            name=name,
+            owner_user_id=owner_user_id,
+            canvas=f"{canvas_w}x{canvas_h}",
+            parent_box=parent_box,
+            version=version,
+        )
         row = SignLayoutModel(
             name=name,
             owner_user_id=owner_user_id,
@@ -497,8 +840,8 @@ class RepositoryEINK:
             parent_w=int(parent_box.get("w", 0)),
             parent_h=int(parent_box.get("h", 0)),
             tpl_json=_json_passthrough(tpl_json or {}),
-            slots_json=_json_passthrough(slots_json or []),
-            layers_json=_json_passthrough(layers_json or {}),
+            slots_json=_json_passthrough(slots_json or {}),      # ✅ dict 기본값
+            layers_json=_json_passthrough(layers_json or []),    # ✅ list 기본값
             version=int(version),
             created_at=now_kst(),
             updated_at=now_kst(),
@@ -509,7 +852,9 @@ class RepositoryEINK:
             _dbg("insert_sign_layout:committed", sign_layout_id=int(row.id))
             return int(row.id)
         except SQLAlchemyError as e:
-            _logger().debug("[insert_sign_layout] DB error, rollback", exc_info=True)
+            _logger().debug(
+                "[insert_sign_layout] DB error, rollback", exc_info=True
+            )
             db.session.rollback()
             raise e
 
@@ -534,7 +879,12 @@ class RepositoryEINK:
                 "name": row.name,
                 "canvas_w": row.canvas_w,
                 "canvas_h": row.canvas_h,
-                "parent": {"x": row.parent_x, "y": row.parent_y, "w": row.parent_w, "h": row.parent_h},
+                "parent": {
+                    "x": row.parent_x,
+                    "y": row.parent_y,
+                    "w": row.parent_w,
+                    "h": row.parent_h,
+                },
                 "tpl_json": row.tpl_json,
                 "slots_json": row.slots_json,
                 "layers_json": row.layers_json,
@@ -543,65 +893,105 @@ class RepositoryEINK:
                 "created_at": row.created_at,
                 "updated_at": row.updated_at,
             }
-            _dbg("get_latest_sign_layout_by_name:done", sign_layout_id=row.id, version=row.version)
+            _dbg(
+                "get_latest_sign_layout_by_name:done",
+                sign_layout_id=row.id,
+                version=row.version,
+            )
             return out
         except SQLAlchemyError:
-            _logger().debug("[get_latest_sign_layout_by_name] DB error", exc_info=True)
+            _logger().debug(
+                "[get_latest_sign_layout_by_name] DB error", exc_info=True
+            )
             return None
 
     # ------------------------------------------------------------------
-    # 업로드 1건 상세 조회 (스냅샷 포함) – 필요 시 사용
+    # DocumentInfo 1건 상세 조회 (스냅샷 포함)
     # ------------------------------------------------------------------
     @staticmethod
-    def get_upload(upload_id: int) -> Optional[UploadModel]:
+    def get_upload(upload_id: int) -> Optional[DocumentInfoModel]:
         _dbg("get_upload:start", upload_id=upload_id)
         try:
-            row = db.session.get(UploadModel, upload_id)
+            row = db.session.get(DocumentInfoModel, upload_id)
             _dbg("get_upload:done", found=bool(row))
             return row
         except SQLAlchemyError:
             _logger().debug("[get_upload] DB error", exc_info=True)
             return None
 
+    # ------------------------------------------------------------------
+    # 결재 대기 문서 1건 조회 (구/신 metadata 구조 모두 지원 시도)
+    # ------------------------------------------------------------------
     @staticmethod
     def get_latest_pending_for_user(*, userid: str) -> Optional[Dict[str, Any]]:
         """
-        userid가 검토(review) 또는 승인(approve) 담당인 최신 1건 리턴.
-        DB status는 'in_review' 또는 'checked'를 대상으로 검색.
-        target_dir는 'in_review' 또는 'checked'가 정상.
+        userid가 결재 대상인 최신 DocumentInfo 1건 리턴.
+        - 상태: status in ('in_review', 'checked') AND target_dir in ('in_review', 'checked')
+        - metadata_json.assignees 구조는 2가지 케이스를 지원:
+          1) 구형: {"review": "njsk2006", "approve": "njsk2003"}
+          2) 신형: {"draft":[{...}], "check":[{...}]}
         """
         _dbg("get_latest_pending_for_user:start", userid=userid)
         try:
             q = (
-                db.session.query(UploadModel)
-                .filter(UploadModel.status.in_(["in_review", "checked"]))
-                .filter(UploadModel.target_dir.in_(["in_review", "checked"]))
-                .order_by(desc(UploadModel.id))
+                db.session.query(DocumentInfoModel)
+                .filter(DocumentInfoModel.status.in_(["in_review", "checked"]))
+                .filter(DocumentInfoModel.target_dir.in_(["in_review", "checked"]))
+                .order_by(desc(DocumentInfoModel.id))
             )
             rows = q.all()
             for row in rows:
-                assignees = None
+                assignees_raw: Dict[str, Any] = {}
                 try:
                     md = row.metadata_json or {}
-                    assignees = (md.get("assignees") or {}) if isinstance(md, dict) else {}
+                    if isinstance(md, dict):
+                        assignees_raw = md.get("assignees") or {}
                 except Exception:
-                    assignees = {}
+                    assignees_raw = {}
 
-                is_review = (
-                    row.status == "in_review" 
-                    and row.target_dir == "in_review" 
-                    and assignees.get("review") == userid
-                    )  
-                #uploads table의 metadata_json에는 {"assignees": {"review": "njsk2006", "approve": "njsk2003"}}게 review로 저장되기 때문에 assignees.get("review") == userid 작성 필요
-                is_approve = (
-                    row.status == "checked" 
-                    and row.target_dir == "checked" 
-                    and assignees.get("approve") == userid
+                is_review = False
+                is_approve = False
+
+                # 1) 구형: {"review": "userid", "approve": "userid"}
+                if isinstance(assignees_raw, dict) and (
+                    isinstance(assignees_raw.get("review"), str)
+                    or isinstance(assignees_raw.get("approve"), str)
+                ):
+                    is_review = (
+                        row.status == "in_review"
+                        and row.target_dir == "in_review"
+                        and assignees_raw.get("review") == userid
                     )
+                    is_approve = (
+                        row.status == "checked"
+                        and row.target_dir == "checked"
+                        and assignees_raw.get("approve") == userid
+                    )
+                else:
+                    # 2) 신형: {"draft":[{userid/...}], "check":[{userid/...}]}
+                    try:
+                        draft_list = assignees_raw.get("draft") or []
+                        check_list = assignees_raw.get("check") or []
+                        if isinstance(draft_list, list) and row.status == "in_review":
+                            for a in draft_list:
+                                if not isinstance(a, dict):
+                                    continue
+                                if a.get("userid") == userid or a.get("user_id") == userid:
+                                    is_review = True
+                                    break
+                        if isinstance(check_list, list) and row.status == "checked":
+                            for a in check_list:
+                                if not isinstance(a, dict):
+                                    continue
+                                if a.get("userid") == userid or a.get("user_id") == userid:
+                                    is_approve = True
+                                    break
+                    except Exception:
+                        pass
+
                 if not (is_review or is_approve):
                     continue
 
-                # 메타 파일 경로 추정 (같은 폴더, 같은 베이스명)
                 stored_path = row.stored_path or ""
                 base = os.path.splitext(os.path.basename(stored_path))[0]
                 meta_name = base + ".meta.json"
@@ -613,7 +1003,7 @@ class RepositoryEINK:
                     "stored_path": stored_path,
                     "target_dir": row.target_dir,
                     "status": row.status,
-                    "assignees": assignees,
+                    "assignees": assignees_raw,
                     "meta_path": meta_path if os.path.isfile(meta_path) else None,
                     "width": row.width or 1200,
                     "height": row.height or 1600,
@@ -623,7 +1013,9 @@ class RepositoryEINK:
             _dbg("get_latest_pending_for_user:none")
             return None
         except SQLAlchemyError:
-            _logger().debug("[get_latest_pending_for_user] DB error", exc_info=True)
+            _logger().debug(
+                "[get_latest_pending_for_user] DB error", exc_info=True
+            )
             return None
 
     @staticmethod
@@ -635,14 +1027,18 @@ class RepositoryEINK:
             _dbg("get_user_sign_path_by_userid:done", exists=bool(path), path=path)
             return path
         except SQLAlchemyError:
-            _logger().debug("[get_user_sign_path_by_userid] DB error", exc_info=True)
+            _logger().debug(
+                "[get_user_sign_path_by_userid] DB error", exc_info=True
+            )
             return None
 
-
+    # ------------------------------------------------------------------
+    # meta(.meta.json) → DocumentInfo.layout_snapshot_json 조회
+    # ------------------------------------------------------------------
     @staticmethod
     def get_layout_snapshot_by_meta(meta_path: str) -> Optional[Dict[str, Any]]:
         """
-        meta의 bmp 베이스파일명으로 uploads 레코드를 추정해 layout_snapshot_json 반환.
+        meta의 bmp 베이스파일명으로 DocumentInfo 레코드를 추정해 layout_snapshot_json 반환.
         """
         _dbg("get_layout_snapshot_by_meta:start", meta_path=meta_path)
         try:
@@ -653,49 +1049,77 @@ class RepositoryEINK:
             bmp_name = js.get("file")  # 예: E01_1200x1600_BWRYBG.bmp
             if not bmp_name:
                 return None
-            # stored_path LIKE %bmp_name
             q = (
-                db.session.query(UploadModel)
-                .filter(UploadModel.stored_path.like(f"%{bmp_name}"))
-                .order_by(desc(UploadModel.id))
+                db.session.query(DocumentInfoModel)
+                .filter(DocumentInfoModel.stored_path.like(f"%{bmp_name}"))
+                .order_by(desc(DocumentInfoModel.id))
             )
             row = q.first()
             if not row:
-                _dbg("get_layout_snapshot_by_meta:not_found_by_name", bmp_name=bmp_name)
+                _dbg(
+                    "get_layout_snapshot_by_meta:not_found_by_name",
+                    bmp_name=bmp_name,
+                )
                 return None
             snap = row.layout_snapshot_json
-            _dbg("get_layout_snapshot_by_meta:done", has=bool(snap))
+            _dbg(
+                "get_layout_snapshot_by_meta:done",
+                has=bool(snap),
+                upload_id=int(row.id),
+            )
             return snap if isinstance(snap, dict) else None
         except Exception:
-            _logger().debug("[get_layout_snapshot_by_meta] error", exc_info=True)
+            _logger().debug(
+                "[get_layout_snapshot_by_meta] error", exc_info=True
+            )
             return None
 
-
+    # ------------------------------------------------------------------
+    # meta 기반으로 DocumentInfo 상태/디렉터리/stored_path 갱신
+    # ------------------------------------------------------------------
     @staticmethod
-    def update_upload_status_by_meta(*, old_meta_path: str, new_dir: str, new_status: str, note: Optional[str] = None) -> bool:
+    def update_upload_status_by_meta(
+        *, old_meta_path: str, new_dir: str, new_status: str, note: Optional[str] = None
+    ) -> bool:
         """
-        파일 번들을 이동한 뒤, 해당 건의 DB status/dir/stored_path 갱신.
-        - new_dir: 'uploads' | 'in_review' | 'checked' | 'updates'
-        - new_status: 'in_review' | 'checked' | 'approved' | 'rejected' | 'draft'
-        - old_meta_path: 이동 전/후 어느 쪽이든 OK (아래에서 새 경로를 추정해본다)
+        파일 번들을 이동한 뒤, 해당 건의 DocumentInfo.status/target_dir/stored_path 갱신.
+        - new_dir:
+            'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
+        - new_status:
+            'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
+        - old_meta_path: 이동 전/후 어느 쪽이든 OK (아래에서 새 경로를 추정)
         """
-        _dbg("update_upload_status_by_meta:start", old_meta_path=old_meta_path, new_dir=new_dir, new_status=new_status)
+        _dbg(
+            "update_upload_status_by_meta:start",
+            old_meta_path=old_meta_path,
+            new_dir=new_dir,
+            new_status=new_status,
+        )
         try:
             meta_path = old_meta_path
 
-            # 1) 옛 경로가 이미 이동되어 없을 수 있으므로, 새 위치를 추정해본다.
+            # 1) 옛 경로가 이미 이동되어 없을 수 있으므로, 새 위치를 추정
             if not (meta_path and os.path.isfile(meta_path)):
                 try:
-                    base_dir = os.path.dirname(os.path.dirname(old_meta_path))  # D:/bmp_files
-                    guess = os.path.join(base_dir, new_dir, os.path.basename(old_meta_path))
+                    base_dir = os.path.dirname(os.path.dirname(old_meta_path))  # root
+                    guess = os.path.join(
+                        base_dir, new_dir, os.path.basename(old_meta_path)
+                    )
                     if os.path.isfile(guess):
                         meta_path = guess
-                        _dbg("update_upload_status_by_meta:resolved_new_meta_path", meta_path=meta_path)
+                        _dbg(
+                            "update_upload_status_by_meta:resolved_new_meta_path",
+                            meta_path=meta_path,
+                        )
                     else:
-                        _dbg("update_upload_status_by_meta:meta_missing", tried=guess)
+                        _dbg(
+                            "update_upload_status_by_meta:meta_missing", tried=guess
+                        )
                         return False
                 except Exception:
-                    _dbg("update_upload_status_by_meta:meta_missing_unresolvable")
+                    _dbg(
+                        "update_upload_status_by_meta:meta_missing_unresolvable",
+                    )
                     return False
 
             # 2) 메타 열고 BMP 파일명 획득
@@ -706,11 +1130,11 @@ class RepositoryEINK:
                 _dbg("update_upload_status_by_meta:no_bmp_name")
                 return False
 
-            # 3) BMP 파일명으로 uploads 레코드를 역추적 (디렉터리 변동과 무관하게 매칭)
+            # 3) BMP 파일명으로 DocumentInfo 레코드를 역추적
             q = (
-                db.session.query(UploadModel)
-                .filter(UploadModel.stored_path.like(f"%{bmp_name}"))
-                .order_by(desc(UploadModel.id))
+                db.session.query(DocumentInfoModel)
+                .filter(DocumentInfoModel.stored_path.like(f"%{bmp_name}"))
+                .order_by(desc(DocumentInfoModel.id))
             )
             row = q.first()
             if not row:
@@ -718,13 +1142,27 @@ class RepositoryEINK:
                 return False
 
             # 4) 상태/디렉터리 갱신
-            if new_status in ("draft", "in_review", "checked", "approved", "rejected"):
+            if new_status in (
+                "draft",
+                "in_review",
+                "checked",
+                "approved",
+                "rejected",
+                "uploads",
+            ):
                 row.status = new_status
-            if new_dir in ("uploads", "in_review", "checked", "updates"):
+
+            if new_dir in (
+                "uploads",
+                "in_review",
+                "checked",
+                "approved",
+                "bulletin_files",
+            ):
                 row.target_dir = new_dir
 
             # 5) stored_path도 이동 후 실제 경로로 동기화
-            root = os.path.dirname(os.path.dirname(meta_path))  # D:/bmp_files
+            root = os.path.dirname(os.path.dirname(meta_path))  # root
             new_bmp_path = os.path.join(root, new_dir, bmp_name)
             row.stored_path = new_bmp_path
 
@@ -732,22 +1170,32 @@ class RepositoryEINK:
             meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
             if note:
                 logs = meta.get("notes", [])
-                ts = now_kst().isoformat() if hasattr(now_kst(), "isoformat") else str(now_kst())
+                ts = (
+                    now_kst().isoformat()
+                    if hasattr(now_kst(), "isoformat")
+                    else str(now_kst())
+                )
                 logs.append({"ts": ts, "note": note})
                 meta["notes"] = logs
             row.metadata_json = meta
 
             row.updated_at = now_kst()
             db.session.commit()
-            _dbg("update_upload_status_by_meta:committed",
-                upload_id=int(row.id), status=row.status, dir=row.target_dir, stored_path=row.stored_path)
+            _dbg(
+                "update_upload_status_by_meta:committed",
+                upload_id=int(row.id),
+                status=row.status,
+                dir=row.target_dir,
+                stored_path=row.stored_path,
+            )
             return True
 
         except SQLAlchemyError:
-            _logger().debug("[update_upload_status_by_meta] DB error", exc_info=True)
+            _logger().debug(
+                "[update_upload_status_by_meta] DB error", exc_info=True
+            )
             db.session.rollback()
             return False
-
 
     # ===== USERID별 디바이스 등록 =====
     @staticmethod
@@ -764,15 +1212,21 @@ class RepositoryEINK:
         supports_zlib: bool = True,
     ) -> int:
         """
-        (1) 클라이언트/관리자에서 호출: 특정 사용자(user_no)에게 device_id를 등록/갱신.
-            - 옵션 A 설계: FK는 user_no 한 가닥만 유지
-            - user_userid(캐시)는 User 조인으로 채워줌 (경로 생성 시 사용)
-            - (user_no, device_id) UNIQUE 제약 준수
-
-        반환: upsert 된 EInkDevice.id
+        (1) 특정 사용자(user_no)에게 device_id를 등록/갱신.
+        - (user_no, device_id) UNIQUE 제약 준수
+        - 경로 생성 용도로 user_userid 캐시 사용
         """
-        _dbg("upsert_device_for_user:start",
-             user_no=user_no, device_id=device_id, panel_res=panel_res, cap=cap, bpp=bpp)
+        if EInkDevice is None:
+            raise RuntimeError("EInkDevice 모델이 정의되어 있지 않습니다.")
+
+        _dbg(
+            "upsert_device_for_user:start",
+            user_no=user_no,
+            device_id=device_id,
+            panel_res=panel_res,
+            cap=cap,
+            bpp=bpp,
+        )
 
         if not user_no or not device_id or not panel_res:
             raise ValueError("user_no, device_id, panel_res 는 필수입니다.")
@@ -788,8 +1242,10 @@ class RepositoryEINK:
             # 2) (user_no, device_id)로 기존 행 조회
             row = (
                 db.session.query(EInkDevice)
-                .filter(EInkDevice.user_no == user_no,
-                        EInkDevice.device_id == device_id)
+                .filter(
+                    EInkDevice.user_no == user_no,
+                    EInkDevice.device_id == device_id,
+                )
                 .first()
             )
 
@@ -815,7 +1271,7 @@ class RepositoryEINK:
             # === INSERT 경로 ===
             row = EInkDevice(
                 user_no=int(user_no),
-                user_userid=userid_cache,   # ★ 옵션 A: 경로 생성을 위해 캐시
+                user_userid=userid_cache,
                 device_id=device_id.strip(),
                 device_name=(device_name or None),
                 panel_res=panel_res.strip(),
@@ -847,12 +1303,18 @@ class RepositoryEINK:
         last_seen_ts=None,
     ) -> bool:
         """
-        (2) 디바이스 폴링(/device/info, /device/bmp 성공 등) 시 상태 갱신:
-            - current_ver, last_seen 업데이트 (부분 업데이트 허용)
-            - device_id 는 전역 유니크가 아닐 수 있으므로 "최근 등록된" 1건 기준으로 갱신
-              (필요시 user_no 컨텍스트를 받아 더 좁혀도 됨)
+        디바이스가 폴링될 때 상태 갱신:
+          - current_ver, last_seen 업데이트
+          - device_id 는 전역 유니크가 아닐 수 있으므로 "최근 등록된" 1건 기준으로 갱신
         """
-        _dbg("touch_device_seen_and_version:start", device_id=device_id, new_ver=new_version)
+        if EInkDevice is None:
+            return False
+
+        _dbg(
+            "touch_device_seen_and_version:start",
+            device_id=device_id,
+            new_ver=new_version,
+        )
 
         try:
             q = (
@@ -862,7 +1324,9 @@ class RepositoryEINK:
             )
             row = q.first()
             if not row:
-                _dbg("touch_device_seen_and_version:not_found", device_id=device_id)
+                _dbg(
+                    "touch_device_seen_and_version:not_found", device_id=device_id
+                )
                 return False
 
             if new_version is not None:
@@ -871,11 +1335,14 @@ class RepositoryEINK:
                 except Exception:
                     pass
 
-            # last_seen 기본값: now_kst()
             row.last_seen = last_seen_ts or now_kst()
             row.updated_at = now_kst()
             db.session.commit()
-            _dbg("touch_device_seen_and_version:done", id=row.id, current_ver=row.current_ver)
+            _dbg(
+                "touch_device_seen_and_version:done",
+                id=row.id,
+                current_ver=row.current_ver,
+            )
             return True
 
         except Exception:
@@ -891,6 +1358,9 @@ class RepositoryEINK:
           1) 캐시 컬럼(EInkDevice.user_userid)이 있으면 그대로 사용
           2) 없으면 user_no로 User 조인하여 userid 획득
         """
+        if EInkDevice is None:
+            return None
+
         _dbg("get_userid_by_device_id:start", device_id=device_id)
         try:
             row = (
@@ -911,3 +1381,304 @@ class RepositoryEINK:
         except Exception:
             _logger().debug("[get_userid_by_device_id] error", exc_info=True)
             return None
+
+
+    @staticmethod
+    def create_doc_approval_steps_from_layout(
+        *,
+        document_info_id: int,
+        tpl_json: Dict[str, Any],
+    ) -> None:
+        """
+        tpl_json["approval_box"]["columns"] 를 기준으로
+        DocumentApprovalStep 행들을 생성.
+        """
+        box = (tpl_json or {}).get("approval_box") or {}
+        cols = box.get("columns") or []
+        if not isinstance(cols, list):
+            _dbg("create_doc_approval_steps_from_layout:no_columns")
+            return
+
+        for idx, col in enumerate(cols, start=1):
+            step_type = col.get("role")  # '작성','검토','승인' 등
+            if step_type not in ("작성", "검토", "승인"):
+                continue
+
+            dept = col.get("dept") or ""
+            userid = col.get("user_id") or ""
+            username = col.get("user_name") or ""
+
+            row = DocumentApprovalStepModel(
+                document_info_id=document_info_id,
+                col_index=idx,             # 1..5
+                step_type=step_type,       # Enum('작성','검토','승인')
+                dept_snapshot=dept,
+                userid_snapshot=userid,
+                username_snapshot=username,
+                photo_1_snapshot=None,     # 필요시 User 조회해서 채워도 됨
+                status="pending",
+            )
+            db.session.add(row)
+
+        db.session.commit()
+        _dbg(
+            "create_doc_approval_steps_from_layout:done",
+            document_info_id=document_info_id,
+            count=len(cols),
+        )
+        
+
+    @staticmethod
+    def create_sign_slots_from_layout(
+        *,
+        document_info_id: int,
+        tpl_json: Dict[str, Any],
+        slots_json: Dict[str, Any],
+    ) -> None:
+        """
+        approval_box + slots_json을 이용해 SignSlot 좌표/타겟을 생성.
+        (1차 버전: approval 칼럼만 체크 박스라고 가정)
+        """
+        approval_slot_cfg = (slots_json or {}).get("approval") or {}
+        # 나중에 mode, label, target_user_id 등 확장 가능
+        box = (tpl_json or {}).get("approval_box") or {}
+        cols = box.get("columns") or []
+        if not isinstance(cols, list) or not cols:
+            _dbg("create_sign_slots_from_layout:no_columns")
+            return
+
+        parent_x = int(box.get("x", 0))
+        parent_y = int(box.get("y", 0))
+        parent_w = int(box.get("w", 0))
+        parent_h = int(box.get("h", 0))
+        n = len(cols)
+        if n <= 0 or parent_w <= 0:
+            return
+
+        col_w = parent_w // n
+
+        for idx, col in enumerate(cols):
+            slot_key = col.get("id") or f"APP-COL-{idx+1}"
+            userid = col.get("user_id")  # "njsk2002" 같은 문자열
+
+            # 사용자 FK를 걸고 싶으면 User.userid → User.no 조회
+            target_user_id = None
+            if userid:
+                u = db.session.query(User).filter(User.userid == userid).first()
+                if u:
+                    target_user_id = u.no
+
+            x = parent_x + col_w * idx
+            y = parent_y
+            w = col_w
+            h = parent_h
+
+            slot = SignSlotModel(
+                document_info_id=document_info_id,
+                slot_key=slot_key,
+                mode="check",      # 기본값: 체크박스. 나중에 photo로 구분 가능.
+                target_user_id=target_user_id,
+                label=col.get("role") or "",
+                x=x,
+                y=y,
+                w=w,
+                h=h,
+                filled=False,
+            )
+            db.session.add(slot)
+
+        db.session.commit()
+        _dbg(
+            "create_sign_slots_from_layout:done",
+            document_info_id=document_info_id,
+            count=len(cols),
+        )
+
+
+
+    # ─────────────────────────────
+    # 공통 필터 헬퍼
+    # ─────────────────────────────
+    @staticmethod
+    def _apply_common_filters(
+        query,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+    ):
+        """
+        search      : 문서명/원본파일명 LIKE 검색
+        status      : DocumentInfo.status (draft/in_review/...)
+        date_from   : 작성일 시작 (YYYY-MM-DD)
+        date_to     : 작성일 끝   (YYYY-MM-DD)
+        """
+        if search:
+            like = f"%{search.strip()}%"
+            query = query.filter(
+                or_(
+                    DocumentInfoModel.doc_name.ilike(like),
+                    DocumentInfoModel.orig_filename.ilike(like),
+                )
+            )
+
+        if status and status != "all":
+            query = query.filter(DocumentInfoModel.status == status)
+
+        def _parse_date(s: str) -> Optional[datetime]:
+            try:
+                return datetime.strptime(s, "%Y-%m-%d")
+            except Exception:
+                return None
+
+        dt_from = _parse_date(date_from) if date_from else None
+        dt_to = _parse_date(date_to) if date_to else None
+
+        if dt_from:
+            query = query.filter(DocumentInfoModel.created_at >= dt_from)
+        if dt_to:
+            # dt_to 의 하루 끝까지 포함시키고 싶으면 +1일로 처리해도 됨
+            query = query.filter(DocumentInfoModel.created_at <= dt_to)
+
+        return query.order_by(DocumentInfoModel.created_at.desc())
+
+    # ─────────────────────────────
+    # Tab 1: 결재작성문서 (내가 작성자)
+    # ─────────────────────────────
+    @staticmethod
+    def list_author_documents(
+        user_id: int,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[DocumentInfoModel]:
+        q = (
+            DocumentInfoModel.query
+            .options(joinedload(DocumentInfoModel.approval_steps))
+            .filter(DocumentInfoModel.user_id == user_id)
+        )
+        q = RepositoryEINK._apply_common_filters(q, search, status, date_from, date_to)
+        return q.limit(limit).all()
+
+    # ─────────────────────────────
+    # Tab 2: 결재대기 (내가 검토/승인 등 해야 할 문서)
+    #  - SignSlot.target_user_id == me AND filled == False 기준
+    # ─────────────────────────────
+    @staticmethod
+    def list_my_pending_documents(
+        user_id: int,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[Tuple[DocumentInfoModel, SignSlotModel]]:
+        """
+        반환: [(DocumentInfoModel, SignSlotModel), ...]
+          - SignSlotModel.label 로 '내 역할' 표시 가능
+        """
+        q = (
+            db.session.query(DocumentInfoModel, SignSlotModel)
+            .join(SignSlotModel, SignSlotModel.document_info_id == DocumentInfoModel.id)
+            .options(joinedload(DocumentInfoModel.approval_steps))
+            .filter(
+                SignSlotModel.target_user_id == user_id,
+                SignSlotModel.filled == False,  # 아직 체크/서명 안된 슬롯
+                DocumentInfoModel.status.in_(["in_review", "checked"]),
+            )
+        )
+
+        # DocumentInfoModel 기준 공통 필터 적용
+        q = RepositoryEINK._apply_common_filters(
+            q,
+            search=search,
+            status=status,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+        return q.limit(limit).all()
+
+
+    # ─────────────────────────────
+    # Tab 3: 결재진행사항
+    #  - 내가 작성 OR 내가 결재에 참여한 문서
+    # ─────────────────────────────
+    @staticmethod
+    def list_my_progress_documents(
+        user_id: int,
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[DocumentInfoModel]:
+        q = (
+            DocumentInfoModel.query
+            .outerjoin(
+                DocumentApprovalStepModel,
+                DocumentApprovalStepModel.document_info_id == DocumentInfoModel.id,
+            )
+            .options(joinedload(DocumentInfoModel.approval_steps))
+            .filter(
+                or_(
+                    DocumentInfoModel.user_id == user_id,                 # 내가 작성한 문서
+                    DocumentApprovalStepModel.signed_by_user_id == user_id,  # 내가 결재한 문서
+                ),
+                DocumentInfoModel.status.in_(
+                    ["in_review", "checked", "approved", "rejected"]
+                ),
+            )
+        )
+
+        q = RepositoryEINK._apply_common_filters(
+            q, search=search, status=status, date_from=date_from, date_to=date_to
+        )
+        q = q.distinct(DocumentInfoModel.id)  # 중복 제거
+
+        return q.limit(limit).all()
+
+
+    # ─────────────────────────────
+    # Tab 4: 결재완료
+    #  - status=='approved' AND (내가 작성 OR 내가 결재 참여)
+    # ─────────────────────────────
+    # ─────────────────────────────
+    # Tab 4: 결재완료
+    #  - status=='approved' AND (내가 작성 OR 내가 결재 참여)
+    # ─────────────────────────────
+    @staticmethod
+    def list_my_completed_documents(
+        user_id: int,
+        search: Optional[str] = None,
+        status: Optional[str] = None,  # 기본은 무시하고 approved로 강제
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[DocumentInfoModel]:
+        q = (
+            DocumentInfoModel.query
+            .outerjoin(
+                DocumentApprovalStepModel,
+                DocumentApprovalStepModel.document_info_id == DocumentInfoModel.id,
+            )
+            .options(joinedload(DocumentInfoModel.approval_steps))
+            .filter(
+                DocumentInfoModel.status == "approved",
+                or_(
+                    DocumentInfoModel.user_id == user_id,
+                    DocumentApprovalStepModel.signed_by_user_id == user_id,
+                ),
+            )
+        )
+
+        # status 인자는 무시하고 나머지 필터만 적용
+        q = RepositoryEINK._apply_common_filters(
+            q, search=search, status=None, date_from=date_from, date_to=date_to
+        )
+        q = q.distinct(DocumentInfoModel.id)
+
+        return q.limit(limit).all()
+
