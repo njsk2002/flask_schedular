@@ -1,6 +1,15 @@
 <body>
     <header class="blog-header">
-        <a class="blog-header-logo text-dark text-decoration-none" href="#">ICE Sense</a>
+        <a class="blog-header-logo text-dark text-decoration-none d-flex align-items-center"
+        href="#">
+            <!-- 로고 이미지 -->
+            <img src="{{ url_for('static', filename='images/ICEense.png') }}"
+                alt="ICEnse 로고"
+                class="iceense-logo me-2">
+
+            <!-- 로고 옆 텍스트 -->
+            <span>ICEense</span>
+        </a>
         <div class="blog-header-right">
            
             <!-- <button id="loginBtn" class="login-btn" onclick="toggleLogin()">Login</button> -->
@@ -29,7 +38,8 @@
             <a class="nav-item nav-link" href="{{url_for('enamecard.view_sharecards')}}">e-쉐어카드</a>
 
             <a class="nav-item nav-link" href="{{url_for('bulletin.bmp_view')}}">게시판파일</a>
-            <a class="nav-item nav-link" href="{{url_for('bulletin.file_view')}}">파일편집</a>
+            <a class="nav-item nav-link" href="{{url_for('bulletin.file_table')}}">게시판결재</a>
+            <a class="nav-item nav-link" href="{{url_for('bulletin.file_view')}}">게시판작성</a>
             <a class="nav-item nav-link" href="{{url_for('worksheet.file_view')}}">체크리스트</a>
             <!-- <a class="nav-item nav-link" href="#">Politics</a>
             <a class="nav-item nav-link" href="#">Opinion</a>
@@ -49,7 +59,8 @@
             <a class="nav-item nav-link" href="{{url_for('enamecard.view_sharecards')}}">e-쉐어카드</a>
 
             <a class="nav-item nav-link" href="{{url_for('bulletin.bmp_view')}}">게시판파일</a>
-            <a class="nav-item nav-link" href="{{url_for('bulletin.file_view')}}">파일편집</a>
+            <a class="nav-item nav-link" href="{{url_for('bulletin.file_table')}}">게시판결재</a>
+            <a class="nav-item nav-link" href="{{url_for('bulletin.file_view')}}">게시판작성</a>
             <a class="nav-item nav-link" href="{{url_for('worksheet.file_view')}}">체크리스트</a>
             <!-- <a class="nav-item nav-link" href="#">Politics</a>
             <a class="nav-item nav-link" href="#">Opinion</a>

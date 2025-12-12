@@ -22,7 +22,7 @@
       width: auto; max-width:100%; margin-inline:auto;
       background:#f8f9fa; overflow:hidden; border-radius:.375rem; position:relative;
     }
-    .preview-img { width:100%; height:100%; object-fit:contain; }
+    .preview-img { width:100%; height:100%; object-fit:contain; transition: transform .15s ease-out; }
 
     /* 카드 오버레이(표시용, 편집은 모달에서만) */
     .overlay-layers, .modal-overlay { position:absolute; inset:0; }
@@ -92,8 +92,8 @@
             <div class="col-4">
               <label class="form-label mb-1 small">해상도</label>
               <select class="form-select form-select-sm select-resolution">
-                <option value="480x800" selected>480×800</option>
-                <option value="1200x1600">1200×1600</option>
+                <option value="480x800" >480×800</option>
+                <option value="1200x1600" selected>1200×1600</option>
               </select>
             </div>
             <div class="col-4">
@@ -196,7 +196,7 @@
               </div>
 
               <!-- 원본/BMP 토글 -->
-              <button class="btn btn-outline-dark btn-original" type="button" title="원본 보기 토글">원본</button>
+              <button class="btn btn-outline-dark btn-original" type="button" title="BMP 보기 토글">BMP</button>
 
               <!-- 파일 수정(모달) -->
               <button class="btn btn-outline-primary btn-enlarge" type="button">파일 수정</button>
@@ -261,7 +261,7 @@
 {% endblock %}
 
 {% block script %}
-<!-- 서버에서 주입 (없으면 빈 객체/배열 처리) -->
+<!-- 서버에서 주입 -->
 <script type="application/json" id="devices-json">
   {{ devices|default([], true)|tojson }}
 </script>
@@ -275,12 +275,56 @@
 <script>
 (() => {
   /* ---------- 공통 유틸 ---------- */
-  const toJSON = (id) => { try{ const t=document.getElementById(id); return t && t.textContent.trim()? JSON.parse(t.textContent):null; }catch(e){ return null; } };
+  const toJSON = (id) => {
+    try {
+      const t = document.getElementById(id);
+      return t && t.textContent.trim() ? JSON.parse(t.textContent) : null;
+    } catch (e) { return null; }
+  };
   const injectedDevices = toJSON('devices-json') || [];
   const injectedMe = toJSON('me-json') || {};
   let injectedRoutes = toJSON('routes-json') || [];
 
-  // Dept / Users 캐시
+  function toast(msg, type='info'){
+    const id = 't'+Date.now()+Math.random().toString(16).slice(2);
+    const el = document.createElement('div');
+    el.id=id;
+    el.className = `toast align-items-center text-bg-${type} border-0 show`;
+    el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
+    (document.querySelector('#toast-area')||document.body).appendChild(el);
+    setTimeout(()=>el.remove(), 4000);
+  }
+
+  const parseResolution = v => { const [w,h]=v.split('x').map(Number); return {width:w, height:h}; };
+  const getPreviewBoxDims = (selW,selH)=>{
+    if (selW===800 && selH===480) return {pw:3, ph:5};
+    if (selW===1200 && selH===1600) return {pw:3, ph:4};
+    return {pw:selW, ph:selH};
+  };
+  function applyPreviewAspect(card, s){
+    const surface = card.querySelector('.preview-surface');
+    if(!surface) return;
+    const {pw,ph}=getPreviewBoxDims(s.uiWidth, s.uiHeight);
+    surface.style.aspectRatio = `${pw} / ${ph}`;
+  }
+
+  /* ---------- 파일 타입 유틸 ---------- */
+  function getFileExt(name){
+    const idx = name.lastIndexOf('.');
+    return idx === -1 ? '' : name.substring(idx+1).toLowerCase();
+  }
+  function isImageExt(ext){
+    return ['png','jpg','jpeg','bmp'].includes(ext);
+  }
+  function isPdfExt(ext){
+    return ext === 'pdf';
+  }
+  function isOfficeExt(ext){
+    return ['ppt','pptx','doc','docx','xls','xlsx','csv','txt'].includes(ext);
+  }
+
+  /* ---------- Dept / Users 캐시 ---------- */
   let _departmentsCache = null;
   const _usersByDept = new Map();
 
@@ -313,58 +357,73 @@
     }
   }
 
-  function toast(msg, type='info'){
-    const id = 't'+Date.now()+Math.random().toString(16).slice(2);
-    const el = document.createElement('div');
-    el.id=id; el.className = `toast align-items-center text-bg-${type} border-0 show`;
-    el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
-    (document.querySelector('#toast-area')||document.body).appendChild(el);
-    setTimeout(()=>el.remove(), 4000);
+  /* ---------- 프리뷰 / 업로드 유틸 ---------- */
+
+  async function showLocalPreviewImage(file, state, imgEl){
+    if (!file) return;
+    if (state._localUrl) URL.revokeObjectURL(state._localUrl);
+    const url = URL.createObjectURL(file);
+    state._localUrl = url;
+    imgEl.src = url + '#t=' + Date.now();
   }
 
-  const parseResolution = v => { const [w,h]=v.split('x').map(Number); return {width:w, height:h}; };
-  const getPreviewBoxDims = (selW,selH)=>{
-    if (selW===800 && selH===480) return {pw:3, ph:5};
-    if (selW===1200 && selH===1600) return {pw:3, ph:4};
-    return {pw:selW, ph:selH};
-  };
-  function applyPreviewAspect(card, s){
-    const surface = card.querySelector('.preview-surface');
-    if(!surface) return;
-    const {pw,ph}=getPreviewBoxDims(s.uiWidth, s.uiHeight);
-    surface.style.aspectRatio = `${pw} / ${ph}`;
+  // 원본 업로드: 엑셀/워드/PPT/PDF 등 → 서버에서 normalized.pdf + 첫 페이지 이미지 생성
+  async function uploadOriginalIfNeeded(state){
+    if (state.upload_id || !state._localFile) return;
+    const fd = new FormData();
+    fd.append('file', state._localFile);
+    if (state.device_id) fd.append('device_id', state.device_id);
+
+    const r = await fetch('/bulletin/document/upload_original', {
+      method: 'POST',
+      body: fd
+    });
+    if (!r.ok) throw new Error('upload_original failed');
+
+    const js = await r.json();
+    state.upload_id = js.upload_id || js.tmp_id || null;
+    state.pages = js.page_count || 1;
+    state.page = 1;
+    if (js.preview_image_url){
+      state._originalServerUrl = js.preview_image_url;
+    }
+    if (!state.file_name && js.filename){
+      state.file_name = js.filename;
+    }
   }
 
-  /* ---------- 프리뷰 ---------- */
-  async function previewJSON(s, imgEl, raw=0){
+  // BMP/E-INK 프리뷰: 항상 layout_snapshot + render_params만 사용
+  async function bmpPreviewJSON(state, imgEl){
+    if (!state.upload_id){
+      await uploadOriginalIfNeeded(state);
+      if (!state.upload_id){
+        throw new Error('no upload_id for bmp_preview');
+      }
+    }
     const body = {
-      upload_id:s.upload_id, width:s.uiWidth, height:s.uiHeight,
-      mode:s.mode, scale:s.scale, percent:s.percent, rotate:s.rotate,
-      layers:s.layers, raw
+      upload_id: state.upload_id,
+      page: state.page || 1,
+      width: state.uiWidth,
+      height: state.uiHeight,
+      mode: state.mode,
+      scale: state.scale,
+      percent: state.percent,
+      rotate: state.rotate,
+      layout_snapshot: buildLayoutSnapshot(state)
     };
-    const r = await fetch('/bulletin/preview_blob', {method:'POST',
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-    if(!r.ok) throw new Error('preview_blob json failed');
+
+    const r = await fetch('/bulletin/bmp_preview', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) throw new Error('bmp_preview failed');
+
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
+    if (state._bmpUrl) URL.revokeObjectURL(state._bmpUrl);
+    state._bmpUrl = url;
     imgEl.src = url + '#t=' + Date.now();
-    if (s._prevUrl) URL.revokeObjectURL(s._prevUrl);
-    s._prevUrl = url;
-  }
-  async function previewFile(file, s, imgEl){
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('width', s.uiWidth); fd.append('height', s.uiHeight);
-    fd.append('mode', s.mode); fd.append('scale', s.scale);
-    fd.append('percent', s.percent); fd.append('rotate', s.rotate);
-    fd.append('raw', 0);
-    const r = await fetch('/bulletin/preview_blob', {method:'POST', body:fd});
-    if(!r.ok) throw new Error('preview_blob multipart failed');
-    const upid = r.headers.get('X-Upload-Id'); if(upid) s.upload_id = parseInt(upid,10);
-    const blob = await r.blob(); const url = URL.createObjectURL(blob);
-    if (s._prevUrl) URL.revokeObjectURL(s._prevUrl);
-    s._prevUrl = url; imgEl.src = url + '#t=' + Date.now();
   }
 
   /* ---------- 좌표/슬롯 도우미 ---------- */
@@ -430,8 +489,12 @@
   }
 
   function createSignboxLayerDefault(){
-    const parent = { x:Math.round(BASE_W*0.05), y:Math.round(BASE_H*0.72),
-                     w:Math.round(BASE_W*0.90), h:Math.round(BASE_H*0.18) };
+    const parent = {
+      x:Math.round(BASE_W*0.05),
+      y:Math.round(BASE_H*0.72),
+      w:Math.round(BASE_W*0.90),
+      h:Math.round(BASE_H*0.18)
+    };
     const tpl = buildFiveSlotsTemplate();
     const slots = makeSlotsFromTemplate(parent, tpl);
     return { id:'signbox-1', type:'signbox', parent, tpl, slots, z:2 };
@@ -443,7 +506,8 @@
     selectEl.innerHTML = `<option value="">(선택하세요)</option>`;
     (routes||[]).forEach(rt=>{
       const opt = document.createElement('option');
-      opt.value = rt.id; opt.textContent = rt.name || `Route #${rt.id}`;
+      opt.value = rt.id;
+      opt.textContent = rt.name || `Route #${rt.id}`;
       selectEl.appendChild(opt);
     });
     selectEl.disabled = !(routes && routes.length);
@@ -496,6 +560,18 @@
   }
   const hasSignbox = (s)=> Array.isArray(s.layers) && s.layers.some(L=>L.type==='signbox');
 
+  // layout_snapshot 공통 빌더 (editor_layers + process_map + process_runtime)
+  function buildLayoutSnapshot(state){
+    return {
+      version: 1,
+      canvas: { width: BASE_W, height: BASE_H, w: BASE_W, h: BASE_H },
+      editor_layers: state.layers || [],
+      layers: state.layers || [],
+      process_map: state.process_map || null,
+      process_runtime: state.process_runtime || null
+    };
+  }
+
   /* ---------- 모달(전역 싱글톤) ---------- */
   const modalEl = document.getElementById('previewModal');
   const modalWrap = document.getElementById('modalPreviewWrap');
@@ -527,24 +603,25 @@
   }
 
   async function refreshModalPreview(){
-    if(!modalState || !modalState.upload_id){ toast('편집할 파일이 없습니다.','warning'); return; }
+    if(!modalState){
+      toast('편집할 파일이 없습니다.','warning');
+      return;
+    }
+    if (!modalState.upload_id){
+      try{
+        await uploadOriginalIfNeeded(modalState);
+      }catch(e){
+        toast('원본 업로드 실패','danger');
+        return;
+      }
+    }
     applyModalAspect();
-    const body = {
-      upload_id: modalState.upload_id,
-      width: modalState.uiWidth || BASE_W,
-      height: modalState.uiHeight || BASE_H,
-      mode: modalState.mode, scale: modalState.scale, percent: modalState.percent,
-      rotate: modalState.rotate, raw: (modalState.view==='original')?1:0,
-      layers: modalState.layers
-    };
-    const r = await fetch('/bulletin/preview_blob', {
-      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
-    });
-    if(!r.ok) { toast('모달 미리보기 실패','danger'); return; }
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    modalImg.src = url + '#t=' + Date.now();
-    modalPage.textContent = `${modalState.page||1} / ${modalState.pages||1}`;
+    try{
+      await bmpPreviewJSON(modalState, modalImg);
+      modalPage.textContent = `${modalState.page||1} / ${modalState.pages||1}`;
+    }catch(e){
+      toast('모달 미리보기 실패','danger');
+    }
   }
 
   function makeDragResize(el, container, onCommit){
@@ -582,8 +659,11 @@
   function renderLayersModal(){
     if(!modalState) return;
     const stage = document.getElementById('modalOverlayStage');
-    const vp = computeImageViewport(document.getElementById('modalPreviewWrap'),
-                                    modalState.uiWidth||BASE_W, modalState.uiHeight||BASE_H);
+    const vp = computeImageViewport(
+      document.getElementById('modalPreviewWrap'),
+      modalState.uiWidth||BASE_W,
+      modalState.uiHeight||BASE_H
+    );
     stage.style.left = `${vp.left}px`;
     stage.style.top = `${vp.top}px`;
     stage.style.width = `${vp.width}px`;
@@ -638,8 +718,12 @@
 
         makeDragResize(el, stage, (nx,ny,nw,nh, orect)=>{
           const kx0 = orect.width/BASE_W, ky0 = orect.height/BASE_H;
-          L.parent={ x:Math.round(nx/kx0), y:Math.round(ny/ky0),
-                    w:Math.round(nw/kx0), h:Math.round(nh/ky0) };
+          L.parent={
+            x:Math.round(nx/kx0),
+            y:Math.round(ny/ky0),
+            w:Math.round(nw/kx0),
+            h:Math.round(nh/ky0)
+          };
           L.slots = makeSlotsFromTemplate(L.parent, L.tpl);
           ensureAuthorSignLayer(modalState);
           renderLayersModal();
@@ -676,13 +760,19 @@
 
   // 모달 네비/회전/새로고침
   modalPrev.onclick = async ()=>{
-    if(!modalState || !modalState.upload_id) return toast('편집할 파일이 없습니다.','warning');
-    modalState.view='processed'; modalState.page=Math.max(1,(modalState.page||1)-1);
+    if(!modalState || !modalState.upload_id){
+      toast('편집할 파일이 없습니다.','warning');
+      return;
+    }
+    modalState.page = Math.max(1,(modalState.page||1)-1);
     await refreshModalPreview();
   };
   modalNext.onclick = async ()=>{
-    if(!modalState || !modalState.upload_id) return toast('편집할 파일이 없습니다.','warning');
-    modalState.view='processed'; modalState.page=Math.min(modalState.pages||1,(modalState.page||1)+1);
+    if(!modalState || !modalState.upload_id){
+      toast('편집할 파일이 없습니다.','warning');
+      return;
+    }
+    modalState.page = Math.min(modalState.pages||1,(modalState.page||1)+1);
     await refreshModalPreview();
   };
   modalRotate.onchange = async (e)=>{
@@ -698,43 +788,65 @@
     modalEditMode = (modalEditMode==='signbox')?'none':'signbox';
     if(!modalState.layers.find(L=>L.type==='signbox')) {
       modalState.layers.push(createSignboxLayerDefault());
-      // 결재 사용 시작: 카드 쪽도 즉시 반영
       modalCurrentCard?._onStateChanged?.();
     }
     ensureAuthorSignLayer(modalState);
-    renderLayersModal(); modalCurrentCard?._renderLayers?.();
+    renderLayersModal();
+    modalCurrentCard?._renderLayers?.();
   };
   modalEditStamp.onclick = ()=>{
     if(!modalState) return toast('모달 상태가 없습니다.','warning');
     modalEditMode = (modalEditMode==='stamp')?'none':'stamp';
     renderLayersModal();
-    if(modalEditMode==='stamp'){ modalLayerFile.dataset.layerType='stamp'; modalLayerFile.click(); }
+    if(modalEditMode==='stamp'){
+      modalLayerFile.dataset.layerType='stamp';
+      modalLayerFile.click();
+    }
   };
   modalEditValid.onclick = ()=>{
     if(!modalState) return toast('모달 상태가 없습니다.','warning');
     modalEditMode = (modalEditMode==='validity')?'none':'validity';
     renderLayersModal();
-    if(modalEditMode==='validity'){ modalLayerFile.dataset.layerType='validity'; modalLayerFile.click(); }
+    if(modalEditMode==='validity'){
+      modalLayerFile.dataset.layerType='validity';
+      modalLayerFile.click();
+    }
   };
 
   // 모달: 레이어 이미지 업로드
   modalLayerFile.addEventListener('change', async (ev)=>{
     const f=ev.target.files?.[0]; if(!f) return;
-    if(!modalState) return toast('모달 상태가 없습니다.','warning');
+    if(!modalState) {
+      toast('모달 상태가 없습니다.','warning');
+      return;
+    }
     try{
       const fd=new FormData(); fd.append('file', f);
       const r=await fetch('/bulletin/layer_upload',{method:'POST', body:fd});
       if(!r.ok) throw new Error('layer_upload failed');
       const js=await r.json();
-      const L = { id:'L'+Date.now().toString(16), type:(modalLayerFile.dataset.layerType==='validity')?'validity':'stamp',
-                  preview_url:js.preview_url, upload_token:js.upload_token,
-                  x:Math.round(BASE_W*0.70), y:Math.round(BASE_H*0.10),
-                  w:Math.round(BASE_W*0.20), h:Math.round(BASE_H*0.20), z:3 };
+      const L = {
+        id:'L'+Date.now().toString(16),
+        type:(modalLayerFile.dataset.layerType==='validity')?'validity':'stamp',
+        preview_url:js.preview_url,
+        upload_token:js.upload_token,
+        x:Math.round(BASE_W*0.70),
+        y:Math.round(BASE_H*0.10),
+        w:Math.round(BASE_W*0.20),
+        h:Math.round(BASE_H*0.20),
+        z:3
+      };
       modalState.layers.push(L);
-      renderLayersModal(); modalCurrentCard?._renderLayers?.(); modalCurrentCard?._onStateChanged?.(); await refreshModalPreview();
+      renderLayersModal();
+      modalCurrentCard?._renderLayers?.();
+      modalCurrentCard?._onStateChanged?.();
+      await refreshModalPreview();
       toast('레이어 추가 완료','success');
-    }catch(e){ toast('레이어 업로드 실패','danger'); }
-    finally{ ev.target.value=''; }
+    }catch(e){
+      toast('레이어 업로드 실패','danger');
+    }finally{
+      ev.target.value='';
+    }
   });
 
   // 모달 닫힐 때 상태 리셋
@@ -751,19 +863,35 @@
     const deviceId = card.dataset.deviceId;
     const spec = injectedDevices.find(d=>d.device_no===deviceNo) || {};
     const s = {
-      device_no: deviceNo, device_id: deviceId,
-      upload_id:null, file_name:'-', pages:1, page:1,
-      uiWidth: spec.default_width||480, uiHeight: spec.default_height||800,
-      mode:'BWRYBG', scale:'fit', percent:100, rotate:0, view:'processed',
-      layers:[], _prevUrl:null,
+      device_no: deviceNo,
+      device_id: deviceId,
+      upload_id:null,           // /document/upload_original 결과
+      file_name:'-',
+      pages:1,
+      page:1,
+      uiWidth: spec.default_width||480,
+      uiHeight: spec.default_height||800,
+      mode:'BWRYBG',
+      scale:'fit',
+      percent:100,
+      rotate:0,
+      view:'original',          // 'original' | 'bmp'
+      layers:[],
+      _prevUrl:null,
+      _localFile:null,
+      _localUrl:null,
+      _bmpUrl:null,
+      _originalServerUrl:null,
 
-      // approval meta (초기엔 결재 미사용)
+      // approval meta
       needApproval: false,
       finalApproval: false,
       autoAuthorSign: true,
       routeId: "",
       department: "",
-      assignees: { review:"", approve:"" }
+      assignees: { review:"", approve:"" },
+      process_map: null,
+      process_runtime: null
     };
 
     const $fileName=card.querySelector('.file-name');
@@ -781,6 +909,7 @@
     const $selRotate=card.querySelector('.select-rotate');
     const $overlay=card.querySelector('.overlay-layers');
     const $btnEnlarge=card.querySelector('.btn-enlarge');
+    const $memoInput = card.querySelector('.memo-input');
 
     // approval UI
     const $approvalPanel = card.querySelector('.approval-panel');
@@ -794,9 +923,11 @@
 
     s.mode = $selMode.value;
     function refreshPercentRow(){ $percentRow.classList.toggle('d-none', s.scale!=='percent'); }
-    function redraw() { $pageInd.textContent=`${s.page} / ${s.pages}`; $fileName.textContent=s.file_name||'-'; }
+    function redraw() {
+      $pageInd.textContent=`${s.page} / ${s.pages}`;
+      $fileName.textContent=s.file_name||'-';
+    }
 
-    // 결재선: 서버 주입 사용(패널 열릴 때 활성화)
     function setupRoutes(){
       const routes = injectedRoutes || [];
       fillRouteOptions($selRoute, routes);
@@ -811,7 +942,8 @@
     function clearUserSelects(){
       $selReview.innerHTML = `<option value="">(검토자 선택)</option>`;
       $selApprove.innerHTML = `<option value="">(승인자 선택)</option>`;
-      s.assignees.review = ""; s.assignees.approve = "";
+      s.assignees.review = "";
+      s.assignees.approve = "";
     }
 
     async function populateDepartmentsIfNeeded(){
@@ -828,6 +960,7 @@
     async function populateUsersByDept(dept){
       const users = await fetchUsersByDepartment(dept||"");
       const toLabel = (u)=> (u.username?`${u.username}`: (u.userid||`${u.id}`)) + (u.userid?` (${u.userid})`:'');
+
       const build = (sel, placeholder) => {
         sel.innerHTML = `<option value="">(${placeholder})</option>`;
         users.forEach(u=>{
@@ -842,24 +975,25 @@
       build($selApprove, '승인자 선택');
     }
 
-    // signbox 유무에 따른 패널 표시/초기화
     async function updateApprovalPanelVisibility(){
       const on = hasSignbox(s);
       $approvalPanel.classList.toggle('d-none', !on);
       if (!on){
-        // 결재 미사용 상태로 초기화
-        s.needApproval = false; s.finalApproval = false;
-        $ckNeed.checked = false; $ckFinal.checked = false;
+        s.needApproval = false;
+        s.finalApproval = false;
+        $ckNeed.checked = false;
+        $ckFinal.checked = false;
         setApprovalControlsEnabled(false);
-        $selDept.value=""; clearUserSelects();
+        $selDept.value="";
+        clearUserSelects();
         return;
       }
-      // 결재 사용 시작: 기본값 on
       if (!s.needApproval && !s.finalApproval){
-        s.needApproval = true; $ckNeed.checked = true; $ckFinal.checked = false;
+        s.needApproval = true;
+        $ckNeed.checked = true;
+        $ckFinal.checked = false;
       }
       setApprovalControlsEnabled(true);
-      // 결재선 옵션/부서 목록 준비
       setupRoutes();
       await populateDepartmentsIfNeeded();
       if (s.department) {
@@ -870,23 +1004,36 @@
     // 결재 스위치/입력
     $ckNeed.addEventListener('change', async ()=>{
       s.needApproval = $ckNeed.checked;
-      if (s.needApproval){ s.finalApproval = false; $ckFinal.checked = false; }
+      if (s.needApproval){
+        s.finalApproval = false;
+        $ckFinal.checked = false;
+      }
       setApprovalControlsEnabled(s.needApproval && !s.finalApproval);
       if (s.needApproval && !s.finalApproval){
         await populateDepartmentsIfNeeded();
       } else {
-        $selDept.value=""; clearUserSelects();
+        $selDept.value="";
+        clearUserSelects();
       }
     });
     $ckFinal.addEventListener('change', ()=>{
       s.finalApproval = $ckFinal.checked;
-      if (s.finalApproval){ s.needApproval = false; $ckNeed.checked = false; }
+      if (s.finalApproval){
+        s.needApproval = false;
+        $ckNeed.checked = false;
+      }
       setApprovalControlsEnabled(s.needApproval && !s.finalApproval);
-      if (s.finalApproval){ $selDept.value=""; clearUserSelects(); }
+      if (s.finalApproval){
+        $selDept.value="";
+        clearUserSelects();
+      }
     });
     $ckAuto.addEventListener('change', ()=>{
       s.autoAuthorSign = $ckAuto.checked;
-      if (s.autoAuthorSign) { ensureAuthorSignLayer(s); card._renderLayers?.(); }
+      if (s.autoAuthorSign) {
+        ensureAuthorSignLayer(s);
+        card._renderLayers?.();
+      }
     });
 
     $selRoute.addEventListener('change', ()=>{
@@ -905,88 +1052,224 @@
       s.assignees.approve = $selApprove.value || '';
     });
 
-    $selReview.addEventListener('change', ()=>{ s.assignees.review = $selReview.value || ''; });
-    $selApprove.addEventListener('change', ()=>{ s.assignees.approve = $selApprove.value || ''; });
+    $selReview.addEventListener('change', ()=>{
+      s.assignees.review = $selReview.value || '';
+    });
+    $selApprove.addEventListener('change', ()=>{
+      s.assignees.approve = $selApprove.value || '';
+    });
 
     // 파일 선택
     $btnChoose.addEventListener('click', ()=> $fileInput.click());
     $fileInput.addEventListener('change', async (ev)=>{
-      const f=ev.target.files[0]; if(!f) return;
-      s.file_name=f.name; s.pages=1; s.page=1; s.view='processed';
+      const f=ev.target.files[0];
+      if(!f) return;
+
+      // 이전 URL/상태 정리
+      if (s._localUrl){ URL.revokeObjectURL(s._localUrl); s._localUrl=null; }
+      if (s._bmpUrl){ URL.revokeObjectURL(s._bmpUrl); s._bmpUrl=null; }
+      s.upload_id = null;
+      s._originalServerUrl = null;
+
+      s._localFile=f;
+      s.file_name=f.name;
+      s.pages=1;
+      s.page=1;
+      s.view='original';
+
+      const ext = getFileExt(f.name);
+
       try {
         applyPreviewAspect(card,s);
-        await previewFile(f,s,$preview);
-        // signbox가 이미 있다면 author 자동 서명 보장
+
+        if (isImageExt(ext)){
+          // 이미지 계열: 완전 로컬 프리뷰
+          await showLocalPreviewImage(f,s,$preview);
+        } else {
+          // Office / PDF 계열: 원본 업로드 후 서버가 만들어 준 미리보기 이미지 사용
+          await uploadOriginalIfNeeded(s);
+          if (s._originalServerUrl){
+            $preview.src = s._originalServerUrl + '#t=' + Date.now();
+          } else {
+            toast(`[${deviceNo}] 서버 미리보기 이미지를 찾을 수 없습니다.`, 'warning');
+          }
+        }
+
         if (hasSignbox(s) && s.autoAuthorSign) ensureAuthorSignLayer(s);
-        redraw(); toast(`[${deviceNo}] 미리보기 준비`,'success');
-        // signbox 유무에 따라 패널 표시
+        redraw();
+        toast(`[${deviceNo}] 원본 미리보기 준비`, 'success');
         await updateApprovalPanelVisibility();
         card._renderLayers?.();
       }
-      catch(e){ toast(`[${deviceNo}] 미리보기 실패`,'danger'); }
-      finally{ $fileInput.value=''; }
+      catch(e){
+        toast(`[${deviceNo}] 원본 미리보기 실패`, 'danger');
+      }
+      finally{
+        $fileInput.value='';
+      }
     });
 
     // 옵션 변화 → 프리뷰
-    async function refreshPreview(){ if(!s.upload_id) return;
-      try { applyPreviewAspect(card,s); await previewJSON(s,$preview, s.view==='original'?1:0); redraw(); }
-      catch(e){ toast(`[${deviceNo}] 미리보기 실패`,'danger'); }
+    async function refreshPreview(){
+      $preview.style.transform = `rotate(${s.rotate||0}deg)`;
+      applyPreviewAspect(card,s);
+
+      // 원본 모드
+      if (s.view === 'original'){
+        if (s._localUrl){
+          $preview.src = s._localUrl + '#t=' + Date.now();
+        } else if (s._originalServerUrl){
+          $preview.src = s._originalServerUrl + '#t=' + Date.now();
+        } else if (s.upload_id){
+          // 서버에서만 존재하는 케이스: 원본 업로드만 되어 있고 로컬 미리보기 없음
+          try{
+            await uploadOriginalIfNeeded(s);
+            if (s._originalServerUrl){
+              $preview.src = s._originalServerUrl + '#t=' + Date.now();
+            }
+          }catch(e){}
+        }
+        redraw();
+        return;
+      }
+
+      // BMP 모드
+      if (!s._localFile && !s.upload_id){
+        toast(`[${deviceNo}] BMP 미리보기를 위해 먼저 파일을 선택하세요.`, 'warning');
+        return;
+      }
+      try {
+        await bmpPreviewJSON(s, $preview);
+        redraw();
+      } catch(e){
+        toast(`[${deviceNo}] BMP 미리보기 실패`, 'danger');
+      }
     }
 
-    $selRes.addEventListener('change', ()=>{ const {width,height}=parseResolution($selRes.value);
-      s.uiWidth=width; s.uiHeight=height; applyPreviewAspect(card,s); refreshPercentRow(); refreshPreview(); });
-
-    $selScale.addEventListener('change', ()=>{ s.scale=$selScale.value; refreshPercentRow(); refreshPreview(); });
-    $percent.addEventListener('input', ()=>{ s.percent=parseInt($percent.value,10)||100; if(s.scale==='percent') refreshPreview(); });
-    $selMode.addEventListener('change', ()=>{ s.mode=$selMode.value; refreshPreview(); });
-    $selRotate.addEventListener('change', ()=>{ s.rotate=parseInt($selRotate.value,10)||0; applyPreviewAspect(card,s); refreshPreview(); });
-
-    card.querySelector('.btn-prev').addEventListener('click', ()=>{ if(!s.upload_id) return; s.view='processed'; s.page=Math.max(1,(s.page||1)-1); refreshPreview(); });
-    card.querySelector('.btn-next').addEventListener('click', ()=>{ if(!s.upload_id) return; s.view='processed'; s.page=Math.min(s.pages||1,(s.page||1)+1); refreshPreview(); });
-
-    // 원본 ↔ BMP 토글
-    const btnOriginal = card.querySelector('.btn-original');
-    btnOriginal.addEventListener('click', ()=>{
-      if(!s.upload_id) return toast(`[${deviceNo}] 파일을 먼저 선택`, 'warning');
-      s.view = (s.view==='processed') ? 'original' : 'processed';
-      $btnOriginal.classList.toggle('active', s.view==='original');
-      $btnOriginal.textContent = (s.view==='original') ? 'BMP' : '원본';
+    $selRes.addEventListener('change', ()=>{
+      const {width,height}=parseResolution($selRes.value);
+      s.uiWidth=width; s.uiHeight=height;
+      refreshPercentRow();
       refreshPreview();
     });
 
+    $selScale.addEventListener('change', ()=>{
+      s.scale=$selScale.value;
+      refreshPercentRow();
+      refreshPreview();
+    });
+    $percent.addEventListener('input', ()=>{
+      s.percent=parseInt($percent.value,10)||100;
+      if(s.scale==='percent') refreshPreview();
+    });
+    $selMode.addEventListener('change', ()=>{
+      s.mode=$selMode.value;
+      refreshPreview();
+    });
+    $selRotate.addEventListener('change', ()=>{
+      s.rotate=parseInt($selRotate.value,10)||0;
+      refreshPreview();
+    });
+
+    card.querySelector('.btn-prev').addEventListener('click', ()=>{
+      if(!s.upload_id) return;
+      s.view='bmp';
+      s.page=Math.max(1,(s.page||1)-1);
+      refreshPreview();
+    });
+    card.querySelector('.btn-next').addEventListener('click', ()=>{
+      if(!s.upload_id) return;
+      s.view='bmp';
+      s.page=Math.min(s.pages||1,(s.page||1)+1);
+      refreshPreview();
+    });
+
+    // 원본/BMP 토글 버튼
+    $btnOriginal.addEventListener('click', async ()=>{
+      if (!s._localFile && !s.upload_id){
+        toast(`[${deviceNo}] 먼저 파일을 선택하세요.`, 'warning');
+        return;
+      }
+      if (s.view === 'original'){
+        s.view = 'bmp';
+        $btnOriginal.classList.add('active');
+        $btnOriginal.textContent = '원본';
+      } else {
+        s.view = 'original';
+        $btnOriginal.classList.remove('active');
+        $btnOriginal.textContent = 'BMP';
+      }
+      await refreshPreview();
+    });
+
     // 전송
-    function mapRotateForWire(ui){ const n=((ui%360)+360)%360; const is12=(s.uiWidth===1200&&s.uiHeight===1600);
-      const table=is12?{0:0,90:90,180:180,270:270}:{0:270,90:0,180:90,270:180}; return table[n]??0; }
+    function mapRotateForWire(ui){
+      const n=((ui%360)+360)%360;
+      const is12=(s.uiWidth===1200&&s.uiHeight===1600);
+      const table=is12?{0:0,90:90,180:180,270:270}:{0:270,90:0,180:90,270:180};
+      return table[n]??0;
+    }
+
     $btnSend.addEventListener('click', async ()=>{
-      if(!s.upload_id) return toast(`[${deviceNo}] 전송할 파일이 없습니다.`,'warning');
+      if(!s._localFile && !s.upload_id){
+        toast(`[${deviceNo}] 전송 전에 파일을 선택하세요.`, 'warning');
+        return;
+      }
+      try{
+        await uploadOriginalIfNeeded(s);
+      }catch(e){
+        toast(`[${deviceNo}] 원본 업로드에 실패했습니다.`, 'danger');
+        return;
+      }
+      if(!s.upload_id){
+        toast(`[${deviceNo}] 전송을 위한 원본 핸들이 없습니다.`, 'danger');
+        return;
+      }
+
       normalizeApprovalSwitches(s);
 
-      // 결재 패널이 열려 있고 결재 필요인데 사용자 미선택 방지
       if (hasSignbox(s) && s.needApproval && !s.finalApproval) {
-        if (!$selDept.value) return toast(`[${deviceNo}] 부서를 선택하세요.`,'warning');
-        if (!$selReview.value || !$selApprove.value) return toast(`[${deviceNo}] 검토/승인 사용자를 선택하세요.`,'warning');
+        if (!$selDept.value) return toast(`[${deviceNo}] 부서를 선택하세요.`, 'warning');
+        if (!$selReview.value || !$selApprove.value) return toast(`[${deviceNo}] 검토/승인 사용자를 선택하세요.`, 'warning');
       }
 
       const body={
-        upload_id:s.upload_id, page:s.page||1, device_id:s.device_id, mode:s.mode, scale:s.scale,
-        percent:s.percent, rotate:mapRotateForWire(s.rotate), width:s.uiWidth, height:s.uiHeight, layers:s.layers,
+        upload_id:s.upload_id,
+        page:s.page||1,
+        device_id:s.device_id,
+        mode:s.mode,
+        scale:s.scale,
+        percent:s.percent,
+        rotate:mapRotateForWire(s.rotate),
+        width:s.uiWidth,
+        height:s.uiHeight,
+
+        // 레이어/레이아웃
+        layout_snapshot: buildLayoutSnapshot(s),
 
         // 결재 메타
         need_approval: hasSignbox(s) ? s.needApproval : false,
         final_approval: hasSignbox(s) ? s.finalApproval : false,
         route_id: hasSignbox(s) ? (s.routeId || null) : null,
         assignees: hasSignbox(s) ? s.assignees : { },
-        layout_snapshot: { canvas:{w:BASE_W,h:BASE_H}, layers: s.layers }
+        memo: $memoInput.value || ""
       };
       try{
-        const r=await fetch('/bulletin/sendfile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-        const js=await r.json(); toast(`[${deviceNo}] 전송 준비 완료 (job #${js.job_id})`,'info');
+        const r=await fetch('/bulletin/sendfile',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(body)
+        });
+        const js=await r.json();
+        toast(`[${deviceNo}] 전송 준비 완료 (job #${js.job_id})`,'info');
       }
-      catch(e){ toast(`[${deviceNo}] 전송 실패`,'danger'); }
+      catch(e){
+        toast(`[${deviceNo}] 전송 실패`,'danger');
+      }
     });
 
     /* ---------- 카드 오버레이(표시용) ---------- */
-    function computeImageViewport(surface, w, h){
+    function computeImageViewportCard(surface, w, h){
       const r = surface.getBoundingClientRect();
       const scale = Math.min(r.width / w, r.height / h);
       const vw = w * scale, vh = h * scale;
@@ -995,7 +1278,7 @@
     function renderLayersCard(){
       const stage = $overlay.querySelector('.overlay-stage');
       const surface = $overlay.closest('.preview-surface');
-      const vp = computeImageViewport(surface, s.uiWidth, s.uiHeight);
+      const vp = computeImageViewportCard(surface, s.uiWidth, s.uiHeight);
       stage.style.left = `${vp.left}px`;
       stage.style.top = `${vp.top}px`;
       stage.style.width = `${vp.width}px`;
@@ -1069,27 +1352,39 @@
           if (L.preview_url) img.src=L.preview_url;
         }
       });
-      // 오버레이 그린 뒤 패널 표시 상태 동기화
       updateApprovalPanelVisibility();
     }
 
     function init(){
-      refreshPercentRow(); applyPreviewAspect(card,s);
+      refreshPercentRow();
+      applyPreviewAspect(card,s);
       setApprovalControlsEnabled(false);
-      updateApprovalPanelVisibility(); // 초기: signbox 없음 → 패널 숨김
+      updateApprovalPanelVisibility();
+      $btnOriginal.classList.remove('active');
+      $btnOriginal.textContent = 'BMP';
     }
     init();
 
     card._state = s;
     card._renderLayers = renderLayersCard;
-    // 모달에서 변경된 레이어/상태를 카드가 반영할 수 있도록 훅 제공
     card._onStateChanged = async () => {
       if (hasSignbox(s) && s.autoAuthorSign) ensureAuthorSignLayer(s);
       await updateApprovalPanelVisibility();
     };
 
     $btnEnlarge.addEventListener('click', async ()=>{
-      if(!s.upload_id) return toast(`[${deviceNo}] 파일을 먼저 선택하세요.`,'warning');
+      if(!s.upload_id){
+        if (!s._localFile){
+          toast(`[${deviceNo}] 먼저 파일을 선택하세요.`, 'warning');
+          return;
+        }
+        try{
+          await uploadOriginalIfNeeded(s);
+        }catch(e){
+          toast(`[${deviceNo}] 원본 업로드 실패`, 'danger');
+          return;
+        }
+      }
       modalState = s;
       modalCurrentCard = card;
       modalRotate.value = String(((s.rotate%360)+360)%360);
@@ -1116,7 +1411,7 @@
       return {
         device_id: c.dataset.deviceId,
         upload_id: st.upload_id || null,
-        layout: { canvas:{w:BASE_W,h:BASE_H}, layers: st.layers || [] },
+        layout: buildLayoutSnapshot(st),
         approval_meta: {
           need_approval: hasSignbox(st) ? !!st.needApproval : false,
           final_approval: hasSignbox(st) ? !!st.finalApproval : false,
@@ -1127,9 +1422,15 @@
       };
     });
     try{
-      await fetch('/bulletin/sign_layout/save_batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:payload})});
+      await fetch('/bulletin/sign_layout/save_batch',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({items:payload})
+      });
       toast('레이아웃 저장 완료','success');
-    }catch(e){ toast('레이아웃 저장 실패','danger'); }
+    }catch(e){
+      toast('레이아웃 저장 실패','danger');
+    }
   });
 
 })();

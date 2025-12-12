@@ -1,0 +1,74 @@
+{# templates/bulletinboard/e_file_detail.html #}
+{% extends "e_base.html" %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">전자결재 문서 상세</h4>
+    <a href="{{ url_for('bulletin.file_table', tab='author') }}" class="btn btn-sm btn-outline-secondary">
+      목록으로
+    </a>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title mb-1">
+        {{ doc.doc_name or doc.orig_filename }}
+      </h5>
+      <p class="text-muted small mb-2">
+        작성자: {{ doc.user.department or '' }} {{ doc.user.username or '' }}<br>
+        작성일: {{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}
+      </p>
+
+      <p class="mb-0">
+        상태:
+        {% set s = doc.status %}
+        {% if s == 'draft' %}
+          <span class="badge bg-secondary">작성중</span>
+        {% elif s == 'in_review' %}
+          <span class="badge bg-info text-dark">결재진행</span>
+        {% elif s == 'checked' %}
+          <span class="badge bg-warning text-dark">검토완료</span>
+        {% elif s == 'approved' %}
+          <span class="badge bg-success">결재완료</span>
+        {% elif s == 'rejected' %}
+          <span class="badge bg-danger">반려</span>
+        {% else %}
+          <span class="badge bg-light text-muted">{{ s }}</span>
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header py-2">
+      <strong>결재선</strong>
+    </div>
+    <div class="card-body py-2">
+      {% if doc.approval_steps %}
+        {% for step in doc.approval_steps|sort(attribute='col_index') %}
+          <div class="small mb-1">
+            <strong>{{ step.step_type }}</strong>
+            /
+            {{ step.username_snapshot or '미지정' }}
+            {% if step.status == 'pending' %}
+              <span class="badge bg-light text-muted ms-1">대기</span>
+            {% elif step.status == 'signed' %}
+              <span class="badge bg-success ms-1">완료</span>
+            {% endif %}
+            {% if step.signed_at %}
+              <span class="text-muted ms-2">
+                ({{ step.signed_at.strftime('%Y-%m-%d %H:%M') }})
+              </span>
+            {% endif %}
+          </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted small mb-0">결재선 정보가 없습니다.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# TODO: 여기서부터는 나중에 E-INK 미리보기, 메타데이터, 파일 링크 등 붙이면 됨 #}
+</div>
+{% endblock %}

@@ -1,0 +1,342 @@
+{# templates/e_file_table.html #}
+{% extends "e_base.html" %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">전자결재 문서함</h4>
+    <a href="{{ url_for('bulletin.file_view') }}" class="btn btn-sm btn-primary">
+      파일 작성
+    </a>
+  </div>
+
+  <!-- 검색/필터 영역 -->
+  <form class="row g-2 mb-3" method="get" action="{{ url_for('bulletin.file_table') }}">
+    <input type="hidden" name="tab" value="{{ tab }}">
+    <div class="col-md-4">
+      <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm"
+             placeholder="문서명 / 원본파일명 검색">
+    </div>
+    <div class="col-md-3">
+      <select name="status" class="form-select form-select-sm">
+        <option value="all" {% if status=='all' %}selected{% endif %}>전체 상태</option>
+        <option value="draft" {% if status=='draft' %}selected{% endif %}>작성중</option>
+        <option value="in_review" {% if status=='in_review' %}selected{% endif %}>결재진행</option>
+        <option value="checked" {% if status=='checked' %}selected{% endif %}>검토완료</option>
+        <option value="approved" {% if status=='approved' %}selected{% endif %}>결재완료</option>
+        <option value="rejected" {% if status=='rejected' %}selected{% endif %}>반려</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm"
+             placeholder="작성일 시작">
+    </div>
+    <div class="col-md-2">
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm"
+             placeholder="작성일 끝">
+    </div>
+    <div class="col-md-1 d-grid">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">검색</button>
+    </div>
+  </form>
+
+  <!-- 탭 -->
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <a class="nav-link {% if tab == 'author' %}active{% endif %}"
+         href="{{ url_for('bulletin.file_table', tab='author') }}">결재작성문서</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if tab == 'pending' %}active{% endif %}"
+         href="{{ url_for('bulletin.file_table', tab='pending') }}">결재대기</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if tab == 'progress' %}active{% endif %}"
+         href="{{ url_for('bulletin.file_table', tab='progress') }}">결재진행사항</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if tab == 'completed' %}active{% endif %}"
+         href="{{ url_for('bulletin.file_table', tab='completed') }}">결재완료</a>
+    </li>
+  </ul>
+
+  <style>
+    .approval-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: .7rem;
+      margin-right: 2px;
+      margin-bottom: 2px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .approval-chip-signed {
+      background-color: #198754;
+      color: #fff;
+    }
+    .approval-chip-pending {
+      border-color: #adb5bd;
+      color: #6c757d;
+      background-color: #fff;
+    }
+    .status-badge {
+      font-size: .7rem;
+    }
+  </style>
+
+  <!-- Tab 1: 결재작성문서 -->
+  {% if tab == 'author' %}
+  <div class="card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th>문서명</th>
+            <th style="width: 100px;">상태</th>
+            <th style="width: 260px;">결재선</th>
+            <th style="width: 160px;">작성일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs_author %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
+            </td>
+            <td>
+              {% set s = doc.status %}
+              {% if s == 'draft' %}
+                <span class="badge bg-secondary status-badge">작성중</span>
+              {% elif s == 'in_review' %}
+                <span class="badge bg-info text-dark status-badge">결재진행</span>
+              {% elif s == 'checked' %}
+                <span class="badge bg-warning text-dark status-badge">검토완료</span>
+              {% elif s == 'approved' %}
+                <span class="badge bg-success status-badge">결재완료</span>
+              {% elif s == 'rejected' %}
+                <span class="badge bg-danger status-badge">반려</span>
+              {% else %}
+                <span class="badge bg-light text-muted status-badge">{{ s }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% for step in doc.approval_steps|sort(attribute='col_index') %}
+                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
+                <span class="approval-chip {{ chip_class }}"
+                      data-signed-at="{{ step.signed_at or '' }}">
+                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
+                </span>
+              {% endfor %}
+            </td>
+            <td>{{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted small py-3">
+              표시할 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tab 2: 결재대기 -->
+  {% if tab == 'pending' %}
+  <div class="card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th>문서명</th>
+            <th style="width: 140px;">요청자</th>
+            <th style="width: 120px;">내 역할</th>
+            <th style="width: 100px;">상태</th>
+            <th style="width: 260px;">결재선</th>
+            <th style="width: 160px;">요청일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc, slot in pending_rows %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
+            </td>
+            <td>
+              {{ doc.user.department or '' }} {{ doc.user.username or '' }}
+            </td>
+            <td>
+              {{ slot.label or '결재' }}
+            </td>
+            <td>
+              {% set s = doc.status %}
+              {% if s == 'in_review' %}
+                <span class="badge bg-info text-dark status-badge">결재진행</span>
+              {% elif s == 'checked' %}
+                <span class="badge bg-warning text-dark status-badge">검토완료</span>
+              {% else %}
+                <span class="badge bg-light text-muted status-badge">{{ s }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% for step in doc.approval_steps|sort(attribute='col_index') %}
+                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
+                <span class="approval-chip {{ chip_class }}"
+                      data-signed-at="{{ step.signed_at or '' }}">
+                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
+                </span>
+              {% endfor %}
+            </td>
+            <td>{{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center text-muted small py-3">
+              결재대기 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tab 3: 결재진행사항 -->
+  {% if tab == 'progress' %}
+  <div class="card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th>문서명</th>
+            <th style="width: 140px;">작성자</th>
+            <th style="width: 100px;">상태</th>
+            <th style="width: 260px;">결재선</th>
+            <th style="width: 160px;">작성일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs_progress %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
+            </td>
+            <td>
+              {{ doc.user.department or '' }} {{ doc.user.username or '' }}
+            </td>
+            <td>
+              {% set s = doc.status %}
+              {% if s == 'in_review' %}
+                <span class="badge bg-info text-dark status-badge">결재진행</span>
+              {% elif s == 'checked' %}
+                <span class="badge bg-warning text-dark status-badge">검토완료</span>
+              {% elif s == 'approved' %}
+                <span class="badge bg-success status-badge">결재완료</span>
+              {% elif s == 'rejected' %}
+                <span class="badge bg-danger status-badge">반려</span>
+              {% else %}
+                <span class="badge bg-secondary status-badge">{{ s }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% for step in doc.approval_steps|sort(attribute='col_index') %}
+                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
+                <span class="approval-chip {{ chip_class }}"
+                      data-signed-at="{{ step.signed_at or '' }}">
+                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
+                </span>
+              {% endfor %}
+            </td>
+            <td>{{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="text-center text-muted small py-3">
+              표시할 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tab 4: 결재완료 -->
+  {% if tab == 'completed' %}
+  <div class="card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th>문서명</th>
+            <th style="width: 140px;">작성자</th>
+            <th style="width: 260px;">결재선</th>
+            <th style="width: 160px;">완료일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs_completed %}
+          {% set last_signed = (doc.approval_steps | map(attribute='signed_at') | select) | list %}
+          {% if last_signed %}
+            {% set last_signed_at = last_signed | max %}
+          {% else %}
+            {% set last_signed_at = doc.updated_at %}
+          {% endif %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
+            </td>
+            <td>
+              {{ doc.user.department or '' }} {{ doc.user.username or '' }}
+            </td>
+            <td>
+              {% for step in doc.approval_steps|sort(attribute='col_index') %}
+                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
+                <span class="approval-chip {{ chip_class }}"
+                      data-signed-at="{{ step.signed_at or '' }}">
+                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
+                </span>
+              {% endfor %}
+            </td>
+            <td>
+              {{ last_signed_at.strftime('%Y-%m-%d %H:%M') if last_signed_at else '' }}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted small py-3">
+              결재완료 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

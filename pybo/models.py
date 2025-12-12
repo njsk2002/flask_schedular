@@ -5,8 +5,9 @@ from sqlalchemy.sql import func
 from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import event
-from sqlalchemy.ext.associationproxy import association_proxy  # ← 추가
+# from sqlalchemy.ext.associationproxy import association_proxy  # ← 추가
 from sqlalchemy import CheckConstraint
+from flask_login import UserMixin
 
 # ─────────────────────────────────────────────────────────────
 # ✅ 기준: "DB에도 KST 저장", 화면에서도 KST 그대로 사용
@@ -118,12 +119,56 @@ class Comment(db.Model):
 # ─────────────────────────────────────────────────────────────
 # 사용자
 # ─────────────────────────────────────────────────────────────
-class User(db.Model):
+# class User(db.Model):
+#     __tablename__ = 'user'
+#     __table_args__ = TABLE_ARGS  # ← 수정: UniqueConstraint 제거
+
+#     no = db.Column(db.Integer, primary_key=True, autoincrement=True)
+#     userid = db.Column(db.String(150), nullable=False, unique=True, default='')  # ← unique=True 유지
+
+#     password = db.Column(db.String(200), nullable=False, default='')
+#     username = db.Column(db.String(150), nullable=False, default='')
+
+#     userimage = db.Column(db.String(300))
+#     email = db.Column(db.String(150), nullable=False, default='')
+#     phone = db.Column(db.String(150), nullable=False, default='')
+
+#     photo_1 = db.Column(db.String(500))
+#     photo_2 = db.Column(db.String(500))
+#     photo_3 = db.Column(db.String(500))
+
+#     company = db.Column(db.String(100))
+#     com_address = db.Column(db.String(500))
+#     tel_rep = db.Column(db.String(100))
+#     tel_dir = db.Column(db.String(100))
+#     fax = db.Column(db.String(100))
+#     homepage = db.Column(db.String(300))
+#     department = db.Column(db.String(150))
+#     position = db.Column(db.String(150))
+#     blood = db.Column(db.String(150))
+#     healthy = db.Column(db.String(150))
+#     age = db.Column(db.String(150))
+#     namecard = db.Column(db.String(150), nullable=False, default='0')
+#     address = db.Column(db.String(500))
+#     security = db.Column(db.String(100), nullable=False, default='0')
+
+#     # 변경: server_default 제거, 파이썬 KST 기본값 사용
+#     create_date = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+#     modify_date = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+#     # 관계
+#     namecards = db.relationship('NameCard', backref='user', cascade="all, delete", passive_deletes=True, lazy=True)
+#     files = db.relationship('FileUpload', backref='user', cascade="all, delete", passive_deletes=True, lazy=True)
+#     sharecards = db.relationship('ShareCard', backref='user', cascade="all, delete", passive_deletes=True, lazy=True)
+
+
+
+class User(UserMixin, db.Model):
     __tablename__ = 'user'
-    __table_args__ = TABLE_ARGS  # ← 수정: UniqueConstraint 제거
+    __table_args__ = TABLE_ARGS  # ← 그대로 유지
 
     no = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    userid = db.Column(db.String(150), nullable=False, unique=True, default='')  # ← unique=True 유지
+    userid = db.Column(db.String(150), nullable=False, unique=True, default='')
 
     password = db.Column(db.String(200), nullable=False, default='')
     username = db.Column(db.String(150), nullable=False, default='')
@@ -151,7 +196,7 @@ class User(db.Model):
     address = db.Column(db.String(500))
     security = db.Column(db.String(100), nullable=False, default='0')
 
-    # 변경: server_default 제거, 파이썬 KST 기본값 사용
+    # 변경: server_default 제거, 파이썬 KST 기본값 사용 (형이 쓰던 그대로 유지)
     create_date = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
     modify_date = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
@@ -159,6 +204,11 @@ class User(db.Model):
     namecards = db.relationship('NameCard', backref='user', cascade="all, delete", passive_deletes=True, lazy=True)
     files = db.relationship('FileUpload', backref='user', cascade="all, delete", passive_deletes=True, lazy=True)
     sharecards = db.relationship('ShareCard', backref='user', cascade="all, delete", passive_deletes=True, lazy=True)
+
+    # 🔸 UserMixin 기본은 self.id를 쓰는데, 형은 PK가 no라서 이거 한 줄만 오버라이드
+    def get_id(self) -> str:
+        return str(self.no)
+
 
 # ─────────────────────────────────────────────────────────────
 # 명함/파일/공유카드
@@ -648,9 +698,9 @@ class SignLayout(db.Model):
     parent_h = db.Column(db.Integer, nullable=False)
 
     # 템플릿/슬롯/레이어 정의(JSON)
-    tpl_json    = db.Column(db.JSON, nullable=False)   # {label_ratio, line_pos_ratio, font_size_px, ...}
-    slots_json  = db.Column(db.JSON, nullable=False)   # [{x_rel,y_rel,w_rel,h_rel,role,label}, ...]
-    layers_json = db.Column(db.JSON)                   # (옵션) stamp/validity 포함 전체 구조
+    tpl_json    = db.Column(db.JSON, nullable=False)   # {approval_box, qr_box, period_box, message_box, ...}
+    slots_json  = db.Column(db.JSON, nullable=False)   # {"approval":{...}, "stamp":{...}, "qrcode":{...}, ...}
+    layers_json = db.Column(db.JSON)                   # [ {id,type,x,y,w,h,...}, ... ]
 
     version = db.Column(db.Integer, nullable=False, default=1)
     owner_user_id = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='SET NULL'))
@@ -661,134 +711,124 @@ class SignLayout(db.Model):
     owner = db.relationship('User', backref=db.backref('own_sign_layouts', lazy=True, passive_deletes=True))
 
 
-class ApprovalRoute(db.Model):
-    __tablename__ = 'approval_routes'
-    __table_args__ = TABLE_ARGS
+# class ApprovalRoute(db.Model):
+#     __tablename__ = 'approval_routes'
+#     __table_args__ = TABLE_ARGS
 
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+#     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
 
-    # ✅ 결재선 이름(필수)
-    name = db.Column(db.String(100), nullable=False)
+#     # ✅ 결재선 이름(필수)
+#     name = db.Column(db.String(100), nullable=False)
 
-    # 작성자
-    created_by = db.Column(
-        db.Integer,
-        db.ForeignKey('user.no', ondelete='SET NULL'),
-        index=True,
-        nullable=True
-    )
+#     # 작성자
+#     created_by = db.Column(
+#         db.Integer,
+#         db.ForeignKey('user.no', ondelete='SET NULL'),
+#         index=True,
+#         nullable=True
+#     )
 
-    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+#     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
 
-    # 작성자 관계
-    creator = db.relationship(
-        'User',
-        backref=db.backref('approval_routes', lazy=True, passive_deletes=True),
-        foreign_keys=[created_by],
-        lazy='joined'
-    )
+#     # 작성자 관계
+#     creator = db.relationship(
+#         'User',
+#         backref=db.backref('approval_routes', lazy=True, passive_deletes=True),
+#         foreign_keys=[created_by],
+#         lazy='joined'
+#     )
 
-    # ✅ 프록시 필드명 충돌 방지: creator_username 등으로 변경
-    creator_userid     = association_proxy('creator', 'userid')
-    creator_username   = association_proxy('creator', 'username')
-    creator_department = association_proxy('creator', 'department')
-    creator_position   = association_proxy('creator', 'position')
-    creator_photo_1    = association_proxy('creator', 'photo_1')
+#     # ✅ 프록시 필드명
+#     creator_userid     = association_proxy('creator', 'userid')
+#     creator_username   = association_proxy('creator', 'username')
+#     creator_department = association_proxy('creator', 'department')
+#     creator_position   = association_proxy('creator', 'position')
+#     creator_photo_1    = association_proxy('creator', 'photo_1')
 
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,  # ← 실 컬럼
-            "created_by": self.created_by,
-            "created_at": self.created_at,
-            "creator": {
-                "userid": self.creator_userid,
-                "username": self.creator_username,
-                "department": self.creator_department,
-                "position": self.creator_position,
-                "photo_1": self.creator_photo_1,
-            },
-        }
-
-
+#     def to_dict(self):
+#         return {
+#             "id": self.id,
+#             "name": self.name,
+#             "created_by": self.created_by,
+#             "created_at": self.created_at,
+#             "creator": {
+#                 "userid": self.creator_userid,
+#                 "username": self.creator_username,
+#                 "department": self.creator_department,
+#                 "position": self.creator_position,
+#                 "photo_1": self.creator_photo_1,
+#             },
+#         }
 
 
+# class ApprovalRouteStep(db.Model):
+#     __tablename__ = 'approval_route_steps'
+#     __table_args__ = (
+#         UniqueConstraint('route_id', 'step_order', name='uq_route_steporder'),
+#         TABLE_ARGS,
+#     )
+
+#     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+#     route_id = db.Column(db.BigInteger, db.ForeignKey('approval_routes.id', ondelete='CASCADE'), nullable=False, index=True)
+#     step_order = db.Column(db.Integer, nullable=False)
+#     role = db.Column(db.Enum('author', 'review', 'approve', 'review2', 'approve2', name='approval_role'), nullable=False)
+
+#     assignee_user_id  = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='SET NULL'), index=True)
+#     assignee_group_id = db.Column(db.Integer)
+#     sign_required     = db.Column(db.Boolean, nullable=False, default=True)
+
+#     assignee = db.relationship('User', foreign_keys=[assignee_user_id], lazy='joined')
+
+#     # 최신 User 필드 접근용 프록시
+#     assignee_userid     = association_proxy('assignee', 'userid')
+#     assignee_username   = association_proxy('assignee', 'username')
+#     assignee_department = association_proxy('assignee', 'department')
+#     assignee_position   = association_proxy('assignee', 'position')
+#     assignee_photo_1    = association_proxy('assignee', 'photo_1')
+
+#     # 스냅샷 컬럼
+#     assignee_userid_snapshot      = db.Column(db.String(150))
+#     assignee_username_snapshot    = db.Column(db.String(150))
+#     assignee_department_snapshot  = db.Column(db.String(150))
+#     assignee_position_snapshot    = db.Column(db.String(150))
+#     assignee_photo_1_snapshot     = db.Column(db.String(500))
+
+#     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+#     updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
 
-class ApprovalRouteStep(db.Model):
-    __tablename__ = 'approval_route_steps'
+# @event.listens_for(ApprovalRouteStep, 'before_insert')
+# def _fill_step_assignee_snapshot(mapper, connection, target: 'ApprovalRouteStep'):
+#     # 담당자가 지정되어 있으면 그 시점의 값을 스냅샷으로 저장
+#     if target.assignee is not None:
+#         u = target.assignee
+#         target.assignee_userid_snapshot     = getattr(u, 'userid', None)
+#         target.assignee_username_snapshot   = getattr(u, 'username', None)
+#         target.assignee_department_snapshot = getattr(u, 'department', None)
+#         target.assignee_position_snapshot   = getattr(u, 'position', None)
+#         target.assignee_photo_1_snapshot    = getattr(u, 'photo_1', None)
+
+
+
+# ─────────────────────────────────────────────────────────────
+# DocumentInfo: 문서 등록/결재 인스턴스
+#   - target_dir: in_review | checked | approved | bulletin_files | uploads
+#   - status    : draft | in_review | checked | approved | rejected | uploads
+#   - 즉시배포형: target_dir='uploads', status='approved', need_approval=False
+# ─────────────────────────────────────────────────────────────
+
+class DocumentInfo(db.Model):
+    __tablename__ = 'document_infos'
     __table_args__ = (
-        UniqueConstraint('route_id', 'step_order', name='uq_route_steporder'),
-        TABLE_ARGS,
-    )
-
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    route_id = db.Column(db.BigInteger, db.ForeignKey('approval_routes.id', ondelete='CASCADE'), nullable=False, index=True)
-    step_order = db.Column(db.Integer, nullable=False)
-    role = db.Column(db.Enum('author', 'review', 'approve', 'review2', 'approve2', name='approval_role'), nullable=False)
-
-    assignee_user_id  = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='SET NULL'), index=True)
-    assignee_group_id = db.Column(db.Integer)
-    sign_required     = db.Column(db.Boolean, nullable=False, default=True)
-
-    assignee = db.relationship('User', foreign_keys=[assignee_user_id], lazy='joined')
-
-    # 최신 User 필드 접근용 프록시
-    assignee_userid     = association_proxy('assignee', 'userid')
-    assignee_username   = association_proxy('assignee', 'username')
-    assignee_department = association_proxy('assignee', 'department')
-    assignee_position   = association_proxy('assignee', 'position')
-    assignee_photo_1    = association_proxy('assignee', 'photo_1')
-
-    # 스냅샷 컬럼
-    assignee_userid_snapshot      = db.Column(db.String(150))
-    assignee_username_snapshot    = db.Column(db.String(150))
-    assignee_department_snapshot  = db.Column(db.String(150))
-    assignee_position_snapshot    = db.Column(db.String(150))
-    assignee_photo_1_snapshot     = db.Column(db.String(500))
-
-    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
-    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
-    
-
-# ─────────────────────────────────────────────────────────────
-# 👇 자동 업데이트 👇
-# ─────────────────────────────────────────────────────────────
-@event.listens_for(ApprovalRouteStep, 'before_insert')
-def _fill_step_assignee_snapshot(mapper, connection, target: 'ApprovalRouteStep'):
-    # 담당자가 지정되어 있으면 그 시점의 값을 스냅샷으로 저장
-    if target.assignee is not None:
-        u = target.assignee
-        target.assignee_userid_snapshot     = getattr(u, 'userid', None)
-        target.assignee_username_snapshot   = getattr(u, 'username', None)
-        target.assignee_department_snapshot = getattr(u, 'department', None)
-        target.assignee_position_snapshot   = getattr(u, 'position', None)
-        target.assignee_photo_1_snapshot    = getattr(u, 'photo_1', None)
-
-
-
-# ─────────────────────────────────────────────────────────────
-# Upload: 새 워크플로우
-#   - target_dir: in_review | checked | approved | upload
-#   - status    : draft | in_review | checked | approved | rejected
-#   - 즉시배포형은 처음부터 target_dir='upload', status='approved', need_approval=False
-# ─────────────────────────────────────────────────────────────
-
-class Upload(db.Model):
-    __tablename__ = 'uploads'
-    __table_args__ = (
-        # 단계/상태 제약
         CheckConstraint(
-                "target_dir IN ('in_review','checked','approved','uploads')",
-                name='ck_upload_target_dir'
-            ),
+            "target_dir IN ('in_review','checked','approved','bulletin_files','uploads')",
+            name='ck_docinfo_target_dir'
+        ),
         CheckConstraint(
             "status IN ('draft','in_review','checked','approved','rejected','uploads')",
-            name='ck_upload_status'
-            ),
-
-        # 업로드 큐/리스트 화면 최적화 인덱스
-        db.Index('idx_upload_queue', 'user_id', 'target_dir', 'status', 'created_at'),
+            name='ck_docinfo_status'
+        ),
+        db.Index('idx_docinfo_queue', 'user_id', 'target_dir', 'status', 'created_at'),
         TABLE_ARGS,
     )
 
@@ -797,17 +837,25 @@ class Upload(db.Model):
     user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='SET NULL'))
     device_id = db.Column(db.String(64))   # (옵션) 특정 디바이스를 미리 지정 가능
 
+    # 문서 이름(화면/검색용). 원본 파일명과 분리된 "타이틀"
+    doc_name = db.Column(db.String(200))  # 예: "회의실 안내문 2025-12"
+
     # 원본 파일명 / 저장 경로(상대 또는 절대)
     orig_filename = db.Column(db.String(255), nullable=False)
-    stored_path   = db.Column(db.String(500), nullable=False)  # 예: "<userid>/in_review/..."
+    stored_path   = db.Column(db.String(500), nullable=False)
 
-    # 단계 디렉토리(기본: in_review)
+    # 단계 디렉토리
     target_dir = db.Column(db.String(16), nullable=False, default='in_review', index=True)
 
+    # 결재 필요 여부 / 스탬프 필요 여부
     need_approval = db.Column(db.Boolean, nullable=False, default=True)
+    need_stamp    = db.Column(db.Boolean, nullable=False, default=False)
 
-    # 상태
+    # 상태: draft / in_review / checked / approved / rejected / uploads
     status = db.Column(db.String(16), nullable=False, default='in_review', index=True)
+
+    # 문서 만료 시점(게시/사용 기한)
+    expire_time = db.Column(MySQLDateTime(fsp=0))
 
     # 렌더 파라미터(옵션)
     pages   = db.Column(db.Integer, default=1)
@@ -819,28 +867,40 @@ class Upload(db.Model):
     rotate  = db.Column(db.Integer)
 
     # 결재선/레이아웃 스냅샷
-    route_id       = db.Column(db.BigInteger, db.ForeignKey('approval_routes.id', ondelete='SET NULL'))
-    sign_layout_id = db.Column(db.BigInteger, db.ForeignKey('sign_layouts.id', ondelete='SET NULL'))
+    # 🔸 ApprovalRoute 템플릿은 사용하지 않으므로 route_id FK 제거
+    sign_layout_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('sign_layouts.id', ondelete='SET NULL')
+    )
 
+    # 프론트/서비스에서 구성한 결재선 구조 전체를 JSON으로만 보관
+    # 예: { "cols":[{ "step_type":"작성", "user_id":..., ...}, ...], ... }
     route_snapshot_json  = db.Column(db.JSON)
     layout_snapshot_json = db.Column(db.JSON)
-    metadata_json        = db.Column(db.JSON)  # 업로드 단계 메타(경량)
+
+    # 기타 메타데이터(게시기간, 카테고리, 태그 등)
+    metadata_json        = db.Column(db.JSON)
+
+    # 최종 승인된 정규화 문서(pdf 등) 상대경로
+    final_doc_relpath = db.Column(db.String(500))
 
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
     updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
-    user        = db.relationship('User', backref=db.backref('uploads', lazy=True, passive_deletes=True))
-    route       = db.relationship('ApprovalRoute', backref=db.backref('uploads', lazy=True, passive_deletes=True))
-    sign_layout = db.relationship('SignLayout', backref=db.backref('uploads', lazy=True, passive_deletes=True))
+    user        = db.relationship('User', backref=db.backref('document_infos', lazy=True, passive_deletes=True))
+    sign_layout = db.relationship('SignLayout', backref=db.backref('document_infos', lazy=True, passive_deletes=True))
 
-    # Upload 클래스 하단 관계 추가(이미 backref로도 접근 가능하지만 명시)
-    # approval_steps = db.relationship('UploadApprovalStep', backref='upload',
-    #                                 cascade="all, delete", passive_deletes=True, lazy=True)
-    # sign_slots     = db.relationship('SignSlot', backref='upload',
-    #                                 cascade="all, delete", passive_deletes=True, lazy=True)
-    # device_jobs    = db.relationship('DeviceJob', backref='upload',
-    #                                 cascade="all, delete", passive_deletes=True, lazy=True)
-
+    @property
+    def is_publish_source(self) -> bool:
+        """
+        디바이스 송출 후보(1차 필터 대상)인지 여부:
+        - 결재형: target_dir='approved'       AND status='approved'
+        - 공지형: target_dir='bulletin_files' AND status='approved'
+        """
+        return (
+            self.status == 'approved'
+            and self.target_dir in ('approved', 'bulletin_files')
+        )
 
 
 
@@ -849,21 +909,30 @@ class Upload(db.Model):
 # 템플릿(ApprovalRoute/ApprovalRouteStep)과 별개로, 해당 업로드에 귀속되는 인스턴스를 저장
 # ─────────────────────────────────────────────────────────────
 
-class UploadApprovalStep(db.Model):
-    __tablename__ = 'upload_approval_steps'
+# ─────────────────────────────────────────────────────────────
+# 문서 단위 결재 열(최대 5열) – DocumentInfo 기준
+# ─────────────────────────────────────────────────────────────
+
+class DocumentApprovalStep(db.Model):
+    __tablename__ = 'document_approval_steps'
     __table_args__ = (
-        db.UniqueConstraint('upload_id', 'col_index', name='uq_uapproval_col'),
-        db.Index('idx_uapproval_upload', 'upload_id', 'status'),
+        db.UniqueConstraint('document_info_id', 'col_index', name='uq_docapproval_col'),
+        db.Index('idx_docapproval_doc', 'document_info_id', 'status'),
         TABLE_ARGS,
     )
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    upload_id = db.Column(db.BigInteger, db.ForeignKey('uploads.id', ondelete='CASCADE'), nullable=False, index=True)
+    document_info_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('document_infos.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
 
     # 1~5 열
     col_index = db.Column(db.Integer, nullable=False)  # 1..5
 
-    # 단계(작성/검토/승인) — 화면 용어 그대로 Enum 구성
+    # 단계(작성/검토/승인)
     step_type = db.Column(db.Enum('작성','검토','승인', name='approval_step_type'), nullable=False)
 
     # 스냅샷(그 시점의 부서/이름/사진 등)
@@ -883,26 +952,35 @@ class UploadApprovalStep(db.Model):
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
     updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
-    upload = db.relationship('Upload', backref=db.backref('approval_steps', lazy=True, passive_deletes=True))
+    document_info = db.relationship(
+        'DocumentInfo',
+        backref=db.backref('approval_steps', lazy=True, passive_deletes=True)
+    )
     signed_by = db.relationship('User', foreign_keys=[signed_by_user_id], lazy='joined')
 
 
+
 # ─────────────────────────────────────────────────────────────
-# 서명 슬롯(최대 30칸, 부분업데이트 좌표용)
+# 서명 슬롯(최대 30칸, 부분업데이트 좌표용) – DocumentInfo 기준
 # ─────────────────────────────────────────────────────────────
 
 class SignSlot(db.Model):
     __tablename__ = 'sign_slots'
     __table_args__ = (
-        db.UniqueConstraint('upload_id', 'slot_key', name='uq_signslot_upload_slotkey'),
-        db.Index('idx_signslot_upload', 'upload_id', 'filled'),
+        db.UniqueConstraint('document_info_id', 'slot_key', name='uq_signslot_doc_slotkey'),
+        db.Index('idx_signslot_doc', 'document_info_id', 'filled'),
         db.Index('idx_signslot_user', 'target_user_id', 'filled'),
-        db.Index('idx_signslot_upload_slot', 'upload_id', 'slot_key'),
+        db.Index('idx_signslot_doc_slot', 'document_info_id', 'slot_key'),
         TABLE_ARGS,
     )
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    upload_id = db.Column(db.BigInteger, db.ForeignKey('uploads.id', ondelete='CASCADE'), nullable=False, index=True)
+    document_info_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('document_infos.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
 
     # 프론트 레이어 id와 1:1 매핑(예: 'S001')
     slot_key = db.Column(db.String(64), nullable=False)
@@ -926,14 +1004,18 @@ class SignSlot(db.Model):
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
     updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
-    upload      = db.relationship('Upload', backref=db.backref('sign_slots', lazy=True, passive_deletes=True))
+    document_info = db.relationship(
+        'DocumentInfo',
+        backref=db.backref('sign_slots', lazy=True, passive_deletes=True)
+    )
     target_user = db.relationship('User', foreign_keys=[target_user_id], lazy='joined')
     filled_by   = db.relationship('User', foreign_keys=[filled_by_id], lazy='joined')
 
 
+
 # ─────────────────────────────────────────────────────────────
 # E-INK: 디바이스 / 자산 / 게시(스케줄)
-#   - upload 단계에서 확정된 장치용 산출물(.bin/.meta) 이력 관리
+#   - DocumentInfo 단계에서 확정된 장치용 산출물(.bin/.meta) 이력 관리
 # ─────────────────────────────────────────────────────────────
 
 class EInkDevice(db.Model):
@@ -945,11 +1027,9 @@ class EInkDevice(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
 
-    # PK FK 한 가닥만 유지
     user_no = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'),
                         nullable=False, index=True)
 
-    # (선택) 캐시용: 경로에 바로 쓰기 위해 userid 문자열 보관(UNIQUE FK 아님)
     user_userid = db.Column(db.String(64), nullable=True, index=True)
 
     device_id   = db.Column(db.String(64), nullable=False)
@@ -974,13 +1054,12 @@ class EInkDevice(db.Model):
                            backref=db.backref('eink_devices', lazy=True, passive_deletes=True))
 
 
-
-# ─────────────────────────────────────────────────────────────
-# 디바이스 전송 잡(전체/부분 공용 큐)
-# 결재 완료 후 full 업데이트, 서명 수행 시 partial 업데이트를 하나의 큐로 관리
-# ─────────────────────────────────────────────────────────────
-
 class DeviceJob(db.Model):
+    """
+    디바이스 전송 잡(전체/부분 공용 큐)
+    - 결재 완료 후 full 업데이트
+    - 서명 수행 시 partial 업데이트
+    """
     __tablename__ = 'device_jobs'
     __table_args__ = (
         db.Index('idx_djob_dev_status', 'device_id', 'status'),
@@ -997,8 +1076,8 @@ class DeviceJob(db.Model):
     status   = db.Column(db.Enum('queued','sending','done','error', name='device_job_status'), nullable=False, default='queued')
 
     # 소스 추적(옵션)
-    src_upload_id = db.Column(db.BigInteger, db.ForeignKey('uploads.id', ondelete='SET NULL'))
-    src_asset_id  = db.Column(db.BigInteger, db.ForeignKey('eink_asset.id', ondelete='SET NULL'))
+    src_docinfo_id = db.Column(db.BigInteger, db.ForeignKey('document_infos.id', ondelete='SET NULL'))
+    src_asset_id   = db.Column(db.BigInteger, db.ForeignKey('eink_asset.id', ondelete='SET NULL'))
 
     # 페이로드 경로(상대경로 권장)
     payload_relpath = db.Column(db.String(512))
@@ -1016,24 +1095,23 @@ class DeviceJob(db.Model):
     started_at  = db.Column(MySQLDateTime(fsp=0))
     finished_at = db.Column(MySQLDateTime(fsp=0))
 
-    user  = db.relationship('User', backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
-    upload= db.relationship('Upload', backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
-    asset = db.relationship('EInkAsset', backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
+    user     = db.relationship('User', backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
+    docinfo  = db.relationship('DocumentInfo', backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
+    asset    = db.relationship('EInkAsset',   backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
 
 
 
 class EInkAsset(db.Model):
     """
-    upload 단계에서 확정된 장치용 산출물(.bin/.meta)을 이력으로 저장
+    DocumentInfo 단계에서 확정된 장치용 산출물(.bin/.meta)을 이력으로 저장
+    - bin_relpath / meta_relpath 는 userid 기준 상대경로:
+      예: f"{userid}/device/{device_id}/renders/{uuid}.bin"
     """
     __tablename__ = 'eink_asset'
     __table_args__ = (
-        # 조회/스케줄 최적화
         db.Index('idx_easset_user_dev_ver', 'user_id', 'device_id', 'ver'),
         db.Index('idx_easset_sched', 'user_id', 'device_id', 'expect_post_time', 'expire_time'),
-        # 동일 user-device 내 ver 유일 보장
         UniqueConstraint('user_id', 'device_id', 'ver', name='uq_easset_user_dev_ver'),
-        # 값 제약
         CheckConstraint('width  > 0',   name='ck_easset_width_pos'),
         CheckConstraint('height > 0',   name='ck_easset_height_pos'),
         CheckConstraint('raw_len   > 0', name='ck_easset_rawlen_pos'),
@@ -1046,8 +1124,8 @@ class EInkAsset(db.Model):
     user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
     device_id = db.Column(db.String(64), nullable=False, index=True)  # 예: "E03"
 
-    # (옵션) 어느 Upload에서 파생되었는지 추적
-    upload_id = db.Column(db.BigInteger, db.ForeignKey('uploads.id', ondelete='SET NULL'))
+    # (옵션) 어느 DocumentInfo에서 파생되었는지
+    document_info_id = db.Column(db.BigInteger, db.ForeignKey('document_infos.id', ondelete='SET NULL'))
 
     # 렌더 결과 스펙
     width  = db.Column(db.Integer, nullable=False)
@@ -1058,18 +1136,16 @@ class EInkAsset(db.Model):
     uuid   = db.Column(db.String(36), nullable=False)
 
     # 파일 경로 (userid 루트 기준 상대경로)
-    bin_relpath  = db.Column(db.String(512), nullable=False)    # "upload/E03/renders/....bin"
-    meta_relpath = db.Column(db.String(512), nullable=False)    # "upload/E03/renders/....meta.json"
+    bin_relpath  = db.Column(db.String(512), nullable=False)
+    meta_relpath = db.Column(db.String(512), nullable=False)
 
     # 무결성/용량
     raw_len   = db.Column(db.Integer, nullable=False)
     total_len = db.Column(db.Integer, nullable=False)
-    crc32_le  = db.Column(db.String(8), nullable=False)         # 소문자 8-hex
+    crc32_le  = db.Column(db.String(8), nullable=False)  # 소문자 8-hex
 
-    # 델타 가능 힌트
     asset_partial_ready = db.Column(db.Boolean, nullable=False, default=False)
 
-    # (선택) 메타 JSON 전체 스냅샷
     meta_json = db.Column(db.JSON)
 
     # 스케줄
@@ -1078,21 +1154,23 @@ class EInkAsset(db.Model):
     expire_time        = db.Column(MySQLDateTime(fsp=0))
 
     # 승인/결재 결과 스냅샷(최종본 기준)
-    need_approval  = db.Column(db.Boolean, nullable=False, default=False)
-    final_approval = db.Column(db.Boolean, nullable=False, default=True)
-    route_id       = db.Column(db.BigInteger, db.ForeignKey('approval_routes.id', ondelete='SET NULL'))
+    # 🔸 ApprovalRoute FK 제거 – 실제 사용된 결재선/결재 결과를 JSON으로만 보관
+    need_approval            = db.Column(db.Boolean, nullable=False, default=False)
+    final_approval           = db.Column(db.Boolean, nullable=False, default=True)
+    approval_snapshot_json   = db.Column(db.JSON)  # 예: route_snapshot_json + 승인 정보 병합본
 
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
     updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
-    user   = db.relationship('User', backref=db.backref('eink_assets', lazy=True, passive_deletes=True))
-    route  = db.relationship('ApprovalRoute', backref=db.backref('eink_assets', lazy=True, passive_deletes=True))
-    upload = db.relationship('Upload', backref=db.backref('derived_assets', lazy=True, passive_deletes=True))
+    user    = db.relationship('User',         backref=db.backref('eink_assets',    lazy=True, passive_deletes=True))
+    docinfo = db.relationship('DocumentInfo', backref=db.backref('derived_assets', lazy=True, passive_deletes=True))
+
+
 
 
 class EInkPosting(db.Model):
     """
-    디바이스에 어떤 자산을 언제 보여줄지(현재/미래) 상태 관리
+    디바이스에 어떤 자산(EInkAsset)을 언제 보여줄지(현재/미래) 상태 관리
     """
     __tablename__ = 'eink_posting'
     __table_args__ = (
@@ -1121,8 +1199,71 @@ class EInkPosting(db.Model):
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
     updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
-    user  = db.relationship('User', backref=db.backref('eink_postings', lazy=True, passive_deletes=True))
-    asset = db.relationship('EInkAsset', backref=db.backref('postings', lazy=True, passive_deletes=True))
+    user  = db.relationship('User',     backref=db.backref('eink_postings', lazy=True, passive_deletes=True))
+    asset = db.relationship('EInkAsset',backref=db.backref('postings',      lazy=True, passive_deletes=True))
+
+
+
+# ─────────────────────────────────────────────────────────────
+# 문서 도메인 (OFFLINE → ONLINE 전자문서/회의록 공통 레이어)
+# ─────────────────────────────────────────────────────────────
+
+class Document(db.Model):
+    __tablename__ = "documents"
+    __table_args__ = TABLE_ARGS
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey("user.no", ondelete="SET NULL"))
+
+    title = db.Column(db.String(200), nullable=False)          # 문서 제목
+    doc_type = db.Column(
+        db.Enum("GENERAL", "FORM", "MEETING", "INVOICE", name="doc_type"),
+        nullable=False,
+        default="GENERAL"
+    )
+    current_version = db.Column(db.Integer, nullable=False, default=1)
+    state = db.Column(
+        db.Enum("ACTIVE", "ARCHIVED", "DELETED", name="doc_state"),
+        nullable=False,
+        default="ACTIVE"
+    )
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+    owner = db.relationship("User", backref=db.backref("documents", lazy=True, passive_deletes=True))
+
+
+class DocumentVersion(db.Model):
+    __tablename__ = "document_versions"
+    __table_args__ = (
+        db.Index("idx_docver_doc_ver", "document_id", "version"),
+        db.UniqueConstraint("document_id", "version", name="uq_docver_doc_ver"),  # ★ 권장 추가
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    document_id = db.Column(db.BigInteger, db.ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+
+    version = db.Column(db.Integer, nullable=False)
+    source_ext = db.Column(db.String(16), nullable=False)   # "docx","hwp","pdf","jpg" ...
+    source_relpath = db.Column(db.String(500), nullable=False)  # /doc_repo/{doc_id}/source.docx
+    pdf_relpath    = db.Column(db.String(500), nullable=False)  # /doc_repo/{doc_id}/normalized.pdf
+
+    page_count = db.Column(db.Integer, nullable=False)
+    hash_value = db.Column(db.String(64))  # sha256 등
+
+    state = db.Column(
+        db.Enum("DRAFT", "REVIEW", "APPROVED", "SEALED", name="docver_state"),
+        nullable=False,
+        default="DRAFT"
+    )
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    approved_at = db.Column(MySQLDateTime(fsp=0))
+
+    document = db.relationship("Document", backref=db.backref("versions", lazy=True, passive_deletes=True))
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1133,34 +1274,42 @@ class EInkPosting(db.Model):
 def _fill_expire_time(mapper, connection, target: 'EInkAsset'):
     """
     posting_period_sec가 있으면 expire_time 자동 계산.
-    (형의 기준: DB에도 KST 저장이므로 KST naive 그대로 계산)
+    (DB에도 KST 저장이므로 KST naive 그대로 계산)
     """
     if target.expect_post_time and target.posting_period_sec and not target.expire_time:
         target.expire_time = target.expect_post_time + timedelta(seconds=int(target.posting_period_sec))
 
 
-def create_immediate_upload_record(
+def create_immediate_documentinfo_record(
     *, user_id:int, device_id:str,
     orig_filename:str, stored_relpath:str,
     width:int, height:int, mode:str, bpp:int=4
-) -> Upload:
+) -> DocumentInfo:
     """
-    즉시배포형: 곧바로 upload/ 에 저장하고 Upload 레코드를 upload 상태로 만든다.
-    이어서 파일시스템에서 bin/meta 생성 → EInkAsset/EInkPosting 생성은 서비스 계층에서 수행.
+    즉시배포형: 곧바로 upload/ 에 저장하고 DocumentInfo 레코드를
+    target_dir='uploads', status='approved' 상태로 생성.
+
+    - stored_relpath 예:
+      f"{userid}/upload/{device_id}/assets/{some_name}.pdf"
+
+    - 일반 결재형(approval_process 기반)은 이 헬퍼 대신
+      서비스 레이어에서 DocumentInfo를 생성 후 flush → id 할당 →
+      stored_path = f"{userid}/approval_process/{docinfo.id}/{orig_filename}"
+      패턴으로 설정하는 것을 권장.
     """
-    rec = Upload(
+    rec = DocumentInfo(
         user_id=user_id,
         device_id=device_id,
         orig_filename=orig_filename,
-        stored_path=stored_relpath,     # 예: "<userid>/upload/E03/assets/... 또는 renders/..."
+        stored_path=stored_relpath,
         target_dir='uploads',
         status='approved',
         need_approval=False,
-        width=width, height=height, mode=mode #bpp=bpp
+        width=width,
+        height=height,
+        mode=mode,       # bpp는 EInkAsset 쪽에서 관리
     )
     db.session.add(rec)
     return rec
-
-
 
 

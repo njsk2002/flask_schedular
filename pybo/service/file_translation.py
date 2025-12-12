@@ -324,6 +324,8 @@ class FileTranslationBlackBG:
     def load_upload_image(self, upload_id: int, page: int = 1) -> Image.Image:
         from flask import current_app
 
+        current_app.logger.debug(f"UPLOAD: {upload_id}")
+
         item = self.uploads.get(upload_id)
         if not item:
             raise FileNotFoundError("upload not found")
