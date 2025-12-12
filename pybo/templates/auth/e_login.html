@@ -76,8 +76,10 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                sessionStorage.setItem("userId", data.user_id);  // ✅ 세션 저장
-                window.location.href = "{{ url_for('naverapi.admin_image') }}";  // ✅ 로그인 성공 후 이동
+                sessionStorage.setItem("userId", data.user.userid);  // ✅ 세션 저장
+                 // 2) 이름도 쓰고 싶으면
+                sessionStorage.setItem("userName", data.user.username || data.user.userid);
+                window.location.href = "{{ url_for('bulletin.file_view') }}";  // ✅ 로그인 성공 후 이동
             } else {
                 // 🚨 로그인 실패 시 오류 메시지 표시
                 let errorMessage = document.getElementById("error-message");

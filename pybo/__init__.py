@@ -9,6 +9,7 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import MetaData, text
 from flask_jwt_extended import JWTManager
+from flask_login import LoginManager   # 🔹 추가
 import config
 
 # 외부 스케줄러 초기화 함수
@@ -28,6 +29,7 @@ naming_convention = {
 
 db = SQLAlchemy(metadata=MetaData(naming_convention=naming_convention))
 migrate = Migrate()
+login_manager = LoginManager()  # 🔹 추가: Flask-Login 인스턴스
 
 # ─────────────────────────────────────────────────────────────
 # 스케줄러/백그라운드 작업 가드 유틸
@@ -106,6 +108,25 @@ def create_app():
     #  - circular import를 피하기 위해 여기서 import
     # ─────────────────────────────────────────────────────────
     from . import models  # 중요: 누락 시 autogenerate가 빈 리비전을 만들 수 있음
+    from .models import User  # 🔹 추가: Flask-Login user_loader용
+
+    # ─────────────────────────────────────────────────────────
+    # Flask-Login 초기화
+    # ─────────────────────────────────────────────────────────
+    login_manager.init_app(app)
+    login_manager.login_view = "auth.login"  # auth_views.bp 안의 로그인 엔드포인트 이름 기준
+    login_manager.login_message = "로그인이 필요한 페이지입니다."
+    login_manager.login_message_category = "warning"
+
+    @login_manager.user_loader
+    def load_user(user_id: str):
+        """
+        세션에 저장된 user_id → User 인스턴스 복원
+        """
+        try:
+            return User.query.get(int(user_id))
+        except Exception:
+            return None
 
     # ─────────────────────────────────────────────────────────
     # 마이그레이션 초기화

@@ -1,0 +1,1211 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3" id="draft-app">
+
+  <!-- 헤더 -->
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center gap-3">
+      <h3 class="mb-0">E-Ink 파일 작성 · 검토 · 배포 (단일)</h3>
+      <span class="badge text-bg-secondary" id="device-badge">대상 장치 선택 전</span>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary" id="btn-save-draft">임시저장</button>
+      <button class="btn btn-outline-primary" id="btn-export-editor" title="편집 레이어를 이미지에 굽기(서버 빌드)">편집결과 내보내기</button>
+      <button class="btn btn-success" id="btn-send">전송/배포</button>
+    </div>
+  </div>
+
+  <!-- 토스트 -->
+  <div id="toast-area" class="position-fixed top-0 end-0 p-3" style="z-index:1080;"></div>
+
+  <!-- 스타일 -->
+<style>
+  /* ===== canvas / layers ===== */
+  #draft-app .tool-btn { padding:.35rem .6rem; }
+
+  #draft-app .canvas-wrap {
+    background:#f8f9fa;
+    border:1px solid #dee2e6;
+    border-radius:.5rem;
+    position:relative;
+    overflow:hidden;
+    min-height:360px;
+  }
+
+  /* 미리보기 이미지는 포인터 이벤트를 먹지 않게 */
+  #draft-app .preview-img {
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    display:block;
+    position:relative;
+    z-index:1;
+    pointer-events:none !important;
+    -webkit-user-drag:none;
+    user-select:none;
+  }
+
+  /* 스테이지는 이미지 위로 */
+  #draft-app .stage {
+    position:absolute;
+    inset:0;
+    z-index:3;
+    pointer-events:auto !important;
+    touch-action:none;
+  }
+
+  #draft-app .layer {
+    position:absolute;
+    border:1px dashed #0d6efd;
+    background:rgba(13,110,253,.04);
+    pointer-events:auto !important;
+    touch-action:none;
+    cursor:move;
+    z-index:4;
+    box-sizing:border-box;
+  }
+
+  #draft-app .layer .handle {
+    position:absolute;
+    right:-6px;
+    bottom:-6px;
+    width:12px;
+    height:12px;
+    background:#0d6efd;
+    border-radius:2px;
+    cursor:se-resize;
+    z-index:5;
+  }
+
+  #draft-app .layer .title {
+    position:absolute;
+    top:-18px;
+    left:0;
+    font-size:12px;
+    color:#0d6efd;
+    background:rgba(255,255,255,.8);
+    padding:0 .25rem;
+    border-radius:3px;
+    pointer-events:none;
+  }
+
+  #draft-app .layer.selected { outline:2px solid #198754; }
+
+  #draft-app .ghost-line {
+    position:absolute;
+    height:2px;
+    background:#212529;
+    opacity:.8;
+  }
+
+  #draft-app .props small { color:#6c757d; }
+  #draft-app .hidden { display:none !important; }
+</style>
+
+
+
+  <!-- 1. 좌측: 파일/옵션/결재 | 우측: 프리뷰+에디터 -->
+  <div class="row g-3">
+    <div class="col-12 col-xl-4">
+
+      <!-- 파일 선택 -->
+      <div class="card shadow-sm">
+        <div class="card-header"><strong>파일</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <input type="file" id="file-input" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.bmp,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.csv,.txt">
+          </div>
+          <div class="row g-2">
+            <div class="col-8">
+              <input type="text" class="form-control" id="input-filename" placeholder="파일명(표시용)" readonly>
+            </div>
+            <div class="col-4">
+              <select id="select-device" class="form-select">
+                <option value="">대상 장치(E01~E06)</option>
+                <option value="E01">E01</option>
+                <option value="E02">E02</option>
+                <option value="E03">E03</option>
+                <option value="E04">E04</option>
+                <option value="E05">E05</option>
+                <option value="E06">E06</option>
+              </select>
+            </div>
+          </div>
+          <input type="text" id="input-memo" class="form-control" placeholder="메모(옵션)">
+        </div>
+      </div>
+
+      <!-- 옵션 -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>옵션</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-6">
+              <label class="form-label mb-1 small">해상도</label>
+              <select class="form-select" id="select-res">
+                <option value="480x800">480×800</option>
+                <option value="800x480" selected>800×480</option>
+                <option value="1200x1600">1200×1600</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">컬러/팔레트</label>
+              <select class="form-select" id="select-mode">
+                <option value="BWRYBG" selected>6색 (BWRYBG)</option>
+                <option value="BWRY">3색 (BWRY)</option>
+                <option value="BW">흑백 (BW)</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">스케일</label>
+              <select class="form-select" id="select-scale">
+                <option value="fit" selected>FIT</option>
+                <option value="fill">FILL</option>
+                <option value="percent">PERCENT</option>
+              </select>
+            </div>
+            <div class="col-6 percent-wrap hidden">
+              <label class="form-label mb-1 small">배율(%)</label>
+              <input type="range" min="50" max="200" value="100" id="range-percent" class="form-range">
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">회전</label>
+              <select class="form-select" id="select-rotate">
+                <option value="0" selected>0°</option>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+              </select>
+            </div>
+            <div class="col-6 d-flex align-items-end">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="ck-original">
+                <label class="form-check-label" for="ck-original">원본 미리보기</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 기능 토글 -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>기능</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="ck-approval">
+            <label class="form-check-label" for="ck-approval">결재기능 사용</label>
+          </div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="ck-editor">
+            <label class="form-check-label" for="ck-editor">편집기능 사용 (텍스트/선/박스/폰트)</label>
+          </div>
+          <div class="alert alert-info mb-0">
+            <div class="small mb-1"><strong>안내</strong></div>
+            <ul class="mb-0 small">
+              <li>결재기능 미사용 시 저장은 <code>bulletin_files/</code> (uploads와 동등 레벨)에 바로 떨어집니다.</li>
+              <li>편집기능은 프리뷰 위 레이어로 동작하며, “편집결과 내보내기”로 굽기(서버 빌드) 가능합니다.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 결재 패널 -->
+      <div class="card shadow-sm mt-3 approval-panel hidden">
+        <div class="card-header"><strong>결재</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-12">
+              <label class="form-label mb-1 small">결재선</label>
+              <select class="form-select" id="sel-route" disabled>
+                <option value="">(선택)</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="ck-final">
+                <label class="form-check-label" for="ck-final">전결 (승인 없이 즉시 업로드)</label>
+              </div>
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">부서</label>
+              <select class="form-select" id="sel-dept" disabled>
+                <option value="">(부서)</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">검토자</label>
+              <select class="form-select" id="sel-review" disabled>
+                <option value="">(검토자)</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label mb-1 small">승인자</label>
+              <select class="form-select" id="sel-approve" disabled>
+                <option value="">(승인자)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 결재 레이아웃 빌더 (결재 토글과 함께 표시) -->
+      <div class="card shadow-sm mt-3 approval-panel hidden">
+        <div class="card-header"><strong>결재 레이아웃 빌더</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-4">
+              <select id="sel-step-grid" class="form-select">
+                <option value="작성">작성</option>
+                <option value="검토">검토</option>
+                <option value="승인">승인</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <select id="sel-dept-grid" class="form-select">
+                <option value="">(부서)</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <select id="sel-user-grid" class="form-select">
+                <option value="">(사용자)</option>
+              </select>
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" id="btn-grid-add-col">열 추가</button>
+            <button class="btn btn-outline-success" id="btn-grid-apply">그리드 적용/갱신</button>
+          </div>
+          <div class="small text-muted">열 버퍼 (최대 5)</div>
+          <ul class="list-group small" id="grid-cols-list"></ul>
+        </div>
+      </div>
+
+      <!-- 참석자 사진 -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>참석자 사진</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-6">
+              <select id="sel-dept-att" class="form-select">
+                <option value="">(부서)</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <select id="sel-user-att" class="form-select">
+                <option value="">(사용자)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row g-2">
+            <div class="col-6">
+              <select id="sel-photo-fit" class="form-select">
+                <option value="contain" selected>Contain</option>
+                <option value="cover">Cover</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="ck-photo-border">
+                <label class="form-check-label" for="ck-photo-border">테두리</label>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-outline-primary" id="btn-add-photo">사진 레이어 추가</button>
+        </div>
+      </div>
+
+      <!-- 서명 슬롯 -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>서명 슬롯</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="row g-2">
+            <div class="col-4">
+              <select id="sel-sign-mode" class="form-select">
+                <option value="check" selected>✔ 체크</option>
+                <option value="photo">사진</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <select id="sel-dept-sign" class="form-select">
+                <option value="">(부서)</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <select id="sel-user-sign" class="form-select" disabled>
+                <option value="">(사용자)</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-group">
+            <span class="input-group-text">라벨</span>
+            <input type="text" id="input-sign-label" class="form-control" placeholder="예) 검토자 서명">
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="ck-sign-remember" checked>
+            <label class="form-check-label" for="ck-sign-remember">이전 박스 아래로 이어붙이기</label>
+          </div>
+          <button class="btn btn-outline-primary" id="btn-sign-apply">서명 슬롯 추가</button>
+        </div>
+      </div>
+
+      <!-- 텍스트 / 사진(임포트) -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>텍스트 / 사진</strong></div>
+        <div class="card-body d-flex flex-column gap-2">
+          <div class="input-group">
+            <span class="input-group-text">텍스트</span>
+            <input type="text" id="input-inline-text" class="form-control" maxlength="100" placeholder="최대 100자">
+            <button class="btn btn-outline-secondary" id="btn-inline-text-apply">추가</button>
+          </div>
+          <div class="row g-2 align-items-center">
+            <div class="col-8">
+              <input type="file" id="file-inline-image" class="form-control" accept=".png,.jpg,.jpeg,.bmp">
+            </div>
+            <div class="col-4">
+              <select id="sel-image-fit" class="form-select">
+                <option value="contain" selected>Contain</option>
+                <option value="cover">Cover</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-outline-secondary" id="btn-inline-image-apply">사진 레이어 추가</button>
+          <div class="small text-muted">연속 배치: 최근 박스 아래로 자동 배치됩니다.</div>
+        </div>
+      </div>
+
+      <!-- 저장 위치 -->
+      <div class="card shadow-sm mt-3">
+        <div class="card-header"><strong>저장/배포 전략</strong></div>
+        <div class="card-body">
+          <div class="d-flex flex-column gap-2">
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="saveStrategy" id="save-draft" value="draft" checked>
+              <label class="form-check-label" for="save-draft">
+                초안으로 저장 (in_review/checked/approved 진행 가능)
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="saveStrategy" id="save-direct" value="direct">
+              <label class="form-check-label" for="save-direct">
+                결재 없이 즉시 저장/배포 ( <code>bulletin_files/</code> )
+              </label>
+            </div>
+          </div>
+          <div class="form-text mt-2">
+            서버 컨트롤러에서 실제 경로 매핑을 완료해야 합니다.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 우측: 프리뷰 & 에디터 -->
+    <div class="col-12 col-xl-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex align-items-center justify-content-between">
+          <strong>미리보기 & 편집</strong>
+          <div class="d-flex align-items-center gap-2">
+            <div class="btn-group" role="group">
+              <button class="btn btn-outline-secondary tool-btn" id="nav-prev">이전</button>
+              <button class="btn btn-outline-secondary tool-btn" id="nav-next">이후</button>
+            </div>
+            <span class="small" id="page-ind">- / -</span>
+          </div>
+        </div>
+        <div class="card-body d-flex flex-column gap-2">
+          <!-- 에디터 툴바 -->
+          <div class="editor-toolbar border rounded p-2 d-flex align-items-center gap-2 hidden">
+            <div class="btn-group" role="group">
+              <button class="btn btn-outline-dark tool-btn" id="btn-add-text" title="텍스트 추가">T</button>
+              <button class="btn btn-outline-dark tool-btn" id="btn-add-line" title="선 추가">─</button>
+              <button class="btn btn-outline-dark tool-btn" id="btn-add-rect" title="박스 추가">▭</button>
+              <button class="btn btn-outline-danger tool-btn" id="btn-del" title="선택 삭제">삭제</button>
+            </div>
+            <div class="vr mx-2"></div>
+            <select id="font-family" class="form-select form-select-sm" style="width:auto;">
+              <option value="Pretendard,Arial,Helvetica,sans-serif" selected>Pretendard/기본</option>
+              <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+              <option value="'Nanum Gothic', sans-serif">나눔고딕</option>
+              <option value="'Nanum Myeongjo', serif">나눔명조</option>
+              <option value="'Roboto', sans-serif">Roboto</option>
+            </select>
+            <input type="number" id="font-size" class="form-control form-control-sm" value="28" min="8" max="120" style="width:90px;">
+            <select id="font-weight" class="form-select form-select-sm" style="width:auto;">
+              <option value="400">보통</option>
+              <option value="600">세미볼드</option>
+              <option value="700">볼드</option>
+            </select>
+            <input type="color" id="font-color" class="form-control form-control-color" value="#000000" title="텍스트 색상">
+            <div class="vr mx-2"></div>
+            <button class="btn btn-outline-secondary tool-btn" id="btn-align-left">좌</button>
+            <button class="btn btn-outline-secondary tool-btn" id="btn-align-center">중</button>
+            <button class="btn btn-outline-secondary tool-btn" id="btn-align-right">우</button>
+          </div>
+
+          <!-- 프리뷰 캔버스 -->
+          <div class="canvas-wrap" id="canvas-wrap" style="aspect-ratio: 5 / 3;">
+            <img id="preview-img" class="preview-img" alt="미리보기">
+            <div class="stage" id="stage"></div>
+          </div>
+
+          <!-- 선택 레이어 속성 -->
+          <div class="props small border rounded p-2">
+            <div class="d-flex gap-3 flex-wrap">
+              <div>X: <span id="prop-x">-</span></div>
+              <div>Y: <span id="prop-y">-</span></div>
+              <div>W: <span id="prop-w">-</span></div>
+              <div>H: <span id="prop-h">-</span></div>
+              <div>Type: <span id="prop-type">-</span></div>
+              <div>Text: <input type="text" id="prop-text" class="form-control form-control-sm" style="width:280px;" placeholder="선택된 텍스트 내용"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script type="application/json" id="me-json">
+  {{ current_user|default({}, true)|tojson }}
+</script>
+<script type="application/json" id="routes-json">
+  {{ approval_routes|default([], true)|tojson }}
+</script>
+
+<script>
+(()=>{
+/* -------------------- 유틸/상태 -------------------- */
+const toJSON = id => { try{ const t=document.getElementById(id); return t && t.textContent.trim()? JSON.parse(t.textContent):null; }catch(e){ return null; } };
+const routes = toJSON('routes-json') || [];
+const toast = (msg,type='info')=>{
+  const id='t'+Date.now()+Math.random().toString(16).slice(2);
+  const el=document.createElement('div');
+  el.id=id; el.className=`toast align-items-center text-bg-${type} border-0 show`;
+  el.innerHTML=`<div class="d-flex"><div class="toast-body">${msg}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button></div>`;
+  (document.querySelector('#toast-area')||document.body).appendChild(el);
+  setTimeout(()=>el.remove(), 4000);
+};
+
+const state = {
+  upload_id:null, pages:1, page:1,
+  uiWidth:800, uiHeight:480,
+  mode:'BWRYBG', scale:'fit', percent:100, rotate:0, view:'processed',
+  device_id:'', file_name:'', memo:'',
+  useApproval:false,
+  useEditor:false,
+  finalApproval:false, routeId:'', department:'', assignees:{review:'',approve:''},
+  layers:[], selected:null,
+  _prevUrl:null,
+  // ▼ 추가 상태
+  lastBox:null,                    // 최근 박스 기억(연속 배치)
+  gridBuffer:[],                   // 결재 그리드 열 버퍼
+  limits:{ maxCols:5, maxSignSlots:30 }
+};
+
+/* -------------------- DOM -------------------- */
+const $devBadge = document.getElementById('device-badge');
+const $file = document.getElementById('file-input');
+const $fn = document.getElementById('input-filename');
+const $memo = document.getElementById('input-memo');
+const $dev = document.getElementById('select-device');
+const $res = document.getElementById('select-res');
+const $mode = document.getElementById('select-mode');
+const $scale = document.getElementById('select-scale');
+const $percentWrap = document.querySelector('.percent-wrap');
+const $percent = document.getElementById('range-percent');
+const $rotate = document.getElementById('select-rotate');
+const $original = document.getElementById('ck-original');
+
+const $approvalCk = document.getElementById('ck-approval');
+const $editorCk = document.getElementById('ck-editor');
+const $approvalPanel = document.querySelector('.approval-panel'); // 여러 카드에 동일 클래스 존재
+const $route = document.getElementById('sel-route');
+const $final = document.getElementById('ck-final');
+const $dept = document.getElementById('sel-dept');
+const $review = document.getElementById('sel-review');
+const $approve = document.getElementById('sel-approve');
+
+const $toolbar = document.querySelector('.editor-toolbar');
+const $canvasWrap = document.getElementById('canvas-wrap');
+const $img = document.getElementById('preview-img'); $img.draggable = false;
+const $stage = document.getElementById('stage');
+const $pageInd = document.getElementById('page-ind');
+
+const $btnPrev = document.getElementById('nav-prev');
+const $btnNext = document.getElementById('nav-next');
+const $btnSave = document.getElementById('btn-save-draft');
+const $btnExport = document.getElementById('btn-export-editor');
+const $btnSend = document.getElementById('btn-send');
+
+const $btnAddText = document.getElementById('btn-add-text');
+const $btnAddLine = document.getElementById('btn-add-line');
+const $btnAddRect = document.getElementById('btn-add-rect');
+const $btnDel = document.getElementById('btn-del');
+
+const $fontFamily = document.getElementById('font-family');
+const $fontSize = document.getElementById('font-size');
+const $fontWeight = document.getElementById('font-weight');
+const $fontColor = document.getElementById('font-color');
+
+const $alignL = document.getElementById('btn-align-left');
+const $alignC = document.getElementById('btn-align-center');
+const $alignR = document.getElementById('btn-align-right');
+
+const $px = document.getElementById('prop-x');
+const $py = document.getElementById('prop-y');
+const $pw = document.getElementById('prop-w');
+const $ph = document.getElementById('prop-h');
+const $ptype = document.getElementById('prop-type');
+const $ptext = document.getElementById('prop-text');
+
+/* 새 UI DOM 참조 */
+// 참석자 사진
+const $deptAtt = document.getElementById('sel-dept-att');
+const $userAtt = document.getElementById('sel-user-att');
+const $photoFit = document.getElementById('sel-photo-fit');
+const $photoBorder = document.getElementById('ck-photo-border');
+const $btnAddPhoto = document.getElementById('btn-add-photo');
+// 결재 레이아웃 빌더
+const $stepGrid = document.getElementById('sel-step-grid');
+const $deptGrid = document.getElementById('sel-dept-grid');
+const $userGrid = document.getElementById('sel-user-grid');
+const $btnGridAdd = document.getElementById('btn-grid-add-col');
+const $btnGridApply = document.getElementById('btn-grid-apply');
+const $gridList = document.getElementById('grid-cols-list');
+// 서명 슬롯
+const $signMode = document.getElementById('sel-sign-mode');
+const $deptSign = document.getElementById('sel-dept-sign');
+const $userSign = document.getElementById('sel-user-sign');
+const $signLabel = document.getElementById('input-sign-label');
+const $ckSignRemember = document.getElementById('ck-sign-remember');
+const $btnSignApply = document.getElementById('btn-sign-apply');
+// 텍스트/사진(임포트)
+const $inputInlineText = document.getElementById('input-inline-text');
+const $fileInlineImage = document.getElementById('file-inline-image');
+const $btnInlineTextApply = document.getElementById('btn-inline-text-apply');
+const $btnInlineImageApply = document.getElementById('btn-inline-image-apply');
+const $imageFit = document.getElementById('sel-image-fit');
+
+/* -------------------- 기본 UI -------------------- */
+function setAspectByRes(resStr){
+  const [w,h]=resStr.split('x').map(Number);
+  state.uiWidth=w; state.uiHeight=h;
+  $canvasWrap.style.aspectRatio = `${w} / ${h}`;
+}
+setAspectByRes($res.value);
+
+function updatePercentRow(){ $percentWrap.classList.toggle('hidden', $scale.value!=='percent'); }
+function redrawHeader(){
+  $pageInd.textContent = `${state.page} / ${state.pages}`;
+  $fn.value = state.file_name || '';
+  $devBadge.textContent = state.device_id ? `대상: ${state.device_id}` : '대상 장치 선택 전';
+}
+
+/* -------------------- 서버 연동: 프리뷰 -------------------- */
+async function previewFile(file){
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('width', state.uiWidth);
+  fd.append('height', state.uiHeight);
+  fd.append('mode', state.mode);
+  fd.append('scale', state.scale);
+  fd.append('percent', state.percent);
+  fd.append('rotate', state.rotate);
+  fd.append('raw', $original.checked?1:0);
+  fd.append('page', state.page);
+  fd.append('layers', JSON.stringify(state.useEditor ? state.layers : []));
+  const r = await fetch('/bulletin/preview_blob', { method:'POST', body:fd });
+  if(!r.ok) throw new Error('preview_blob failed');
+  const upid = r.headers.get('X-Upload-Id');
+  if (upid) state.upload_id = parseInt(upid,10);
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  if (state._prevUrl) URL.revokeObjectURL(state._prevUrl);
+  state._prevUrl = url; $img.src = url + '#t=' + Date.now();
+}
+
+async function previewJSON(){
+  if(!state.upload_id) return;
+  const body = {
+    upload_id: state.upload_id,
+    page: state.page,
+    width: state.uiWidth, height: state.uiHeight,
+    mode: state.mode, scale: state.scale, percent: state.percent, rotate: state.rotate,
+    raw: $original.checked?1:0,
+    layers: state.useEditor ? state.layers : []
+  };
+  const r = await fetch('/bulletin/preview_blob', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if(!r.ok) throw new Error('preview_json failed');
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  if (state._prevUrl) URL.revokeObjectURL(state._prevUrl);
+  state._prevUrl = url; $img.src = url + '#t=' + Date.now();
+}
+
+/* -------------------- 결재패널 -------------------- */
+function populateRoutes(){
+  $route.innerHTML = `<option value="">(선택)</option>`;
+  routes.forEach(rt=>{
+    const op=document.createElement('option');
+    op.value = rt.id; op.textContent = rt.name || `Route #${rt.id}`;
+    $route.appendChild(op);
+  });
+}
+async function fetchDepartmentsTo(el){
+  try{
+    const r=await fetch('/bulletin/departments'); if(!r.ok) throw 0;
+    const js=await r.json(); const arr=Array.isArray(js.departments)?js.departments:[];
+    el.innerHTML = `<option value="">(부서)</option>` + arr.map(d=>`<option value="${d}">${d}</option>`).join('');
+  }catch(e){ el.innerHTML = `<option value="">(부서)</option>`; }
+}
+async function fetchUsersTo(el, dept){
+  try{
+    const r=await fetch('/bulletin/users?'+new URLSearchParams({department:dept||''}));
+    if(!r.ok) throw 0; const js=await r.json(); const arr=Array.isArray(js.users)?js.users:[];
+    const label = u => (u.username||u.userid||u.id);
+    el.innerHTML = `<option value="">(사용자)</option>` + arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
+  }catch(e){
+    el.innerHTML = `<option value="">(사용자)</option>`;
+  }
+}
+async function fetchUsersByDept(dept){ // 기존 결재 패널용
+  try{
+    const r=await fetch('/bulletin/users?'+new URLSearchParams({department:dept||''}));
+    if(!r.ok) throw 0; const js=await r.json(); const arr=Array.isArray(js.users)?js.users:[];
+    const label = u => (u.username||u.userid||u.id);
+    $review.innerHTML = `<option value="">(검토자)</option>` + arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
+    $approve.innerHTML= `<option value="">(승인자)</option>` + arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
+  }catch(e){
+    $review.innerHTML = `<option value="">(검토자)</option>`;
+    $approve.innerHTML= `<option value="">(승인자)</option>`;
+  }
+}
+function toggleApprovalPanel(on){
+  document.querySelectorAll('.approval-panel').forEach(card=>{
+    card.classList.toggle('hidden', !on);
+  });
+  if (on){
+    populateRoutes();
+    fetchDepartmentsTo($dept);
+    fetchDepartmentsTo($deptGrid);
+    [$route,$final,$dept,$review,$approve].forEach(el=> el.disabled = false);
+  }else{
+    [$route,$final,$dept,$review,$approve].forEach(el=> el.disabled = true);
+  }
+}
+
+/* -------------------- 공통 보조 -------------------- */
+const BASE_W = 1200, BASE_H = 1600;
+function vp() {
+  const r = $canvasWrap.getBoundingClientRect();
+  const scale = Math.min(r.width/state.uiWidth, r.height/state.uiHeight);
+  const vw = state.uiWidth*scale, vh = state.uiHeight*scale;
+  const left=(r.width-vw)/2, top=(r.height-vh)/2;
+  return { left, top, width: vw, height: vh, kx: vw/BASE_W, ky: vh/BASE_H };
+}
+function pxToBase(nx, ny, nw, nh){
+  const v=vp(); return {
+    x: Math.round(nx / v.kx),
+    y: Math.round(ny / v.ky),
+    w: Math.round(nw / v.kx),
+    h: Math.round(nh / v.ky),
+  };
+}
+function baseToPx(bx,by,bw,bh){
+  const v=vp(); return {
+    x: bx * v.kx, y: by * v.ky, w: bw * v.kx, h: bh * v.ky
+  };
+}
+function autoPlaceBox({w=300,h=150,gap=16} = {}){
+  if (!state.lastBox) return { x:80, y: Math.round(BASE_H*0.1), w, h };
+  return { x: state.lastBox.x, y: state.lastBox.y + state.lastBox.h + gap, w: state.lastBox.w, h: state.lastBox.h };
+}
+function rememberBox(b){ state.lastBox = { x:b.x, y:b.y, w:b.w, h:b.h }; }
+
+async function getUserPhotoUrl(userid){
+  try{
+    const r=await fetch('/bulletin/user_photo?'+new URLSearchParams({userid}));
+    const js=await r.json();
+    return (r.ok && js.ok && js.url) ? js.url : null;
+  }catch(_){ return null; }
+}
+async function uploadLayerImage(file){
+  const fd = new FormData(); fd.append('file', file);
+  const r = await fetch('/bulletin/layer_upload', { method:'POST', body: fd });
+  const js = await r.json();
+  if(!r.ok || !js?.ok || !js?.image_url) throw new Error('layer_upload fail');
+  return js.image_url;
+}
+
+/* -------------------- 에디터(레이어) -------------------- */
+function layerTitle(L){
+  switch(L.type){
+    case 'photo': return `PHOTO(${L.userid||'-'})`;
+    case 'approval_grid': return `APPROVAL(${(L.cols||[]).length} cols)`;
+    case 'sign_slot': return `SIGN(${L.mode==='photo'?'photo':'✔'})`;
+    case 'image': return `IMAGE`;
+    case 'text': return `TEXT`;
+    case 'line': return `LINE`;
+    case 'rect': return `RECT`;
+    default: return (L.type||'LAYER').toUpperCase();
+  }
+}
+
+function renderLayers(){
+  $stage.style.pointerEvents = 'auto';
+  $stage.style.userSelect = 'none';
+
+  $stage.innerHTML='';
+  const v=vp();
+  $stage.style.left = v.left+'px';
+  $stage.style.top  = v.top+'px';
+  $stage.style.width= v.width+'px';
+  $stage.style.height= v.height+'px';
+
+  state.layers.forEach(L=>{
+    const px=baseToPx(L.x, L.y, L.w, L.h);
+    const el=document.createElement('div');
+    el.className='layer' + (state.selected===L? ' selected':'');
+    el.style.left=px.x+'px'; el.style.top=px.y+'px';
+    el.style.width=px.w+'px'; el.style.height=px.h+'px';
+    el.dataset.id=L.id;
+    el.innerHTML = `<div class="title">${layerTitle(L)}</div><div class="handle"></div>`;
+    $stage.appendChild(el);
+
+    let mode=null, sx=0, sy=0, sl=0, st=0, sw=0, sh=0;
+
+    el.addEventListener('pointerdown', e=>{
+      e.preventDefault();
+      if (!state.useEditor) return;
+      const isHandle = e.target.closest('.handle'); 
+      mode = isHandle ? 'resize' : 'move';
+      const rect=el.getBoundingClientRect(), orect=$stage.getBoundingClientRect();
+      sx=e.clientX; sy=e.clientY; 
+      sl=rect.left-orect.left; st=rect.top-orect.top; 
+      sw=rect.width; sh=rect.height;
+      try { el.setPointerCapture(e.pointerId); } catch(_) {}
+      selectLayerByEl(el);
+    });
+
+    el.addEventListener('pointermove', e=>{
+      if (!mode) return;
+      e.preventDefault();
+      const dx=e.clientX-sx, dy=e.clientY-sy;
+      if (mode==='move'){
+        el.style.left = (sl+dx)+'px';
+        el.style.top  = (st+dy)+'px';
+      }else{
+        el.style.width  = Math.max(10, sw+dx)+'px';
+        el.style.height = Math.max(10, sh+dy)+'px';
+      }
+      updatePropPanelFromEl(el);
+    });
+
+    const commit = ()=>{
+      const nx=parseFloat(el.style.left)||0, ny=parseFloat(el.style.top)||0;
+      const nw=parseFloat(el.style.width)||0, nh=parseFloat(el.style.height)||0;
+      const base = pxToBase(nx,ny,nw,nh);
+      L.x=base.x; L.y=base.y; L.w=base.w; L.h=base.h;
+      updatePropPanel(); renderLayers(); previewJSON().catch(()=>{});
+      rememberBox(L);
+    };
+    el.addEventListener('pointerup', ()=>{ if(mode){ mode=null; commit(); } });
+    el.addEventListener('pointerleave', ()=>{ if(mode){ mode=null; commit(); } });
+    el.addEventListener('lostpointercapture', ()=>{ mode=null; });
+    el.addEventListener('pointercancel', ()=>{ mode=null; });
+
+    el.addEventListener('dblclick', ()=>{ if (L.type==='text') { $ptext.focus(); } });
+  });
+  updatePropPanel();
+}
+
+function selectLayerByEl(el){
+  const id = el?.dataset?.id;
+  state.selected = state.layers.find(l => String(l.id) === String(id)) || null;
+  document.querySelectorAll('#stage .layer').forEach(n=>{
+    n.classList.toggle('selected', n === el);
+  });
+  updatePropPanel();
+}
+function updatePropPanelFromEl(el){
+  const nx=parseFloat(el.style.left)||0,
+        ny=parseFloat(el.style.top)||0,
+        nw=parseFloat(el.style.width)||0,
+        nh=parseFloat(el.style.height)||0;
+  const base = pxToBase(nx,ny,nw,nh);
+  $px.textContent = base.x; $py.textContent = base.y; $pw.textContent = base.w; $ph.textContent = base.h;
+}
+
+/* 자동 편집모드 ON */
+function ensureEditorOn(){
+  if (!state.useEditor) {
+    state.useEditor = true;
+    $editorCk.checked = true;
+    $toolbar.classList.remove('hidden');
+  }
+}
+
+/* 기본 도형/텍스트 */
+function addText(){
+  ensureEditorOn();
+  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: Math.round(BASE_H*0.1), gap: 10 });
+  const L={ id:'L'+Date.now().toString(16), type:'text', text:'새 텍스트',
+            x:pos.x, y:pos.y, w:pos.w, h:pos.h,
+            fontFamily:$fontFamily.value, fontSize:parseInt($fontSize.value,10)||28,
+            fontWeight:$fontWeight.value, color:$fontColor.value, align:'left' };
+  state.layers.push(L); state.selected=L; rememberBox(L); renderLayers(); previewJSON().catch(()=>{});
+}
+function addLine(){
+  ensureEditorOn();
+  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: 2, gap: 8 });
+  const L={ id:'L'+Date.now().toString(16), type:'line',
+            x:pos.x, y:pos.y, w:pos.w, h:2, color:'#000000' };
+  state.layers.push(L); state.selected=L; rememberBox(L); renderLayers(); previewJSON().catch(()=>{});
+}
+function addRect(){
+  ensureEditorOn();
+  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.3), h: Math.round(BASE_H*0.2), gap: 8 });
+  const L={ id:'L'+Date.now().toString(16), type:'rect',
+            x:pos.x, y:pos.y, w:pos.w, h:pos.h,
+            stroke:'#0d6efd', fill:'rgba(13,110,253,.04)' };
+  state.layers.push(L); state.selected=L; rememberBox(L); renderLayers(); previewJSON().catch(()=>{});
+}
+function delSel(){
+  if (!state.selected) return;
+  state.layers = state.layers.filter(l=> l!==state.selected);
+  state.selected = null; renderLayers(); previewJSON().catch(()=>{});
+}
+function updatePropPanel(){
+  const L=state.selected;
+  $px.textContent = L? L.x:'-';
+  $py.textContent = L? L.y:'-';
+  $pw.textContent = L? L.w:'-';
+  $ph.textContent = L? L.h:'-';
+  $ptype.textContent = L? L.type.toUpperCase():'-';
+  $ptext.value = (L && L.type==='text') ? (L.text||'') : '';
+}
+
+/* 신규 레이어 생성기 */
+function addPhotoLayer({userid, display='contain', border=false}){
+  if(!userid) return toast('사용자를 선택하세요','warning');
+  const pos = autoPlaceBox({ w:180, h:180, gap:12 });
+  const L = { id:'L'+Date.now().toString(16), type:'photo', userid, display, border:!!border,
+              x:pos.x, y:pos.y, w:pos.w, h:pos.h };
+  ensureEditorOn();
+  state.layers.push(L); state.selected=L; rememberBox(L);
+  renderLayers(); previewJSON().catch(()=>{});
+}
+function applyApprovalGrid(){
+  if(state.gridBuffer.length < 1) return toast('열을 하나 이상 추가하세요','warning');
+  if(state.gridBuffer.length > state.limits.maxCols) return toast('열은 최대 5개','warning');
+  let L = state.layers.find(l => l.type==='approval_grid');
+  const pos = L ? L : autoPlaceBox({w:1000, h:280, gap:16});
+  const baseLayer = {
+    id: L?.id || ('L'+Date.now().toString(16)),
+    type: 'approval_grid',
+    cols: state.gridBuffer.slice(0, state.limits.maxCols),
+    layout: { row_heights: [1,3,1,1], col_gap: 12, row_gap: 8, border: true },
+    styles: { font: "Noto Sans KR", fontSize: 20, line: 2 },
+    x: pos.x, y: pos.y, w: pos.w, h: pos.h
+  };
+  ensureEditorOn();
+  if(L){ Object.assign(L, baseLayer); }
+  else { L = baseLayer; state.layers.push(L); state.selected=L; rememberBox(L); }
+  renderLayers(); previewJSON().catch(()=>{});
+}
+function addSignSlot({mode='check', userid='', label='', remember_chain=true}){
+  if(mode==='photo' && !userid) return toast('서명 슬롯(사진) 사용자 선택','warning');
+  const count = state.layers.filter(l=> l.type==='sign_slot').length;
+  if(count >= state.limits.maxSignSlots) return toast('서명 슬롯은 최대 30개','warning');
+  const pos = remember_chain ? autoPlaceBox({w:300, h:100, gap:8}) : {x:80, y:900, w:300, h:100};
+  const L = { id:'S'+(String(count+1).padStart(3,'0')),
+              type:'sign_slot', mode, userid: userid || undefined, label: label || '',
+              remember_chain: !!remember_chain, x:pos.x, y:pos.y, w:pos.w, h:pos.h };
+  ensureEditorOn();
+  state.layers.push(L); state.selected=L; rememberBox(L);
+  renderLayers(); previewJSON().catch(()=>{});
+}
+function addInlineTextLayer(text){
+  if(!text) return;
+  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: Math.round(BASE_H*0.1), gap: 10 });
+  const L = { id:'L'+Date.now().toString(16), type:'text', text,
+              x:pos.x, y:pos.y, w:pos.w, h:pos.h,
+              fontFamily:$fontFamily.value, fontSize:parseInt($fontSize.value,10)||28,
+              fontWeight:$fontWeight.value, color:$fontColor.value, align:'left' };
+  ensureEditorOn();
+  state.layers.push(L); state.selected=L; rememberBox(L);
+  renderLayers(); previewJSON().catch(()=>{});
+}
+function addImageLayer({image_url, objectFit='contain'}){
+  if(!image_url) return;
+  const pos = autoPlaceBox({ w:300, h:300, gap:12 });
+  const L = { id:'L'+Date.now().toString(16), type:'image', image_url, objectFit,
+              x:pos.x, y:pos.y, w:pos.w, h:pos.h };
+  ensureEditorOn();
+  state.layers.push(L); state.selected=L; rememberBox(L);
+  renderLayers(); previewJSON().catch(()=>{});
+}
+
+/* -------------------- 이벤트 바인딩 -------------------- */
+// 파일 선택
+$file.addEventListener('change', async (ev)=>{
+  const f=ev.target.files?.[0]; if(!f) return;
+  state.file_name = f.name; state.page=1; state.pages=1;
+  try{ await previewFile(f); redrawHeader(); toast('미리보기 준비 완료','success'); }
+  catch(e){ toast('미리보기 실패','danger'); }
+  finally{ ev.target.value=''; }
+});
+
+// 장치
+$dev.addEventListener('change', ()=>{
+  state.device_id = $dev.value || '';
+  redrawHeader();
+});
+
+// 옵션
+$res.addEventListener('change', ()=>{
+  setAspectByRes($res.value);
+  renderLayers();
+  previewJSON().catch(()=>{});
+});
+$mode.addEventListener('change', ()=>{ state.mode=$mode.value; previewJSON().catch(()=>{}); });
+$scale.addEventListener('change', ()=>{ state.scale=$scale.value; updatePercentRow(); previewJSON().catch(()=>{}); });
+$percent.addEventListener('input', ()=>{ state.percent=parseInt($percent.value,10)||100; if($scale.value==='percent') previewJSON().catch(()=>{}); });
+$rotate.addEventListener('change', ()=>{ state.rotate=parseInt($rotate.value,10)||0; previewJSON().catch(()=>{}); });
+$original.addEventListener('change', ()=> previewJSON().catch(()=>{}) );
+
+// 페이지 네비
+$btnPrev.addEventListener('click', ()=>{ if(!state.upload_id) return; state.view='processed'; state.page=Math.max(1, state.page-1); previewJSON().catch(()=>{}); redrawHeader(); });
+$btnNext.addEventListener('click', ()=>{ if(!state.upload_id) return; state.view='processed'; state.page=Math.min(state.pages, state.page+1); previewJSON().catch(()=>{}); redrawHeader(); });
+
+// 기능 토글
+$approvalCk.addEventListener('change', ()=>{
+  state.useApproval = $approvalCk.checked;
+  toggleApprovalPanel(state.useApproval);
+});
+$editorCk.addEventListener('change', ()=>{
+  state.useEditor = $editorCk.checked;
+  $toolbar.classList.toggle('hidden', !state.useEditor);
+  renderLayers();
+  previewJSON().catch(()=>{});
+});
+
+// 결재 입력
+$route.addEventListener('change', ()=> state.routeId = $route.value || '' );
+$final.addEventListener('change', ()=>{
+  state.finalApproval = $final.checked;
+  const enabled = state.useApproval && !state.finalApproval;
+  [$route,$dept,$review,$approve].forEach(el=> el.disabled = !enabled);
+});
+$dept.addEventListener('change', async ()=>{
+  state.department = $dept.value || '';
+  await fetchUsersByDept(state.department);
+});
+$review.addEventListener('change', ()=> state.assignees.review = $review.value || '' );
+$approve.addEventListener('change', ()=> state.assignees.approve = $approve.value || '' );
+
+// 에디터 툴
+$btnAddText.addEventListener('click', addText);
+$btnAddLine.addEventListener('click', addLine);
+$btnAddRect.addEventListener('click', addRect);
+$btnDel.addEventListener('click', delSel);
+
+$fontFamily.addEventListener('change', ()=>{
+  const L=state.selected; if (!L || L.type!=='text') return;
+  L.fontFamily = $fontFamily.value; previewJSON().catch(()=>{});
+});
+$fontSize.addEventListener('change', ()=>{
+  const L=state.selected; if (!L || L.type!=='text') return;
+  L.fontSize = parseInt($fontSize.value,10)||28; previewJSON().catch(()=>{});
+});
+$fontWeight.addEventListener('change', ()=>{
+  const L=state.selected; if (!L || L.type!=='text') return;
+  L.fontWeight = $fontWeight.value; previewJSON().catch(()=>{});
+});
+$fontColor.addEventListener('change', ()=>{
+  const L=state.selected; if (!L || L.type!=='text') return;
+  L.color = $fontColor.value; previewJSON().catch(()=>{});
+});
+$alignL.addEventListener('click', ()=>{ const L=state.selected; if(!L || L.type!=='text') return; L.align='left'; previewJSON().catch(()=>{}); });
+$alignC.addEventListener('click', ()=>{ const L=state.selected; if(!L || L.type!=='text') return; L.align='center'; previewJSON().catch(()=>{}); });
+$alignR.addEventListener('click', ()=>{ const L=state.selected; if(!L || L.type!=='text') return; L.align='right'; previewJSON().catch(()=>{}); });
+$ptext.addEventListener('input', ()=>{
+  const L=state.selected; if (!L || L.type!=='text') return;
+  L.text = $ptext.value; previewJSON().catch(()=>{});
+});
+
+/* 참석자 사진 */
+$deptAtt?.addEventListener('change', ()=> fetchUsersTo($userAtt, $deptAtt.value));
+$btnAddPhoto?.addEventListener('click', async ()=>{
+  const userid = $userAtt.value || '';
+  if(!userid) return toast('사용자를 선택하세요','warning');
+  const url = await getUserPhotoUrl(userid); // 존재 확인(없으면 서버에서 플레이스홀더)
+  if(!url) toast('사진이 없어 플레이스홀더가 사용될 수 있습니다','info');
+  addPhotoLayer({ userid, display: $photoFit.value, border: $photoBorder.checked });
+});
+
+/* 결재 레이아웃 빌더 */
+$deptGrid?.addEventListener('change', ()=> fetchUsersTo($userGrid, $deptGrid.value));
+$btnGridAdd?.addEventListener('click', ()=>{
+  const step = $stepGrid.value;
+  const dept = $deptGrid.value;
+  const userid = $userGrid.value || '';
+  const username = $userGrid.options[$userGrid.selectedIndex]?.text || '';
+  if(!step || !dept || !userid) return toast('단계/부서/사용자를 모두 선택','warning');
+  if(state.gridBuffer.length >= state.limits.maxCols) return toast('열은 최대 5개','warning');
+  state.gridBuffer.push({ step, dept, userid, username });
+  renderGridBuffer();
+});
+$btnGridApply?.addEventListener('click', applyApprovalGrid);
+function renderGridBuffer(){
+  $gridList.innerHTML = '';
+  state.gridBuffer.forEach((c, idx)=>{
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.innerHTML = `<span>${idx+1}. [${c.step}] ${c.dept} - ${c.username||c.userid}</span>
+      <span class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" data-act="up" data-idx="${idx}">△</button>
+        <button class="btn btn-outline-secondary" data-act="down" data-idx="${idx}">▽</button>
+        <button class="btn btn-outline-danger" data-act="del" data-idx="${idx}">✕</button>
+      </span>`;
+    $gridList.appendChild(li);
+  });
+}
+$gridList?.addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-act]'); if(!btn) return;
+  const act = btn.dataset.act, i = +btn.dataset.idx;
+  if(act==='del'){ state.gridBuffer.splice(i,1); }
+  if(act==='up' && i>0){ [state.gridBuffer[i-1], state.gridBuffer[i]] = [state.gridBuffer[i], state.gridBuffer[i-1]]; }
+  if(act==='down' && i<state.gridBuffer.length-1){ [state.gridBuffer[i+1], state.gridBuffer[i]] = [state.gridBuffer[i], state.gridBuffer[i+1]]; }
+  renderGridBuffer();
+});
+
+/* 서명 슬롯 */
+$deptSign?.addEventListener('change', ()=>{
+  if($signMode.value==='photo'){
+    $userSign.disabled = false;
+    fetchUsersTo($userSign, $deptSign.value);
+  }
+});
+$signMode?.addEventListener('change', ()=>{
+  const photoMode = $signMode.value==='photo';
+  $userSign.disabled = !photoMode;
+  if(!photoMode) $userSign.value = '';
+});
+$btnSignApply?.addEventListener('click', ()=>{
+  addSignSlot({
+    mode: $signMode.value,
+    userid: $signMode.value==='photo' ? ($userSign.value||'') : '',
+    label: $signLabel.value.trim(),
+    remember_chain: $ckSignRemember.checked
+  });
+});
+
+/* 텍스트 / 사진(임포트) */
+$btnInlineTextApply?.addEventListener('click', ()=>{
+  const text = $inputInlineText.value.trim();
+  if(!text) return;
+  if(text.length>100) return toast('텍스트는 최대 100자','warning');
+  addInlineTextLayer(text);
+  $inputInlineText.value='';
+});
+$btnInlineImageApply?.addEventListener('click', async ()=>{
+  const f = $fileInlineImage.files?.[0];
+  if(!f) return toast('이미지 파일을 선택하세요','warning');
+  try{
+    const url = await uploadLayerImage(f);
+    addImageLayer({ image_url: url, objectFit: $imageFit.value });
+    $fileInlineImage.value='';
+  }catch(e){
+    toast('이미지 업로드 실패','danger');
+  }
+});
+
+/* -------------------- 저장/배포 버튼 -------------------- */
+const saveOrSendCommon = async (url, body) =>{
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const js=await r.json();
+  if(!r.ok) throw new Error(js?.message||url+' fail');
+  return js;
+};
+
+$btnSave.addEventListener('click', async ()=>{
+  const strategy = document.querySelector('input[name="saveStrategy"]:checked')?.value || 'draft';
+  const body = {
+    upload_id: state.upload_id,
+    device_id: state.device_id || null,
+    memo: $memo.value || '',
+    filename: state.file_name || '',
+    params: { width: state.uiWidth, height: state.uiHeight, mode: state.mode, scale: state.scale, percent: state.percent, rotate: state.rotate },
+    editor_layers: state.useEditor ? state.layers : [],
+    use_approval: !!state.useApproval,
+    final_approval: !!state.finalApproval,
+    route_id: state.useApproval ? (state.routeId||null) : null,
+    assignees: state.useApproval ? state.assignees : {},
+    strategy
+  };
+  try{ await saveOrSendCommon('/bulletin/save_draft', body); toast('저장 완료','success'); }
+  catch(e){ toast('저장 실패','danger'); }
+});
+
+$btnExport.addEventListener('click', async ()=>{
+  if (!state.upload_id) return toast('파일을 먼저 선택하세요.','warning');
+  try{
+    const r=await fetch('/bulletin/editor_export',{method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify({ upload_id:state.upload_id, layers: state.layers })});
+    if(!r.ok) throw 0;
+    toast('편집결과 내보내기 요청 완료','info');
+  }catch(e){ toast('내보내기 실패','danger'); }
+});
+
+$btnSend.addEventListener('click', async ()=>{
+  if (!state.upload_id) return toast('전송할 파일이 없습니다.','warning');
+  if (!state.device_id) return toast('대상 장치를 선택하세요.','warning');
+  if (state.useApproval && !state.finalApproval) {
+    if (!state.routeId) return toast('결재선을 선택하세요.','warning');
+    if (!$dept.value) return toast('부서를 선택하세요.','warning');
+    if (!$review.value || !$approve.value) return toast('검토/승인자를 선택하세요.','warning');
+  }
+  const body = {
+    upload_id: state.upload_id,
+    device_id: state.device_id,
+    page: state.page,
+    width: state.uiWidth, height: state.uiHeight,
+    mode: state.mode, scale: state.scale, percent: state.percent, rotate: state.rotate,
+    use_approval: !!state.useApproval,
+    final_approval: !!state.finalApproval,
+    route_id: state.useApproval ? (state.routeId||null) : null,
+    assignees: state.useApproval ? state.assignees : {},
+    editor_layers: state.useEditor ? state.layers : [],
+    memo: $memo.value || ''
+  };
+  try{
+    const js=await saveOrSendCommon('/bulletin/sendfile', body);
+    toast(`전송 요청 완료 (job #${js.job_id||'-'})`,'success');
+  }catch(e){ toast('전송 실패','danger'); }
+});
+
+/* -------------------- 초기화 -------------------- */
+(async function init(){
+  populateRoutes();
+  updatePercentRow();
+  redrawHeader();
+  // 참여/서명/그리드용 부서 목록 로드
+  await Promise.all([
+    fetchDepartmentsTo($deptAtt),
+    fetchDepartmentsTo($deptSign),
+    fetchDepartmentsTo($deptGrid)
+  ]);
+  // 혹시 외부 CSS가 초기값을 눌러버리면 직접 지정
+  $stage.style.pointerEvents = 'auto';
+  $stage.style.zIndex = 3;
+})();
+})();
+</script>
+
+{% endblock %}

@@ -223,3 +223,22 @@ form {
     gap: 14px;  /* 항목 간 간격 */
     padding-left: 10px; /* 왼쪽 여백 */
 }
+
+.blog-header {
+    /* 기존 padding 그대로 쓰면 됨 (예시) */
+    padding: 0.75rem 1rem;
+}
+
+.blog-header-logo {
+    display: flex;
+    align-items: center;
+    height: 48px;          /* 헤더에서 허용할 최대 높이 (예: 48px) */
+}
+
+.iceense-logo {
+    max-height: 100%;      /* 부모(.blog-header-logo)의 높이 안에서만 */
+    height: 100%;          /* 부모 높이에 맞춤 */
+    width: auto;
+    object-fit: contain;
+    display: block;
+}
