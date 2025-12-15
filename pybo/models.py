@@ -817,6 +817,7 @@ class SignLayout(db.Model):
 #   - 즉시배포형: target_dir='uploads', status='approved', need_approval=False
 # ─────────────────────────────────────────────────────────────
 
+# DocumentInfo: 문서 등록/결재 인스턴스
 class DocumentInfo(db.Model):
     __tablename__ = 'document_infos'
     __table_args__ = (
@@ -835,53 +836,72 @@ class DocumentInfo(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
 
     user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='SET NULL'))
-    device_id = db.Column(db.String(64))   # (옵션) 특정 디바이스를 미리 지정 가능
+    device_id = db.Column(db.String(64))
 
-    # 문서 이름(화면/검색용). 원본 파일명과 분리된 "타이틀"
-    doc_name = db.Column(db.String(200))  # 예: "회의실 안내문 2025-12"
+    doc_name = db.Column(db.String(200))
 
-    # 원본 파일명 / 저장 경로(상대 또는 절대)
     orig_filename = db.Column(db.String(255), nullable=False)
     stored_path   = db.Column(db.String(500), nullable=False)
 
-    # 단계 디렉토리
     target_dir = db.Column(db.String(16), nullable=False, default='in_review', index=True)
-
-    # 결재 필요 여부 / 스탬프 필요 여부
     need_approval = db.Column(db.Boolean, nullable=False, default=True)
     need_stamp    = db.Column(db.Boolean, nullable=False, default=False)
-
-    # 상태: draft / in_review / checked / approved / rejected / uploads
     status = db.Column(db.String(16), nullable=False, default='in_review', index=True)
 
-    # 문서 만료 시점(게시/사용 기한)
     expire_time = db.Column(MySQLDateTime(fsp=0))
 
-    # 렌더 파라미터(옵션)
-    pages   = db.Column(db.Integer, default=1)
-    width   = db.Column(db.Integer)
-    height  = db.Column(db.Integer)
-    mode    = db.Column(db.String(20))
-    scale   = db.Column(db.String(20))
-    percent = db.Column(db.Integer)
-    rotate  = db.Column(db.Integer)
+    # -----------------------------
+    # ✅ (NEW) 정규화 렌더 기준(프론트/디테일 동일 기준)
+    # -----------------------------
+    # 정규화 캔버스(기본 1200x1600): draft/detail 배경 PNG는 무조건 이 크기 기반
+    norm_canvas_w = db.Column(db.Integer, nullable=False, default=1200)
+    norm_canvas_h = db.Column(db.Integer, nullable=False, default=1600)
 
+    # 원본 문서 정보(옵션)
+    source_ext    = db.Column(db.String(16))  # "pdf","pptx","docx","xlsx","jpg"...
+    source_pages  = db.Column(db.Integer, default=1)
+
+    # 렌더 파라미터(정규화 생성 시 적용값을 저장)
+    fit_mode  = db.Column(db.Enum('fit','fill','percent', name='doc_fit_mode'), default='fit')
+    percent   = db.Column(db.Integer)   # fit_mode='percent'일 때만 의미
+    rotate    = db.Column(db.Integer)   # 0/90/180/270 정도를 권장
+
+    # -----------------------------
+    # ✅ (NEW) 정규화 산출물 경로들
+    # -----------------------------
+    # 정규화 PDF(유지용/다운로드용 파이프라인에서 사용 가능)
+    normalized_pdf_relpath = db.Column(db.String(500))
+
+    # 정규화 페이지 PNG/BMP 저장 디렉토리(페이지별 파일은 DocumentPageAsset에서 관리)
+    normalized_dir_relpath = db.Column(db.String(500))
+
+    # 빠른 접근용 “첫 장” 정규화 파일(프론트에서 1장만 필요할 때)
+    normalized_front_png_relpath = db.Column(db.String(500))
+    normalized_front_bmp_relpath = db.Column(db.String(500))
+
+    # 결재 완료 표지(첫 장 교체용) - “서명/직인까지 굽힌” PNG
+    signed_front_png_relpath = db.Column(db.String(500))
+    signed_front_bmp_relpath = db.Column(db.String(500))
+
+    # -----------------------------
+    # ✅ (NEW) 결재완료 PDF 번들(첨부까지 합친 결과)
+    # -----------------------------
+    # 1) 결재문서+첨부를 모두 합친 bundle.pdf
+    bundle_pdf_relpath = db.Column(db.String(500))
+    # 2) bundle의 1페이지를 signed_front_png로 교체한 최종 approved_bundle.pdf
+    approved_bundle_pdf_relpath = db.Column(db.String(500))
+
+    # -----------------------------
     # 결재선/레이아웃 스냅샷
-    # 🔸 ApprovalRoute 템플릿은 사용하지 않으므로 route_id FK 제거
+    # -----------------------------
     sign_layout_id = db.Column(
         db.BigInteger,
         db.ForeignKey('sign_layouts.id', ondelete='SET NULL')
     )
-
-    # 프론트/서비스에서 구성한 결재선 구조 전체를 JSON으로만 보관
-    # 예: { "cols":[{ "step_type":"작성", "user_id":..., ...}, ...], ... }
     route_snapshot_json  = db.Column(db.JSON)
     layout_snapshot_json = db.Column(db.JSON)
-
-    # 기타 메타데이터(게시기간, 카테고리, 태그 등)
     metadata_json        = db.Column(db.JSON)
 
-    # 최종 승인된 정규화 문서(pdf 등) 상대경로
     final_doc_relpath = db.Column(db.String(500))
 
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
@@ -892,15 +912,11 @@ class DocumentInfo(db.Model):
 
     @property
     def is_publish_source(self) -> bool:
-        """
-        디바이스 송출 후보(1차 필터 대상)인지 여부:
-        - 결재형: target_dir='approved'       AND status='approved'
-        - 공지형: target_dir='bulletin_files' AND status='approved'
-        """
         return (
             self.status == 'approved'
             and self.target_dir in ('approved', 'bulletin_files')
         )
+
 
 
 
@@ -1312,4 +1328,119 @@ def create_immediate_documentinfo_record(
     db.session.add(rec)
     return rec
 
+
+class DocumentPageAsset(db.Model):
+    """
+    문서 페이지별 정규화/서명(굽힘) 산출물 관리
+    - normalized_* : 원본을 1200x1600 기준으로 만든 배경(편집 기준)
+    - signed_*     : 레이어(결재란/직인/서명 등)까지 굽혀서 만든 결과(배포/완료표지)
+    """
+    __tablename__ = 'document_page_assets'
+    __table_args__ = (
+        db.UniqueConstraint('document_info_id', 'page_no', name='uq_docpage_doc_page'),
+        db.Index('idx_docpage_doc', 'document_info_id', 'page_no'),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    document_info_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('document_infos.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
+
+    page_no = db.Column(db.Integer, nullable=False)  # 1..N
+
+    # 정규화 결과(항상 norm_canvas_w/h 기준으로 생성)
+    normalized_png_relpath = db.Column(db.String(500))
+    normalized_bmp_relpath = db.Column(db.String(500))
+
+    # 서명/직인/결재란까지 굽힌 결과(결재완료/배포용)
+    signed_png_relpath = db.Column(db.String(500))
+    signed_bmp_relpath = db.Column(db.String(500))
+
+    # (옵션) 캐시/무결성
+    sha256 = db.Column(db.String(64))
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+
+    document_info = db.relationship(
+        'DocumentInfo',
+        backref=db.backref('page_assets', lazy=True, passive_deletes=True)
+    )
+
+
+class DocumentAttachment(db.Model):
+    """
+    결재 문서에 붙는 첨부(엑셀/워드/pdf/이미지 등)
+    - 원본 저장 + 변환 PDF 저장 + 페이지수/순서 관리
+    """
+    __tablename__ = 'document_attachments'
+    __table_args__ = (
+        db.Index('idx_docatt_doc_order', 'document_info_id', 'order_index'),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    document_info_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('document_infos.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
+
+    order_index = db.Column(db.Integer, nullable=False, default=1)  # 결재문서 뒤에 붙는 순서
+
+    orig_filename = db.Column(db.String(255), nullable=False)
+    stored_relpath = db.Column(db.String(500), nullable=False)
+
+    # 변환 결과(PDF)
+    converted_pdf_relpath = db.Column(db.String(500))
+    page_count = db.Column(db.Integer, default=0)
+
+    source_ext = db.Column(db.String(16))  # "xlsx","docx","pdf","png"...
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+
+    document_info = db.relationship(
+        'DocumentInfo',
+        backref=db.backref('attachments', lazy=True, passive_deletes=True, order_by='DocumentAttachment.order_index')
+    )
+
+
+class DocumentDevicePageMap(db.Model):
+    """
+    한 문서의 특정 페이지를 특정 디바이스에 매핑
+    예) doc_id=10, E01=1p / E02=2p ...
+    """
+    __tablename__ = 'document_device_page_map'
+    __table_args__ = (
+        db.UniqueConstraint('document_info_id', 'device_id', name='uq_docdev_doc_device'),
+        db.Index('idx_docdev_doc', 'document_info_id'),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    document_info_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey('document_infos.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True
+    )
+
+    device_id = db.Column(db.String(64), nullable=False)  # "E01"
+    page_no   = db.Column(db.Integer, nullable=False, default=1)
+
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+    document_info = db.relationship(
+        'DocumentInfo',
+        backref=db.backref('device_page_maps', lazy=True, passive_deletes=True)
+    )
 

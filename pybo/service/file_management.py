@@ -4,6 +4,7 @@ import json
 import time
 import tempfile
 import itertools
+import shutil
 from datetime import datetime
 from io import BytesIO
 
@@ -277,22 +278,29 @@ def _open_rgba(path: str):
 # ──────────────────────────────────────────────────────────
 # User / IDs
 # ──────────────────────────────────────────────────────────
+# def current_user_id():
+#     """
+#     숫자 PK(no) 또는 세션 기반 userid를 best-effort로 반환.
+#     - 우선순위: g.user.no → session['no'] → request.user_id
+#     """
+#     if getattr(g, "user", None) is not None and getattr(g.user, "no", None) is not None:
+#         return int(g.user.no)
+#     if "userid" in session:
+#         val = session.get("userid")
+#         if isinstance(val, (int, str)) and str(val).strip():
+#             return val if not str(val).isdigit() else int(val)
+#     if getattr(request, "user_id", None):
+#         try:
+#             return int(request.user_id)
+#         except Exception:
+#             return str(request.user_id)
+#     return None
+
 def current_user_id():
-    """
-    숫자 PK(no) 또는 세션 기반 userid를 best-effort로 반환.
-    - 우선순위: g.user.no → session['no'] → request.user_id
-    """
     if getattr(g, "user", None) is not None and getattr(g.user, "no", None) is not None:
         return int(g.user.no)
-    if "userid" in session:
-        val = session.get("userid")
-        if isinstance(val, (int, str)) and str(val).strip():
-            return val if not str(val).isdigit() else int(val)
-    if getattr(request, "user_id", None):
-        try:
-            return int(request.user_id)
-        except Exception:
-            return str(request.user_id)
+    if "no" in session and str(session["no"]).isdigit():
+        return int(session["no"])
     return None
 
 
@@ -404,11 +412,11 @@ def get_doc_root_for_user(userid: str | None = None) -> str:
     return os.path.join(get_global_docs_root(), uid)
 
 
-def get_doc_dir(userid: str, document_info_id: int) -> str:
-    """
-    {DOC_ROOT}/{userid}/approval_process/{doc_id}/
-    """
-    return os.path.join(get_doc_root_for_user(userid), "approval_process", str(document_info_id))
+# def get_doc_dir(userid: str, document_info_id: int) -> str:
+#     """
+#     {DOC_ROOT}/{userid}/approval_process/{doc_id}/
+#     """
+#     return os.path.join(get_doc_root_for_user(userid), "approval_process", str(document_info_id))
 
 
 def get_doc_paths(userid: str, document_info_id: int, source_ext: str) -> dict:
@@ -1498,6 +1506,7 @@ def render_preview_png(
     rotate,
     raw,
     layers,
+    page: int = 1,
 ):
     """
     PNG 프리뷰 이미지 생성.
@@ -1949,3 +1958,222 @@ def find_latest_pending_for_user(userid: str):
     candidates.sort(key=lambda x: (x.get("_ver", 0), x.get("_mtime", 0)), reverse=True)
     return candidates[0]
 
+# ──────────────────────────────────────────────────────────
+# Docs master store (eink_docs) - approval_process / bulletin_files
+# ──────────────────────────────────────────────────────────
+def safe_doc_bucket(raw: str | None) -> str:
+    v = (raw or "").strip().lower()
+    if v in ("approval_process", "bulletin_files"):
+        return v
+    return "approval_process"
+
+
+def decide_doc_bucket(need_approval: bool) -> str:
+    """
+    - need_approval=True  -> approval_process
+    - need_approval=False -> bulletin_files
+    """
+    return "approval_process" if bool(need_approval) else "bulletin_files"
+
+
+def get_doc_dir(userid: str, document_info_id: int, bucket: str = "approval_process") -> str:
+    """
+    {ROOT}/eink_docs/{user_id}/{bucket}/{doc_id}/
+    """
+    bucket = safe_doc_bucket(bucket)
+    return os.path.join(get_doc_root_for_user(userid), bucket, str(document_info_id))
+
+
+def get_doc_bundle_paths(userid: str, document_info_id: int, bucket: str, source_ext: str) -> dict:
+    """
+    DocumentInfo 1건의 마스터 파일 경로 세트.
+    """
+    bucket = safe_doc_bucket(bucket)
+    doc_dir = get_doc_dir(userid, document_info_id, bucket=bucket)
+    os.makedirs(doc_dir, exist_ok=True)
+
+    source_ext = (source_ext or "").lstrip(".") or "pdf"
+
+    return {
+        "doc_dir": doc_dir,
+        "bucket": bucket,
+        "original": os.path.join(doc_dir, f"original.{source_ext}"),
+        "normalized_pdf": os.path.join(doc_dir, "normalized.pdf"),
+        "layout_snapshot_json": os.path.join(doc_dir, "layout_snapshot.json"),
+        "metadata_json": os.path.join(doc_dir, "metadata.json"),
+        "onelayer_bmp": os.path.join(doc_dir, "onelayer.bmp"),
+        "onelayer_bin": os.path.join(doc_dir, "onelayer.bin"),
+        "onelayer_meta_json": os.path.join(doc_dir, "onelayer_meta.json"),
+    }
+
+
+def _guess_normalized_pdf_from_upload(upload_path: str) -> str | None:
+    """
+    LibreOffice 변환 로직(_convert_doc_to_image) 기준:
+    원본이 {base}/{name}.pptx면 {base}/{name}.pdf가 생성되는 케이스가 많음.
+    """
+    try:
+        if not upload_path:
+            return None
+        base_dir = os.path.dirname(upload_path)
+        base_name = os.path.splitext(os.path.basename(upload_path))[0]
+        guess = os.path.join(base_dir, base_name + ".pdf")
+        return guess if os.path.isfile(guess) else None
+    except Exception:
+        return None
+
+
+def save_doc_master_bundle(
+    *,
+    userid: str,
+    doc_id: int,
+    bucket: str,
+    im,                 # PIL.Image
+    fmt: str,
+    size: tuple[int, int],
+    device_id: str = "",
+    # 원본/정규화 파일 복사용(있으면 copy)
+    upload_temp_path: str | None = None,
+    orig_filename: str | None = None,
+    normalized_pdf_path: str | None = None,
+    # 옵션 스냅샷들
+    layout_snapshot: dict | None = None,
+    metadata: dict | None = None,
+    # meta 확장용
+    need_approval: bool = False,
+    final_approval: bool = False,
+    route_id=None,
+    assignees=None,
+):
+    """
+    {ROOT}/eink_docs/{userid}/{bucket}/{doc_id}/ 아래에:
+      - original.xxx (가능하면 copy)
+      - normalized.pdf (가능하면 copy)
+      - layout_snapshot.json (옵션 dump)
+      - metadata.json (옵션 dump)
+      - onelayer.bmp / onelayer.bin / onelayer_meta.json 저장
+
+    반환: (payload_bytes, onelayer_meta_dict, paths_dict)
+    """
+    bucket = safe_doc_bucket(bucket)
+
+    # 1) 원본 확장자 결정
+    source_ext = "pdf"
+    try:
+        if orig_filename and "." in orig_filename:
+            source_ext = orig_filename.rsplit(".", 1)[-1].lower()
+        elif upload_temp_path and "." in upload_temp_path:
+            source_ext = upload_temp_path.rsplit(".", 1)[-1].lower()
+    except Exception:
+        source_ext = "pdf"
+
+    paths = get_doc_bundle_paths(userid, doc_id, bucket=bucket, source_ext=source_ext)
+
+    # 2) original.xxx 복사 (있으면)
+    try:
+        if upload_temp_path and os.path.isfile(upload_temp_path):
+            shutil.copy2(upload_temp_path, paths["original"])
+    except Exception:
+        current_app.logger.debug("[DocMaster] original copy failed", exc_info=True)
+
+    # 3) normalized.pdf 복사 (있으면)
+    try:
+        norm = normalized_pdf_path or (upload_temp_path and _guess_normalized_pdf_from_upload(upload_temp_path))
+        if norm and os.path.isfile(norm):
+            shutil.copy2(norm, paths["normalized_pdf"])
+    except Exception:
+        current_app.logger.debug("[DocMaster] normalized.pdf copy failed", exc_info=True)
+
+    # 4) snapshot dump (옵션)
+    try:
+        if layout_snapshot is not None:
+            with open(paths["layout_snapshot_json"], "w", encoding="utf-8") as f:
+                json.dump(layout_snapshot, f, ensure_ascii=False, indent=2)
+    except Exception:
+        current_app.logger.debug("[DocMaster] layout_snapshot dump failed", exc_info=True)
+
+    try:
+        if metadata is not None:
+            with open(paths["metadata_json"], "w", encoding="utf-8") as f:
+                json.dump(metadata, f, ensure_ascii=False, indent=2)
+    except Exception:
+        current_app.logger.debug("[DocMaster] metadata dump failed", exc_info=True)
+
+    # 5) onelayer.bmp 저장
+    im.save(paths["onelayer_bmp"], format="BMP")
+
+    # 6) onelayer.bin 저장
+    payload = image_to_payload(im, fmt, size=size)
+    with open(paths["onelayer_bin"], "wb") as f:
+        f.write(payload)
+
+    raw_len = len(payload) - 4
+    crc32_le = int.from_bytes(payload[-4:], "little", signed=False)
+
+    # 7) onelayer_meta.json 저장
+    onelayer_meta = {
+        "doc_id": int(doc_id),
+        "bucket": bucket,
+        "device_id": device_id,
+        "original_name": orig_filename,
+        "files": {
+            "original": os.path.basename(paths["original"]),
+            "normalized_pdf": os.path.basename(paths["normalized_pdf"]),
+            "layout_snapshot_json": os.path.basename(paths["layout_snapshot_json"]),
+            "metadata_json": os.path.basename(paths["metadata_json"]),
+            "bmp": os.path.basename(paths["onelayer_bmp"]),
+            "bin": os.path.basename(paths["onelayer_bin"]),
+        },
+        "width": size[0],
+        "height": size[1],
+        "mode": fmt,
+        "packing": {"BW": "1bpp", "BWRY": "2bpp", "BWRYBG": "3bpp"}.get(fmt, ""),
+        "raw_len": raw_len,
+        "total_len": raw_len + 4,
+        "crc32": f"{crc32_le:08x}",
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "need_approval": bool(need_approval),
+        "final_approval": bool(final_approval),
+        "route_id": route_id,
+        "assignees": assignees or {},
+    }
+
+    with open(paths["onelayer_meta_json"], "w", encoding="utf-8") as f:
+        json.dump(onelayer_meta, f, ensure_ascii=False, indent=2)
+
+    return payload, onelayer_meta, paths
+
+
+def get_device_upload_dir(userid: str | None = None) -> str:
+    """
+    {ROOT}/eink_docs/{userid}/upload/
+    """
+    uid = _safe_fragment(userid or current_userid_str())
+    d = os.path.join(get_global_docs_root(), uid, "upload")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def save_device_upload_bundle(
+    *,
+    userid: str,
+    base_name: str,          # ex) "E03_10_202512120901_202512150900"
+    payload: bytes,          # BIN bytes
+    meta_json: dict,         # JSON dict
+):
+    """
+    {ROOT}/eink_docs/{userid}/upload/{base_name}.bin / .json 저장
+    """
+    base_name = _safe_fragment(base_name)
+    out_dir = get_device_upload_dir(userid)
+
+    bin_path = os.path.join(out_dir, base_name + ".bin")
+    json_path = os.path.join(out_dir, base_name + ".json")
+
+    with open(bin_path, "wb") as f:
+        f.write(payload)
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(meta_json, f, ensure_ascii=False, indent=2)
+
+    return {"bin": bin_path, "json": json_path}

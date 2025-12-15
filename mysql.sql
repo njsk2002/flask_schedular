@@ -1,7 +1,10 @@
 select * from image_data;
 
 select * from document_infos order by id desc;
+
 select * from document_approval_steps;
+select * from document_versions;
+select * from documents;
 
 select * from user;
 
@@ -17,6 +20,7 @@ select * from approval_route_steps;
 
 
 select * from sign_layouts;
+select * from sign_slots;
 DELETE FROM sign_layouts WHERE id < 100;
 
 SELECT * FROM uploads order by id desc;
@@ -25,7 +29,7 @@ DELETE FROM uploads WHERE id < 100;
 
 select * from upload_approval_steps order by id desc;
 select * from sign_slots;
-select * from SignLayoutModel;
+
 
 SHOW COLUMNS FROM uploads LIKE 'target_dir';
 
