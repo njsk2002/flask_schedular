@@ -577,7 +577,7 @@ class RepositoryEINK:
             scale=scale,
             percent=percent,
             rotate=rotate,
-            route_id=route_id,
+            # route_id=route_id,
             sign_layout_id=sign_layout_id,
             route_snapshot_json=_json_passthrough(route_snapshot),
             layout_snapshot_json=_json_passthrough(layout_snapshot),
@@ -614,6 +614,7 @@ class RepositoryEINK:
         metadata: Optional[Dict[str, Any]] = None,
         expire_time: Optional[datetime] = None,
         final_doc_relpath: Optional[str] = None,
+        stored_path: Optional[str] = None,  # ✅ 추가 (문서 마스터 doc_dir 같은 실제 경로)
     ) -> bool:
         _dbg(
             "update_upload_status:start",
@@ -622,6 +623,7 @@ class RepositoryEINK:
             target_dir=target_dir,
             route_id=route_id,
             sign_layout_id=sign_layout_id,
+            stored_path=stored_path,  # ✅ 로그 추가
         )
         if not upload_id:
             _dbg("update_upload_status:invalid_id")
@@ -634,8 +636,10 @@ class RepositoryEINK:
 
             if status in ("draft", "in_review", "checked", "approved", "rejected", "uploads"):
                 row.status = status
+
             if target_dir in ("in_review", "checked", "approved", "uploads", "bulletin_files"):
                 row.target_dir = target_dir
+
             if route_id is not None:
                 row.route_id = route_id
             if sign_layout_id is not None:
@@ -651,6 +655,10 @@ class RepositoryEINK:
             if final_doc_relpath is not None:
                 row.final_doc_relpath = final_doc_relpath
 
+            # ✅ stored_path 반영
+            if stored_path is not None:
+                row.stored_path = stored_path
+
             row.updated_at = now_kst()
             db.session.commit()
             _dbg(
@@ -658,14 +666,15 @@ class RepositoryEINK:
                 upload_id=upload_id,
                 status=row.status,
                 target_dir=row.target_dir,
+                stored_path=row.stored_path,  # ✅ 로그 추가
             )
             return True
+
         except SQLAlchemyError:
-            _logger().debug(
-                "[update_upload_status] DB error, rollback", exc_info=True
-            )
+            _logger().debug("[update_upload_status] DB error, rollback", exc_info=True)
             db.session.rollback()
             return False
+
 
     # ------------------------------------------------------------------
     # (옵션) 결재 단계 전진 헬퍼: in_review -> checked -> approved
