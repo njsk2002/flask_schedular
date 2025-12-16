@@ -11,8 +11,8 @@
     </div>
     <div class="d-flex gap-2">
       <button class="btn btn-outline-secondary" id="btn-save-draft">임시저장</button>
-      <!-- 🔹 원본/BMP 토글 버튼 -->
-      <button class="btn btn-outline-dark" id="btn-bmp-toggle">BMP확인</button>
+      <!-- 🔹 BMP 확인 버튼 추가 -->
+      <button class="btn btn-outline-dark" id="btn-bmp-preview">BMP확인</button>
       <button class="btn btn-outline-primary" id="btn-export-editor" title="편집 레이어를 이미지에 굽기(서버 빌드)">편집결과 내보내기</button>
       <button class="btn btn-success" id="btn-send">전송/배포</button>
     </div>
@@ -91,6 +91,13 @@
     }
 
     #draft-app .layer.selected { outline:2px solid #198754; }
+
+    #draft-app .ghost-line {
+      position:absolute;
+      height:2px;
+      background:#212529;
+      opacity:.8;
+    }
 
     #draft-app .props small { color:#6c757d; }
     #draft-app .hidden { display:none !important; }
@@ -199,6 +206,7 @@
       border-right:0;
     }
 
+
     /* 직인/QR/기간/메세지용 박스 공통 */
     #draft-app .layer.stamp-box,
     #draft-app .layer.qr-box,
@@ -207,6 +215,7 @@
       border: 1px solid #000;
       background: #ffffff;
     }
+
 
     #draft-app .meta-content {
       font-size: 11px;
@@ -221,38 +230,11 @@
       word-break: keep-all;
     }
 
-    /* 🔹 텍스트/선/사각형을 프론트에서 “보이게” */
-    #draft-app .layer.text-layer {
-      background: rgba(255,255,255,.55);
-    }
-    #draft-app .text-content {
-      position:absolute;
-      inset:0;
-      padding:2px 4px;
-      display:flex;
-      align-items:center;
-      overflow:hidden;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-
-    #draft-app .layer.line-layer {
-      border: none !important;
-      background: transparent !important;
-    }
-    #draft-app .line-content {
-      position:absolute;
-      inset:0;
-    }
-
-    #draft-app .layer.rect-layer {
-      border-style: solid !important;
-    }
   </style>
 
   <div class="row g-3">
 
-    <!-- 설정 영역 -->
+    <!-- 설정 영역: PC에서 왼쪽, 모바일에선 아래 -->
     <div class="col-12 col-xl-4 order-2 order-xl-1">
 
       <!-- 1) 파일 -->
@@ -326,9 +308,9 @@
               </select>
             </div>
             <div class="col-6 d-flex align-items-end">
-              <div class="small text-muted">
-                · 옵션 변경은 저장/전송/내보내기 시 적용<br>
-                · 미리보기는 자동 갱신하지 않음
+              <div class="form-check">
+                <input class="check-input" type="checkbox" id="ck-original">
+                <label class="form-check-label" for="ck-original">원본 미리보기</label>
               </div>
             </div>
           </div>
@@ -464,27 +446,29 @@
             </select>
           </div>
 
-          <div class="row g-2 mt-2">
-            <div class="col-6">
-              <label class="form-label mb-1">직인 크기(px)</label>
-              <input type="number" id="input-stamp-size"
-                     class="form-control form-control-sm"
-                     value="80" min="40" max="400">
-            </div>
-            <div class="col-6 d-flex align-items-end">
-              <button class="btn btn-outline-primary btn-sm w-100" id="btn-stamp-add">
-                직인 LAY 추가
-              </button>
-            </div>
+        <div class="row g-2 mt-2">
+          <div class="col-6">
+            <label class="form-label mb-1">직인 크기(px)</label>
+            <input type="number" id="input-stamp-size"
+                  class="form-control form-control-sm"
+                  value="80" min="40" max="400">
           </div>
+          <div class="col-6 d-flex align-items-end">
+            <button class="btn btn-outline-primary btn-sm w-100" id="btn-stamp-add">
+              직인 LAY 추가
+            </button>
+          </div>
+        </div>
 
+          <!-- 🔽 직인 목록 썸네일 영역 -->
           <div id="stamp-list" class="row row-cols-3 g-1 mt-2"></div>
           <div class="form-text">
             · 직인은 관리자(Admin)가 서버에 등록한 파일 목록 기준으로 불러옵니다.<br>
-            · 항목을 클릭한 뒤 “직인 LAY 추가”를 누르면 우측에 추가됩니다.
+            · 항목을 클릭하면 우측 미리보기에 직인 박스가 추가됩니다.
           </div>
         </div>
       </div>
+
 
       <!-- 5) QR 코드 -->
       <div class="card shadow-sm mt-3">
@@ -492,14 +476,14 @@
         <div class="card-body small">
           <label class="form-label mb-1">QR 내용 (URL 또는 텍스트)</label>
           <input type="text" id="input-qrcode-text" class="form-control form-control-sm"
-                 placeholder="예: http://www.icetech.co.kr">
+                placeholder="예: http://www.icetech.co.kr">
 
           <div class="row g-2 mt-2">
             <div class="col-6">
               <label class="form-label mb-1">QR 크기(px)</label>
               <input type="number" id="input-qrcode-size"
-                     class="form-control form-control-sm"
-                     value="120" min="60" max="400">
+                    class="form-control form-control-sm"
+                    value="120" min="60" max="400">
             </div>
             <div class="col-6 d-flex align-items-end">
               <button class="btn btn-outline-primary btn-sm w-100" id="btn-qrcode-add">
@@ -510,10 +494,12 @@
         </div>
       </div>
 
+
       <!-- 6) 게시기간 -->
       <div class="card shadow-sm mt-3">
         <div class="card-header"><strong>게시기간</strong></div>
         <div class="card-body small">
+          <!-- 날짜 -->
           <div class="row g-2 mb-2">
             <div class="col-6">
               <label class="form-label mb-1">시작일</label>
@@ -524,6 +510,7 @@
               <input type="date" id="input-period-to" class="form-control form-control-sm">
             </div>
           </div>
+          <!-- 시간 -->
           <div class="row g-2">
             <div class="col-6">
               <label class="form-label mb-1">시작 시간</label>
@@ -538,17 +525,18 @@
             <div class="col-6">
               <label class="form-label mb-1">글자 크기(px)</label>
               <input type="number" id="input-period-font"
-                     class="form-control form-control-sm"
-                     value="18" min="10" max="48">
+                    class="form-control form-control-sm"
+                    value="18" min="10" max="48">
             </div>
             <div class="col-6 d-flex align-items-end">
               <button class="btn btn-outline-primary btn-sm w-100" id="btn-period-add">
                 게시기간 LAY 추가
               </button>
             </div>
-          </div>
+          </div>         
         </div>
       </div>
+
 
       <!-- 7) 메세지 -->
       <div class="card shadow-sm mt-3 mb-3">
@@ -561,8 +549,8 @@
             <div class="col-6">
               <label class="form-label mb-1">글자 크기(px)</label>
               <input type="number" id="input-message-font"
-                     class="form-control form-control-sm"
-                     value="18" min="10" max="48">
+                    class="form-control form-control-sm"
+                    value="18" min="10" max="48">
             </div>
             <div class="col-6 d-flex align-items-end">
               <button class="btn btn-outline-primary btn-sm w-100" id="btn-message-add">
@@ -575,17 +563,17 @@
 
     </div><!-- /설정 col -->
 
-    <!-- 에디터 영역 -->
+    <!-- 에디터 영역: PC에서 오른쪽, 모바일에서 위 -->
     <div class="col-12 col-xl-8 order-1 order-xl-2">
       <div class="card shadow-sm h-100">
         <div class="card-header d-flex align-items-center justify-content-between">
           <strong>미리보기 & 편집</strong>
           <div class="d-flex align-items-center gap-2">
             <div class="btn-group" role="group">
-              <button class="btn btn-outline-secondary tool-btn" id="nav-prev" disabled>이전</button>
-              <button class="btn btn-outline-secondary tool-btn" id="nav-next" disabled>이후</button>
+              <button class="btn btn-outline-secondary tool-btn" id="nav-prev">이전</button>
+              <button class="btn btn-outline-secondary tool-btn" id="nav-next">이후</button>
             </div>
-            <span class="small" id="page-ind">1 / 1</span>
+            <span class="small" id="page-ind">- / -</span>
           </div>
         </div>
         <div class="card-body d-flex flex-column gap-2">
@@ -659,6 +647,7 @@
   }}
 </script>
 
+
 <script>
 (()=>{
 /* -------------------- 유틸/상태 -------------------- */
@@ -699,47 +688,44 @@ const state = {
   scale:'fit',
   percent:100,
   rotate:0,
+  view:'processed',
   device_id:'',
   file_name:'',
   memo:'',
   useEditor:true,
   layers:[],
   selected:null,
+  _prevUrl:null,
   lastBox:null,
 
-  // 🔹 미리보기 모드: original(원본 변환) / bmp(E-ink 변환)
-  preview: {
-    mode: 'original',
-    originalUrl: null,
-    bmpUrl: null
-  },
+  // 🔽 직인/QR/기간/메세지 메타
+stamp:{
+      use:false,
+      type:'',
+      id:null,
+      name:'',
+      url:'',
+      size:80          // 🔹 기본 직인 크기(px)
+    },
+    qrcode:{
+      text:'',
+      size:120         // 🔹 기본 QR 한 변(px)
+    },
+    period:{
+      from_date:'',
+      from_time:'',
+      to_date:'',
+      to_time:'',
+      label:'',
+      font_size:18     // 🔹 게시기간 글자 크기
+    },
+    message:'',
+    message_font_size:18,
 
-  stamp:{
-    use:false,
-    type:'',
-    id:null,
-    name:'',
-    url:'',
-    size:80
-  },
-  qrcode:{
-    text:'',
-    size:120
-  },
-  period:{
-    from_date:'',
-    from_time:'',
-    to_date:'',
-    to_time:'',
-    label:'',
-    font_size:18
-  },
-  message:'',
-  message_font_size:18,
+    approvalUse:false,
+    approvalCols:[],
 
-  approvalUse:false,
-  approvalCols:[],
-
+  // 🔽 서버에서 내려받은 직인 목록
   stampOptions:[]
 };
 
@@ -756,6 +742,7 @@ const $scale      = document.getElementById('select-scale');
 const $percentWrap= document.querySelector('.percent-wrap');
 const $percent    = document.getElementById('range-percent');
 const $rotate     = document.getElementById('select-rotate');
+const $original   = document.getElementById('ck-original');
 
 const $toolbar    = document.querySelector('.editor-toolbar');
 const $canvasWrap = document.getElementById('canvas-wrap');
@@ -768,7 +755,8 @@ const $btnNext    = document.getElementById('nav-next');
 const $btnSave    = document.getElementById('btn-save-draft');
 const $btnExport  = document.getElementById('btn-export-editor');
 const $btnSend    = document.getElementById('btn-send');
-const $btnBmpToggle = document.getElementById('btn-bmp-toggle');
+// 🔹 BMP 확인 버튼
+const $btnBmp     = document.getElementById('btn-bmp-preview');
 
 const $btnAddText = document.getElementById('btn-add-text');
 const $btnAddLine = document.getElementById('btn-add-line');
@@ -808,26 +796,28 @@ const $btnApprovalClear = document.getElementById('btn-approval-clear');
 const $btnApprovalBuild = document.getElementById('btn-approval-build');
 
 /* 직인 / QR / 게시기간 / 메세지 */
+/* 직인 / QR / 게시기간 / 메세지 */
 const $stampUse   = document.getElementById('ck-stamp');
 const $stampType  = document.getElementById('sel-stamp-type');
 const $stampList  = document.getElementById('stamp-list');
-const $stampSize  = document.getElementById('input-stamp-size');
-const $btnStampAdd= document.getElementById('btn-stamp-add');
+const $stampSize  = document.getElementById('input-stamp-size');   // 🔹
+const $btnStampAdd= document.getElementById('btn-stamp-add');      // 🔹
 
 const $qrText     = document.getElementById('input-qrcode-text');
-const $qrSize     = document.getElementById('input-qrcode-size');
-const $btnQrAdd   = document.getElementById('btn-qrcode-add');
+const $qrSize     = document.getElementById('input-qrcode-size');  // 🔹
+const $btnQrAdd   = document.getElementById('btn-qrcode-add');     // 🔹
 
 const $periodFrom = document.getElementById('input-period-from');
 const $periodTo   = document.getElementById('input-period-to');
 const $periodFromTime = document.getElementById('input-period-from-time');
 const $periodToTime   = document.getElementById('input-period-to-time');
-const $periodFont = document.getElementById('input-period-font');
-const $btnPeriodAdd = document.getElementById('btn-period-add');
+const $periodFont = document.getElementById('input-period-font');  // 🔹
+const $btnPeriodAdd = document.getElementById('btn-period-add');   // 🔹
 
 const $msgInput   = document.getElementById('input-message');
-const $msgFont    = document.getElementById('input-message-font');
-const $btnMsgAdd  = document.getElementById('btn-message-add');
+const $msgFont    = document.getElementById('input-message-font'); // 🔹
+const $btnMsgAdd  = document.getElementById('btn-message-add');    // 🔹
+
 
 
 /* -------------------- 기본 UI -------------------- */
@@ -848,13 +838,8 @@ function redrawHeader(){
   $devBadge.textContent = state.device_id ? `대상: ${state.device_id}` : '대상 장치 선택 전';
 }
 
-/* -------------------- 서버 연동: “원본” 프리뷰 (최초 1회) -------------------- */
-/**
- * 정책:
- * - 파일 최초 선택 시 /bulletin/preview_blob 딱 1회 호출
- * - 이후 레이어/이동/옵션변경으로는 절대 호출하지 않음
- */
-async function previewOriginalOnce(file){
+/* -------------------- 서버 연동: 프리뷰 (에디터용) -------------------- */
+async function previewFile(file){
   const fd = new FormData();
   fd.append('file', file);
   fd.append('width', state.uiWidth);
@@ -863,52 +848,22 @@ async function previewOriginalOnce(file){
   fd.append('scale', state.scale);
   fd.append('percent', state.percent);
   fd.append('rotate', state.rotate);
-  fd.append('raw', 1);                 // 🔹 무조건 “원본 변환” 먼저
-  fd.append('page', 1);
-  fd.append('layers', JSON.stringify([])); // 최초엔 레이어 굽지 않음
-
+  fd.append('raw', $original.checked?1:0);
+  fd.append('page', state.page);
+  fd.append('layers', JSON.stringify(state.useEditor ? state.layers : []));
   const r = await fetch('/bulletin/preview_blob', { method:'POST', body:fd });
   if(!r.ok) throw new Error('preview_blob failed');
-
   const upid = r.headers.get('X-Upload-Id');
   if (upid) state.upload_id = parseInt(upid,10);
-
-  const pages = parseInt(r.headers.get('X-Pages') || r.headers.get('X-Total-Pages') || '1', 10);
-  state.pages = Number.isFinite(pages) && pages>0 ? pages : 1;
-  state.page = 1;
-
-  // 단일 모드 정책: 멀티 페이지여도 서버 재호출 금지 → 네비 비활성 유지
-  $btnPrev.disabled = true;
-  $btnNext.disabled = true;
-
   const blob = await r.blob();
   const url = URL.createObjectURL(blob);
-
-  if (state.preview.originalUrl) URL.revokeObjectURL(state.preview.originalUrl);
-  state.preview.originalUrl = url;
-
-  // 원본 모드로 세팅
-  state.preview.mode = 'original';
+  if (state._prevUrl) URL.revokeObjectURL(state._prevUrl);
+  state._prevUrl = url;
   $img.src = url + '#t=' + Date.now();
-  $btnBmpToggle.textContent = 'BMP확인';
-
-  // BMP 캐시는 새 파일이면 폐기
-  if (state.preview.bmpUrl) { URL.revokeObjectURL(state.preview.bmpUrl); }
-  state.preview.bmpUrl = null;
 }
 
-/* -------------------- BMP(E-INK) 프리뷰: 버튼 클릭 시에만 -------------------- */
-/**
- * 전용 endpoint 가정: /bulletin/review_blob
- * - 여기서는 현재 레이어를 “굽기”해서 BMP 스타일 결과를 받아오는 용도
- * - 자동 호출 없음, 버튼 클릭 시에만 호출
- */
-async function buildBmpPreview(){
-  if (!state.upload_id) {
-    toast('BMP 확인을 위해 먼저 파일을 선택하세요.','warning');
-    return;
-  }
-
+async function previewJSON(){
+  if(!state.upload_id) return;
   const body = {
     upload_id: state.upload_id,
     page: state.page,
@@ -918,62 +873,54 @@ async function buildBmpPreview(){
     scale: state.scale,
     percent: state.percent,
     rotate: state.rotate,
-    layers: state.useEditor ? state.layers : [],
-    meta: {
-      approval: { use: state.approvalUse, columns: state.approvalCols },
-      stamp: state.stamp,
-      qrcode: state.qrcode,
-      period: state.period,
-      message: { text: state.message, font_size: state.message_font_size }
-    }
+    raw: $original.checked?1:0,
+    layers: state.useEditor ? state.layers : []
   };
-
-  const r = await fetch('/bulletin/review_blob', {
+  const r = await fetch('/bulletin/preview_blob', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
+    body:JSON.stringify(body)
   });
-  if(!r.ok) throw new Error('review_blob failed');
-
+  if(!r.ok) throw new Error('preview_json failed');
   const blob = await r.blob();
   const url = URL.createObjectURL(blob);
-
-  if (state.preview.bmpUrl) URL.revokeObjectURL(state.preview.bmpUrl);
-  state.preview.bmpUrl = url;
-
-  state.preview.mode = 'bmp';
+  if (state._prevUrl) URL.revokeObjectURL(state._prevUrl);
+  state._prevUrl = url;
   $img.src = url + '#t=' + Date.now();
-  $btnBmpToggle.textContent = '원본확인';
 }
 
-/* 토글 버튼 */
-$btnBmpToggle.addEventListener('click', async ()=>{
+/* -------------------- BMP 미리보기 -------------------- */
+async function previewBmpJSON(){
   if (!state.upload_id) {
-    toast('먼저 파일을 선택하세요.','warning');
+    toast('BMP 미리보기를 위해 먼저 파일을 선택하세요.','warning');
     return;
   }
-
-  if (state.preview.mode === 'original') {
-    try{
-      await buildBmpPreview();
-      toast('BMP(E-Ink) 프리뷰로 전환했습니다.','info');
-    }catch(e){
-      toast('BMP 프리뷰 생성 실패','danger');
-    }
-    return;
-  }
-
-  // bmp -> original (서버 호출 없음)
-  if (!state.preview.originalUrl) {
-    toast('원본 프리뷰가 없습니다. 파일을 다시 선택하세요.','warning');
-    return;
-  }
-  state.preview.mode = 'original';
-  $img.src = state.preview.originalUrl + '#t=' + Date.now();
-  $btnBmpToggle.textContent = 'BMP확인';
-  toast('원본 프리뷰로 전환했습니다.','info');
-});
-
+  const body = {
+    upload_id: state.upload_id,
+    page: state.page,
+    width: state.uiWidth,
+    height: state.uiHeight,
+    mode: state.mode,
+    scale: state.scale,
+    percent: state.percent,
+    rotate: state.rotate,
+    raw: 0,                       // BMP 확인 시에는 가공본 기준 사용 권장
+    bmp: 1,                       // 🔹 백엔드에서 BMP/E-INK 스타일로 처리 여부 구분
+    layers: state.useEditor ? state.layers : []
+  };
+  const r = await fetch('/bulletin/preview_blob', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error('bmp preview failed');
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  if (state._prevUrl) URL.revokeObjectURL(state._prevUrl);
+  state._prevUrl = url;
+  $img.src = url + '#t=' + Date.now();
+  toast('BMP 스타일 미리보기를 생성했습니다.','info');
+}
 
 /* -------------------- 부서/사용자 로딩 -------------------- */
 async function fetchDepartmentsTo(el){
@@ -989,19 +936,6 @@ async function fetchDepartmentsTo(el){
   }
 }
 
-async function fetchUsersTo(el, dept){
-  try{
-    const r=await fetch('/bulletin/users?'+new URLSearchParams({department:dept||''}));
-    if(!r.ok) throw 0;
-    const js=await r.json();
-    const arr=Array.isArray(js.users)?js.users:[];
-    const label = u => (u.username||u.userid||u.id);
-    el.innerHTML = `<option value="">(직원 선택)</option>` +
-      arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
-  }catch(e){
-    el.innerHTML = `<option value="">(직원 선택)</option>`;
-  }
-}
 
 /* -------------------- 직인 목록 로딩 -------------------- */
 async function fetchStampList(){
@@ -1052,9 +986,90 @@ if ($stampList) {
     state.stamp.url  = item.url || '';
     state.stamp.type = $stampType.value || '';
 
-    toast(`직인 선택: ${state.stamp.name||state.stamp.id}`,'info');
+    //ensureStampLayer();
   });
 }
+
+
+async function fetchUsersTo(el, dept){
+  try{
+    const r=await fetch('/bulletin/users?'+new URLSearchParams({department:dept||''}));
+    if(!r.ok) throw 0;
+    const js=await r.json();
+    const arr=Array.isArray(js.users)?js.users:[];
+    const label = u => (u.username||u.userid||u.id);
+    el.innerHTML = `<option value="">(직원 선택)</option>` +
+      arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
+  }catch(e){
+    el.innerHTML = `<option value="">(직원 선택)</option>`;
+  }
+}
+
+
+ // size/버튼 이벤트
+  $stampSize.addEventListener('change', ()=>{
+    state.stamp.size = parseInt($stampSize.value,10) || 80;
+  });
+
+  $btnStampAdd.addEventListener('click', ()=>{
+    if (!state.stamp.id) {
+      toast('먼저 직인 항목을 선택하세요.','warning');
+      return;
+    }
+    state.stamp.size = parseInt($stampSize.value,10) || 80;
+    ensureStampLayer();
+  });
+
+
+  $qrSize.addEventListener('change', ()=>{
+    state.qrcode.size = parseInt($qrSize.value,10) || 120;
+  });
+
+  $btnQrAdd.addEventListener('click', ()=>{
+    const text = (state.qrcode.text || '').trim();
+    if (!text) {
+      toast('QR 내용 텍스트를 입력하세요.','warning');
+      return;
+    }
+    state.qrcode.size = parseInt($qrSize.value,10) || 120;
+    ensureQrLayer();
+  });
+
+  $periodFont.addEventListener('change', ()=>{
+    state.period.font_size = parseInt($periodFont.value,10) || 18;
+  });
+
+  $msgInput.addEventListener('input', ()=>{
+    const v = $msgInput.value || '';
+    if (v.length>100) $msgInput.value = v.slice(0,100);
+    state.message = $msgInput.value;
+    // 자동 LAY 생성 X
+  });
+
+  $msgFont.addEventListener('change', ()=>{
+    state.message_font_size = parseInt($msgFont.value,10) || 18;
+  });
+
+  $btnPeriodAdd.addEventListener('click', ()=>{
+    onPeriodChange();   // state.period 갱신
+    if (!state.period.label) {
+      toast('게시기간을 먼저 설정하세요.','warning');
+      return;
+    }
+    state.period.font_size = parseInt($periodFont.value,10) || 18;
+    ensurePeriodLayer();
+  });
+
+  $btnMsgAdd.addEventListener('click', ()=>{
+    const text = (state.message || '').trim();
+    if (!text) {
+      toast('메세지를 먼저 입력하세요.','warning');
+      return;
+    }
+    state.message_font_size = parseInt($msgFont.value,10) || 18;
+    ensureMessageLayer();
+  });
+
 
 /* -------------------- 좌표 변환 -------------------- */
 const BASE_W = 1200, BASE_H = 1600;
@@ -1100,7 +1115,7 @@ function rememberBox(b){
   state.lastBox = { x:b.x, y:b.y, w:b.w, h:b.h };
 }
 
-/* -------------------- 레이어 렌더링 (프론트 전용) -------------------- */
+/* -------------------- 레이어 렌더링 -------------------- */
 function layerTitle(L){
   switch(L.type){
     case 'approval_box': return 'APPROVAL';
@@ -1142,16 +1157,15 @@ function renderLayers(){
     const px=baseToPx(L.x, L.y, L.w, L.h);
     const el=document.createElement('div');
     el.className='layer' + (state.selected===L? ' selected':'');
+
     el.style.left=px.x+'px';
     el.style.top=px.y+'px';
     el.style.width=px.w+'px';
     el.style.height=px.h+'px';
     el.dataset.id=L.id;
 
-    // 타입별 프론트 렌더링
     if (L.type === 'approval_box') {
       el.classList.add('approval-box');
-
       const cols = Array.isArray(L.columns) ? L.columns : [];
       const leftRaw  = cols.filter(c=>c.group==='draft');
       const rightRaw = cols.filter(c=>c.group==='check');
@@ -1161,7 +1175,7 @@ function renderLayers(){
 
       const sideHtml = (colsArr, sideClass) => {
         if (!colsArr.length) return '';
-        const deptLabel = (sideClass === 'left') ? '작성부서' : '확인부서';
+        const deptLabel = (sideClass === 'left') ? '작성부서' : '확인부서';   // 🔹 고정 텍스트
 
         const headerCells = colsArr.map(c =>
           `<div class="cell">${c._dispRole || c.role || ''}</div>`
@@ -1175,6 +1189,7 @@ function renderLayers(){
           `<div class="cell">${c.user_name || ''}</div>`
         ).join('');
 
+        // 🔹 cols 개수를 CSS 변수로 전달 → side 폭 비율
         const colsCount = colsArr.length || 1;
 
         return `
@@ -1199,91 +1214,53 @@ function renderLayers(){
           ${sideHtml(right, 'right')}
         </div>
       `;
-
-    } else if (L.type === 'stamp_box') {
+    }else if (L.type === 'stamp_box') {
       el.classList.add('stamp-box');
       const s = L.stamp || {};
       const label = s.name || s.type || 'STAMP';
-
-      // 가능하면 이미지도 표시
-      const imgHtml = s.url ? `<img src="${s.url}" alt="${label}" style="max-width:100%;max-height:100%;object-fit:contain;">` : '';
       el.innerHTML = `
         <div class="title">${layerTitle(L)}</div>
         <div class="handle"></div>
-        <div class="meta-content">${imgHtml || label}</div>
+        <div class="meta-content">
+          ${label}
+        </div>
       `;
-
     } else if (L.type === 'qr_box') {
       const txt = (L.text || '').trim();
       el.classList.add('qr-box');
       el.innerHTML = `
         <div class="title">${layerTitle(L)}</div>
         <div class="handle"></div>
-        <div class="meta-content">QR<br>${txt}</div>
+        <div class="meta-content">
+          QR 링크<br>${txt}
+        </div>
       `;
-
     } else if (L.type === 'period_box') {
       const txt = (L.text || '').trim();
       el.classList.add('period-box');
-      const fs = L.fontSize || 18;
       el.innerHTML = `
         <div class="title">${layerTitle(L)}</div>
         <div class="handle"></div>
-        <div class="meta-content" style="font-size:${fs}px;">${txt}</div>
+        <div class="meta-content">
+          ${txt}
+        </div>
       `;
-
     } else if (L.type === 'message_box') {
       const txt = (L.text || '').trim();
       el.classList.add('message-box');
-      const fs = L.fontSize || 18;
       el.innerHTML = `
         <div class="title">${layerTitle(L)}</div>
         <div class="handle"></div>
-        <div class="meta-content" style="font-size:${fs}px;">${txt}</div>
-      `;
-
-    } else if (L.type === 'text') {
-      el.classList.add('text-layer');
-      const text = (L.text ?? '').toString();
-      const fs = L.fontSize || 28;
-      const fw = L.fontWeight || '400';
-      const ff = L.fontFamily || 'Pretendard,Arial,Helvetica,sans-serif';
-      const col = L.color || '#000000';
-      const align = L.align || 'left';
-      const jc = (align==='center') ? 'center' : (align==='right' ? 'flex-end' : 'flex-start');
-      el.innerHTML = `
-        <div class="title">${layerTitle(L)}</div>
-        <div class="handle"></div>
-        <div class="text-content"
-             style="font-size:${fs}px;font-weight:${fw};font-family:${ff};color:${col};justify-content:${jc};text-align:${align};">
-          ${escapeHtml(text)}
+        <div class="meta-content">
+          ${txt}
         </div>
       `;
-
-    } else if (L.type === 'line') {
-      el.classList.add('line-layer');
-      const col = L.color || '#000000';
-      el.innerHTML = `
-        <div class="title">${layerTitle(L)}</div>
-        <div class="handle"></div>
-        <div class="line-content" style="background:${col};"></div>
-      `;
-
-    } else if (L.type === 'rect') {
-      el.classList.add('rect-layer');
-      const stroke = L.stroke || '#0d6efd';
-      const fill = L.fill || 'rgba(13,110,253,.04)';
-      el.style.border = `2px solid ${stroke}`;
-      el.style.background = fill;
-      el.innerHTML = `<div class="title">${layerTitle(L)}</div><div class="handle"></div>`;
-
     } else {
       el.innerHTML = `<div class="title">${layerTitle(L)}</div><div class="handle"></div>`;
     }
 
     $stage.appendChild(el);
 
-    // 드래그/리사이즈: 프론트에서만 커밋 (서버 호출 없음)
     let mode=null, sx=0, sy=0, sl=0, st=0, sw=0, sh=0;
 
     el.addEventListener('pointerdown', e=>{
@@ -1321,7 +1298,8 @@ function renderLayers(){
       const base = pxToBase(nx,ny,nw,nh);
       L.x=base.x; L.y=base.y; L.w=base.w; L.h=base.h;
       updatePropPanel();
-      renderLayers();     // 프론트만 갱신
+      renderLayers();
+      previewJSON().catch(()=>{});
       rememberBox(L);
     };
     el.addEventListener('pointerup', ()=>{ if(mode){ mode=null; commit(); } });
@@ -1331,18 +1309,7 @@ function renderLayers(){
 
     el.addEventListener('dblclick', ()=>{ if (L.type==='text') { $ptext.focus(); } });
   });
-
   updatePropPanel();
-}
-
-function escapeHtml(s){
-  return String(s)
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
-    .replaceAll("'","&#39;")
-    .replaceAll('\n','<br>');
 }
 
 function selectLayerByEl(el){
@@ -1399,22 +1366,24 @@ function addText(){
   state.layers.push(L);
   state.selected=L;
   rememberBox(L);
-  renderLayers();  // 프론트만
+  renderLayers();
+  previewJSON().catch(()=>{});
 }
 
 function addLine(){
   ensureEditorOn();
-  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: 4, gap: 8 });
+  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: 2, gap: 8 });
   const L={
     id:'L'+Date.now().toString(16),
     type:'line',
-    x:pos.x, y:pos.y, w:pos.w, h:4,
+    x:pos.x, y:pos.y, w:pos.w, h:2,
     color:'#000000'
   };
   state.layers.push(L);
   state.selected=L;
   rememberBox(L);
   renderLayers();
+  previewJSON().catch(()=>{});
 }
 
 function addRect(){
@@ -1431,6 +1400,7 @@ function addRect(){
   state.selected=L;
   rememberBox(L);
   renderLayers();
+  previewJSON().catch(()=>{});
 }
 
 function delSel(){
@@ -1438,6 +1408,7 @@ function delSel(){
   state.layers = state.layers.filter(l=> l!==state.selected);
   state.selected = null;
   renderLayers();
+  previewJSON().catch(()=>{});
 }
 
 function removeLayerByType(type){
@@ -1448,10 +1419,10 @@ function removeLayerByType(type){
       state.selected = null;
     }
     renderLayers();
+    previewJSON().catch(()=>{});
   }
 }
 
-/* -------------------- 직인/QR/기간/메세지 LAY -------------------- */
 function ensureStampLayer(){
   if (!state.stamp.use || !state.stamp.id) {
     removeLayerByType('stamp_box');
@@ -1480,96 +1451,7 @@ function ensureStampLayer(){
   state.selected = L;
   rememberBox(L);
   renderLayers();
-}
-
-function ensureQrLayer(){
-  const text = (state.qrcode.text || '').trim();
-  if (!text) {
-    removeLayerByType('qr_box');
-    return;
-  }
-
-  let L = state.layers.find(l => l.type === 'qr_box');
-  const size = state.qrcode.size || 120;
-  const w = size, h = size;
-  const x = BASE_W - w - 80;
-  const y = 80;
-
-  if (!L) {
-    L = {
-      id:'QR-'+Date.now().toString(16),
-      type:'qr_box',
-      x, y, w, h,
-      text,
-      size
-    };
-    state.layers.push(L);
-  } else {
-    L.text = text;
-    L.size = size;
-    L.w = w; L.h = h;
-  }
-  renderLayers();
-}
-
-function ensurePeriodLayer(){
-  const label = (state.period.label || '').trim();
-  if (!label) {
-    removeLayerByType('period_box');
-    return;
-  }
-
-  let L = state.layers.find(l => l.type === 'period_box');
-  const w = 420;
-  const h = 60;
-  const x = 80;
-  const y = BASE_H - h - 110;
-  const fontSize = state.period.font_size || 18;
-
-  if (!L) {
-    L = {
-      id:'PERIOD-'+Date.now().toString(16),
-      type:'period_box',
-      x, y, w, h,
-      text: label,
-      fontSize
-    };
-    state.layers.push(L);
-  } else {
-    L.text = label;
-    L.fontSize = fontSize;
-  }
-  renderLayers();
-}
-
-function ensureMessageLayer(){
-  const text = (state.message || '').trim();
-  if (!text) {
-    removeLayerByType('message_box');
-    return;
-  }
-
-  let L = state.layers.find(l => l.type === 'message_box');
-  const w = BASE_W - 160;
-  const h = 60;
-  const x = 80;
-  const y = BASE_H - h - 40;
-  const fontSize = state.message_font_size || 18;
-
-  if (!L) {
-    L = {
-      id:'MSG-'+Date.now().toString(16),
-      type:'message_box',
-      x, y, w, h,
-      text,
-      fontSize
-    };
-    state.layers.push(L);
-  } else {
-    L.text = text;
-    L.fontSize = fontSize;
-  }
-  renderLayers();
+  previewJSON().catch(()=>{});
 }
 
 /* -------------------- 결재 열/레이어 -------------------- */
@@ -1618,7 +1500,7 @@ $approvalColsUl.addEventListener('click', (e)=>{
   } else if (act === 'up' && idx > 0) {
     [state.approvalCols[idx-1], state.approvalCols[idx]] = [state.approvalCols[idx], state.approvalCols[idx-1]];
   } else if (act === 'down' && idx < state.approvalCols.length-1) {
-    [state.approvalCols[idx+1], state.approvalCols[idx]] = [state.approvalCols[idx], state.approvalCols[idx+1]];
+    [state.approvalCols[idx+1], state.approvalCols[idx]] = [state.approvalCols[idx+1], state.approvalCols[idx]];
   }
   renderApprovalCols();
 });
@@ -1648,13 +1530,16 @@ $ckApproval.addEventListener('change', async ()=>{
     if (myDept) {
       const options = Array.from($draftDept.options);
       const found = options.find(o => o.value === myDept);
-      if (found) $draftDept.value = myDept;
+      if (found) {
+        $draftDept.value = myDept;
+      }
     }
   } else {
     state.approvalCols = [];
     renderApprovalCols();
   }
 });
+
 
 $draftDept.addEventListener('change', async ()=>{
   const dept = $draftDept.value || '';
@@ -1729,6 +1614,8 @@ $checkDept.addEventListener('change', async ()=>{
   $checkUser.disabled = false;
 });
 
+$checkRole.addEventListener('change', ()=>{});
+
 $btnCheckAdd.addEventListener('click', ()=>{
   const dept = $checkDept.value || '';
   const role = $checkRole.value || '';
@@ -1750,8 +1637,6 @@ $btnCheckAdd.addEventListener('click', ()=>{
 $btnApprovalClear.addEventListener('click', ()=>{
   state.approvalCols = [];
   renderApprovalCols();
-  // 결재 박스 레이어도 함께 제거(원하면)
-  removeLayerByType('approval_box');
 });
 
 $btnApprovalBuild.addEventListener('click', ()=>{
@@ -1777,28 +1662,45 @@ $btnApprovalBuild.addEventListener('click', ()=>{
       type: 'approval_box',
       x, y, w, h,
       columns: [],
+      layout: {
+        headerHeight: 30,
+        deptColWidth: 60,
+        borderWidth: 1
+      },
+      // 🔹 서버 렌더링/SignLayout 템플릿용 tpl 기본값
       tpl: {
-        row_ratio: [1, 3, 1],
-        stamp_scale: 0.8,
-        dept_col_ratio: 0.18
+        border_color: "#000000",   // 하지만 서버에서 어차피 검정으로 고정
+        line_color:   "#000000",
+        font_color:   "#000000",
+        font_size_px: 17,          // 기본값, 서버에서 auto-size로 조정
+        line_thickness_px: 2,
+        line_pos_ratio: 0.72,      // (이제는 안 씀, 호환용으로만 남겨둠)
+        line_hpad_ratio: 0.08,
+
+        row_ratio: [1, 3, 1],      // [header, stamp, name]
+        stamp_scale: 0.8,          // stamp row 높이의 80% 크기 영역
+        dept_col_ratio: 0.18       // 사이드 폭의 18%를 '작성부서/확인부서' 세로 컬럼으로
       }
     };
     state.layers.push(L);
   }
 
+  // 이미 존재하던 L이면 columns만 최신화
   L.columns = state.approvalCols.map(c => ({ ...c }));
 
   state.selected = L;
   rememberBox(L);
   renderLayers();
+  previewJSON().catch(()=>{});
 
   toast('결재 LAY가 미리보기에 추가되었습니다.','success');
 });
 
 
-/* -------------------- 직인 / QR / 게시기간 / 메세지 이벤트 -------------------- */
+/* -------------------- 직인 / QR / 게시기간 / 메세지 -------------------- */
 $stampUse.addEventListener('change', async ()=>{
   state.stamp.use = $stampUse.checked;
+
   if (state.stamp.use) {
     await fetchStampList();
   } else {
@@ -1812,123 +1714,71 @@ $stampType.addEventListener('change', ()=>{
   if (L) {
     L.stamp = { ...(L.stamp || {}), type: state.stamp.type };
     renderLayers();
+    previewJSON().catch(()=>{});
   }
-});
-
-$stampSize.addEventListener('change', ()=>{
-  state.stamp.size = parseInt($stampSize.value,10) || 80;
-});
-
-$btnStampAdd.addEventListener('click', ()=>{
-  if (!state.stamp.id) {
-    toast('먼저 직인 항목을 선택하세요.','warning');
-    return;
-  }
-  state.stamp.size = parseInt($stampSize.value,10) || 80;
-  ensureStampLayer();
 });
 
 $qrText.addEventListener('input', ()=>{
-  state.qrcode.text = ($qrText.value || '').trim();
+  state.qrcode.text = $qrText.value.trim();
+  //ensureQrLayer();
 });
 
-$qrSize.addEventListener('change', ()=>{
-  state.qrcode.size = parseInt($qrSize.value,10) || 120;
-});
+// $periodFrom.addEventListener('change', ()=>{
+//   state.period.from = $periodFrom.value || '';
+// });
+// $periodTo.addEventListener('change', ()=>{
+//   state.period.to = $periodTo.value || '';
+// });
+// $msgInput.addEventListener('input', ()=>{
+//   const v = $msgInput.value || '';
+//   if (v.length>100) $msgInput.value = v.slice(0,100);
+//   state.message = $msgInput.value;
+// });
 
-$btnQrAdd.addEventListener('click', ()=>{
+
+function ensureQrLayer(){
   const text = (state.qrcode.text || '').trim();
   if (!text) {
-    toast('QR 내용 텍스트를 입력하세요.','warning');
+    removeLayerByType('qr_box');
     return;
   }
-  state.qrcode.size = parseInt($qrSize.value,10) || 120;
-  ensureQrLayer();
-});
 
-function formatPeriodLabel(){
-  const fd = state.period.from_date;
-  const td = state.period.to_date;
-  if (!fd || !td) return '';
-  const ft = state.period.from_time || '00:00';
-  const tt = state.period.to_time || '00:00';
-  const fdComp = fd.replaceAll('-','');
-  const tdComp = td.replaceAll('-','');
-  return `${fdComp} ${ft} ~ ${tdComp} ${tt}`;
+  let L = state.layers.find(l => l.type === 'qr_box');
+  const size = state.qrcode.size || 120;
+  const w = size, h = size;
+  const x = BASE_W - w - 80;
+  const y = 80;
+
+  if (!L) {
+    L = {
+      id:'QR-'+Date.now().toString(16),
+      type:'qr_box',
+      x, y, w, h,
+      text,
+      size
+    };
+    state.layers.push(L);
+  } else {
+    L.text = text;
+    L.size = size;
+    L.w = w; L.h = h;
+  }
+  renderLayers();
+  previewJSON().catch(()=>{});
 }
-function onPeriodChange(){
-  state.period.from_date = $periodFrom.value || '';
-  state.period.to_date   = $periodTo.value   || '';
-  state.period.from_time = $periodFromTime.value || '';
-  state.period.to_time   = $periodToTime.value   || '';
-  state.period.label     = formatPeriodLabel();
-}
-
-$periodFrom.addEventListener('change', onPeriodChange);
-$periodTo.addEventListener('change', onPeriodChange);
-$periodFromTime.addEventListener('change', onPeriodChange);
-$periodToTime.addEventListener('change', onPeriodChange);
-
-$periodFont.addEventListener('change', ()=>{
-  state.period.font_size = parseInt($periodFont.value,10) || 18;
-});
-
-$btnPeriodAdd.addEventListener('click', ()=>{
-  onPeriodChange();
-  if (!state.period.label) {
-    toast('게시기간을 먼저 설정하세요.','warning');
-    return;
-  }
-  state.period.font_size = parseInt($periodFont.value,10) || 18;
-  ensurePeriodLayer();
-});
-
-$msgInput.addEventListener('input', ()=>{
-  const v = $msgInput.value || '';
-  if (v.length>100) $msgInput.value = v.slice(0,100);
-  state.message = $msgInput.value;
-});
-
-$msgFont.addEventListener('change', ()=>{
-  state.message_font_size = parseInt($msgFont.value,10) || 18;
-});
-
-$btnMsgAdd.addEventListener('click', ()=>{
-  const text = (state.message || '').trim();
-  if (!text) {
-    toast('메세지를 먼저 입력하세요.','warning');
-    return;
-  }
-  state.message_font_size = parseInt($msgFont.value,10) || 18;
-  ensureMessageLayer();
-});
 
 
-/* -------------------- 파일/옵션 이벤트 -------------------- */
+/* -------------------- 파일/옵션/페이지 이벤트 -------------------- */
 $file.addEventListener('change', async (ev)=>{
   const f=ev.target.files?.[0];
   if(!f) return;
-
-  // 새 파일이면 상태 초기화
   state.file_name = f.name;
   state.page=1;
   state.pages=1;
-  state.layers = [];
-  state.selected = null;
-  state.approvalCols = [];
-  state.approvalUse = false;
-  $ckApproval.checked = false;
-  renderApprovalCols();
-
   try{
-    await previewOriginalOnce(f); // ✅ 딱 1번만 호출
+    await previewFile(f);
     redrawHeader();
-    renderLayers();
-    toast('원본 프리뷰 준비 완료','success');
-
-    if (state.pages > 1) {
-      toast('단일 호출 정책으로 멀티페이지 이동은 비활성입니다.','warning');
-    }
+    toast('미리보기 준비 완료','success');
   }catch(e){
     toast('미리보기 실패','danger');
   }finally{
@@ -1944,79 +1794,104 @@ $dev.addEventListener('change', ()=>{
 $res.addEventListener('change', ()=>{
   setAspectByRes($res.value);
   renderLayers();
+  previewJSON().catch(()=>{});
 });
 $mode.addEventListener('change', ()=>{
   state.mode=$mode.value;
+  previewJSON().catch(()=>{});
 });
 $scale.addEventListener('change', ()=>{
   state.scale=$scale.value;
   updatePercentRow();
+  previewJSON().catch(()=>{});
 });
 $percent.addEventListener('input', ()=>{
   state.percent=parseInt($percent.value,10)||100;
+  if($scale.value==='percent') previewJSON().catch(()=>{});
 });
 $rotate.addEventListener('change', ()=>{
   state.rotate=parseInt($rotate.value,10)||0;
+  previewJSON().catch(()=>{});
+});
+$original.addEventListener('change', ()=> previewJSON().catch(()=>{}) );
+
+$btnPrev.addEventListener('click', ()=>{
+  if(!state.upload_id) return;
+  state.view='processed';
+  state.page=Math.max(1, state.page-1);
+  previewJSON().catch(()=>{});
+  redrawHeader();
+});
+$btnNext.addEventListener('click', ()=>{
+  if(!state.upload_id) return;
+  state.view='processed';
+  state.page=Math.min(state.pages, state.page+1);
+  previewJSON().catch(()=>{});
+  redrawHeader();
 });
 
-/* 도형 버튼 */
 $btnAddText.addEventListener('click', addText);
 $btnAddLine.addEventListener('click', addLine);
 $btnAddRect.addEventListener('click', addRect);
 $btnDel.addEventListener('click', delSel);
 
-/* 텍스트 속성: 프론트 렌더만 갱신 */
 $fontFamily.addEventListener('change', ()=>{
   const L=state.selected;
   if (!L || L.type!=='text') return;
   L.fontFamily = $fontFamily.value;
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $fontSize.addEventListener('change', ()=>{
   const L=state.selected;
   if (!L || L.type!=='text') return;
   L.fontSize = parseInt($fontSize.value,10)||28;
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $fontWeight.addEventListener('change', ()=>{
   const L=state.selected;
   if (!L || L.type!=='text') return;
   L.fontWeight = $fontWeight.value;
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $fontColor.addEventListener('change', ()=>{
   const L=state.selected;
   if (!L || L.type!=='text') return;
   L.color = $fontColor.value;
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $alignL.addEventListener('click', ()=>{
   const L=state.selected;
   if(!L || L.type!=='text') return;
   L.align='left';
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $alignC.addEventListener('click', ()=>{
   const L=state.selected;
   if(!L || L.type!=='text') return;
   L.align='center';
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $alignR.addEventListener('click', ()=>{
   const L=state.selected;
   if(!L || L.type!=='text') return;
   L.align='right';
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 $ptext.addEventListener('input', ()=>{
   const L=state.selected;
   if (!L || L.type!=='text') return;
   L.text = $ptext.value;
-  renderLayers();
+  previewJSON().catch(()=>{});
 });
 
+/* 🔹 BMP 확인 버튼 클릭 이벤트 */
+$btnBmp.addEventListener('click', ()=>{
+  previewBmpJSON().catch(()=>{
+    toast('BMP 미리보기 실패','danger');
+  });
+});
 
-/* -------------------- 저장/배포 (그대로: 서버 호출) -------------------- */
+/* -------------------- 저장/배포 -------------------- */
 const saveOrSendCommon = async (url, body) =>{
   const r=await fetch(url,{
     method:'POST',
@@ -2048,12 +1923,18 @@ $btnSave.addEventListener('click', async ()=>{
     },
     editor_layers: state.useEditor ? state.layers : [],
     meta: {
-      approval: { use: state.approvalUse, columns: state.approvalCols },
-      stamp: state.stamp,
-      qrcode: state.qrcode,
-      period: state.period,
-      message: { text: state.message, font_size: state.message_font_size }
-    }
+          approval: {
+            use: state.approvalUse,
+            columns: state.approvalCols
+          },
+          stamp: state.stamp,
+          qrcode: state.qrcode,
+          period: state.period,
+          message: {
+            text: state.message,
+            font_size: state.message_font_size
+          }
+        }
   };
   try{
     await saveOrSendCommon('/bulletin/save_draft', body);
@@ -2108,11 +1989,17 @@ $btnSend.addEventListener('click', async ()=>{
     editor_layers: state.useEditor ? state.layers : [],
     memo: $memo.value || '',
     meta: {
-      approval: { use: state.approvalUse, columns: state.approvalCols },
+      approval: {
+        use: state.approvalUse,
+        columns: state.approvalCols
+      },
       stamp: state.stamp,
       qrcode: state.qrcode,
       period: state.period,
-      message: { text: state.message, font_size: state.message_font_size }
+      message: {
+        text: state.message,
+        font_size: state.message_font_size
+      }
     }
   };
 
@@ -2124,13 +2011,106 @@ $btnSend.addEventListener('click', async ()=>{
   }
 });
 
+function formatPeriodLabel(){
+  const fd = state.period.from_date;
+  const td = state.period.to_date;
+  if (!fd || !td) return '';
+
+  const ft = state.period.from_time || '00:00';
+  const tt = state.period.to_time || '00:00';
+
+  const fdComp = fd.replaceAll('-','');
+  const tdComp = td.replaceAll('-','');
+
+  return `${fdComp} ${ft} ~ ${tdComp} ${tt}`;
+}
+
+function onPeriodChange(){
+  state.period.from_date = $periodFrom.value || '';
+  state.period.to_date   = $periodTo.value   || '';
+  state.period.from_time = $periodFromTime.value || '';
+  state.period.to_time   = $periodToTime.value   || '';
+  state.period.label     = formatPeriodLabel();
+
+  //ensurePeriodLayer();
+}
+
+function ensurePeriodLayer(){
+  const label = (state.period.label || '').trim();
+  if (!label) {
+    removeLayerByType('period_box');
+    return;
+  }
+
+  let L = state.layers.find(l => l.type === 'period_box');
+  const w = 420;
+  const h = 60;
+  const x = 80;
+  const y = BASE_H - h - 110;
+  const fontSize = state.period.font_size || 18;
+
+  if (!L) {
+    L = {
+      id:'PERIOD-'+Date.now().toString(16),
+      type:'period_box',
+      x, y, w, h,
+      text: label,
+      fontSize
+    };
+    state.layers.push(L);
+  } else {
+    L.text = label;
+    L.fontSize = fontSize;
+  }
+  renderLayers();
+  previewJSON().catch(()=>{});
+}
+
+$periodFrom.addEventListener('change', onPeriodChange);
+$periodTo.addEventListener('change', onPeriodChange);
+$periodFromTime.addEventListener('change', onPeriodChange);
+$periodToTime.addEventListener('change', onPeriodChange);
+
+
+function ensureMessageLayer(){
+  const text = (state.message || '').trim();
+  if (!text) {
+    removeLayerByType('message_box');
+    return;
+  }
+
+  let L = state.layers.find(l => l.type === 'message_box');
+  const w = BASE_W - 160;
+  const h = 60;
+  const x = 80;
+  const y = BASE_H - h - 40;
+  const fontSize = state.message_font_size || 18;
+
+  if (!L) {
+    L = {
+      id:'MSG-'+Date.now().toString(16),
+      type:'message_box',
+      x, y, w, h,
+      text,
+      fontSize
+    };
+    state.layers.push(L);
+  } else {
+    L.text = text;
+    L.fontSize = fontSize;
+  }
+  renderLayers();
+  previewJSON().catch(()=>{});
+}
+
 
 /* -------------------- 초기화 -------------------- */
 (function init(){
   updatePercentRow();
   redrawHeader();
+  $stage.style.pointerEvents = 'auto';
+  $stage.style.zIndex = 3;
   renderApprovalCols();
-  renderLayers();
 })();
 })();
 </script>
