@@ -289,35 +289,63 @@ def _exists_in_doc_dir(doc_dir: str, fname: str) -> str | None:
 
 def _is_allowed_download_name(fname: str, original_name: str | None) -> bool:
     """
-    경로 탈출/임의 파일 다운로드 방지용 화이트리스트.
-
-    ✅ 허용(형이 현재 쓰는 번들)
-    - normalized.pdf
-    - onelayer.bmp
-    - preview_merged.png
-    - + original.* (실제 존재하는 original_name만 허용)
+    경로 탈출/임의 파일 다운로드 방지.
+    - normalized.pdf, onelayer.bmp 고정 허용
+    - original.* 은 실제 존재하는 original_name만 허용
     """
     if not fname:
         return False
-
-    # 경로 탈출 차단
     if "/" in fname or "\\" in fname:
         return False
-
-    allowed_fixed = {
-        "normalized.pdf",
-        "onelayer.bmp",
-        "preview_merged.png",
-    }
-    if fname in allowed_fixed:
+    if fname in ("normalized.pdf", "onelayer.bmp"):
         return True
-
-    # original.* 은 실제 저장된 파일명(original_name) 1개만 허용
     if original_name and fname == original_name and fname.startswith("original."):
         return True
-
     return False
 
+    # 페이지 수는 우선 1로 두고, 실제 Office→PDF 변환/페이지 카운트는
+    # translation_service 또는 Repository 쪽에서 확장
+    page_count = 1
+    source_ext = ext.lstrip(".").lower()
+
+    # UPLOADS 스토어에도 등록 (기존 preview/render 파이프라인 재사용용)
+    UPLOADS = get_upload_store()
+    UPLOADS[upload_id] = {
+        "path": abs_orig_path,
+        "pages": page_count,
+        "name": safe_name,
+        "source_ext": source_ext,
+    }
+
+    # root 기준 상대경로
+    try:
+        original_relpath = os.path.relpath(abs_orig_path, root_dir)
+    except ValueError:
+        # 드문 케이스지만, relpath 실패 시엔 절대경로 그대로 돌려줌
+        original_relpath = abs_orig_path
+
+    # normalized/pdf 경로는 지금은 original과 동일하게 돌려주고,
+    # 실제 표준화(PDF) 변환은 나중에 Repository/Service에서 구현
+    normalized_relpath = original_relpath
+
+    dbg(
+        "document_upload_original:saved",
+        upload_id=upload_id,
+        root=root_dir,
+        original_relpath=original_relpath,
+        normalized_relpath=normalized_relpath,
+        pages=page_count,
+        source_ext=source_ext,
+    )
+
+    return jsonify({
+        "ok": True,
+        "upload_id": upload_id,
+        "source_ext": source_ext,
+        "original_relpath": original_relpath,
+        "pdf_relpath": normalized_relpath,
+        "page_count": page_count,
+    })
 
 
 # ======================================================================
@@ -1120,14 +1148,12 @@ def send_file_route():
     # --------------------------------------------------------------
     # 6-1) dir/bucket/path 계산
     # --------------------------------------------------------------
-    # target_dir = decide_target_dir(need_approval, final_approval)
-    asset_dir = decide_target_dir(need_approval, final_approval)
-    
+    target_dir = decide_target_dir(need_approval, final_approval)
     doc_bucket = decide_doc_bucket(need_approval)
     userid_str = current_userid_str()
 
     bmp_path, meta_path, hdr_path, bin_path = asset_paths(
-        device_id, width, height, fmt, asset_dir, userid=userid_str
+        device_id, width, height, fmt, target_dir, userid=userid_str
     )
 
     # --------------------------------------------------------------
@@ -1143,25 +1169,14 @@ def send_file_route():
     #     else "in_review"
     # )
 
-    # if target_dir == "bulletin_files":
-    #     db_status = "bulletin_files"
-    # elif target_dir == "approved":
-    #     db_status = "approved"
-    # elif target_dir == "checked":
-    #     db_status = "checked"
-    # else:
-    #     db_status = "in_review"
-
-
-    # --- B안: DocumentInfo.status는 큰 상태만 ---
-    if need_approval:
-        # 결재 흐름이면 무조건 in_review에서 시작 (단계는 Step으로 계산)
-        doc_status = "approved" if final_approval else "in_review"
-        doc_target_dir = "approved" if final_approval else "in_review"
+    if target_dir == "bulletin_files":
+        db_status = "bulletin_files"
+    elif target_dir == "approved":
+        db_status = "approved"
+    elif target_dir == "checked":
+        db_status = "checked"
     else:
-        # 결재 없이 게시면 bulletin_files로 고정 (큰 상태)
-        doc_status = "bulletin_files"
-        doc_target_dir = "bulletin_files"
+        db_status = "in_review"
 
     route_snapshot = {"route_id": route_id, "assignees": assignees} if route_id else None
 
@@ -1186,10 +1201,10 @@ def send_file_route():
                 user_id=current_user_id(),
                 device_id=device_id,
                 orig_filename=orig_filename,
-                stored_path="",                 # doc_dir은 뒤에서 채움
-                target_dir=doc_target_dir,      # ✅ 문서 큰 상태 기준
+                stored_path="",   # ✅ 여기서는 아직 doc_dir을 모름
+                target_dir=target_dir,
                 need_approval=need_approval,
-                status=doc_status,              # ✅ 문서 큰 상태만
+                status=db_status,
                 pages=1,
                 width=width,
                 height=height,
@@ -1203,7 +1218,6 @@ def send_file_route():
                 layout_snapshot=layout_snapshot,
                 metadata=metadata,
             )
-
         except Exception:
             current_app.logger.debug("[sendfile][DB] create_upload_record failed", exc_info=True)
             upload_row_id = None
@@ -1219,7 +1233,7 @@ def send_file_route():
         bin_path=bin_path,
         meta_path=meta_path,
         device_id=device_id,
-        target_dir=asset_dir,           # ✅ 에셋 dir
+        target_dir=target_dir,
         need_approval=need_approval,
         final_approval=final_approval,
         route_id=route_id,
@@ -1367,7 +1381,7 @@ def send_file_route():
         status="prepared",
         job_id=job_id,
         device_id=device_id,
-        dir=asset_dir,
+        dir=target_dir,
         file=os.path.basename(bmp_path),
         upload_row_id=upload_row_id,
         sign_layout_id=sign_layout_id,
@@ -1378,7 +1392,7 @@ def send_file_route():
             "status": "prepared",
             "job_id": job_id,
             "device_id": device_id,
-            "dir": asset_dir,            # ✅ 에셋 dir
+            "dir": target_dir,
             "file": os.path.basename(bmp_path),
             "meta": meta_bundle,
             "upload_row_id": upload_row_id,
@@ -1913,7 +1927,6 @@ def file_table():
         docs_completed=docs_completed,
     )
 
-
 @bp.route("/files/<int:doc_id>", methods=["GET"])
 @login_required
 def file_detail(doc_id):
@@ -1934,70 +1947,61 @@ def file_detail(doc_id):
     cur_dept     = getattr(current_user, "department", None)
 
     # 3) 권한 체크 (작성자이거나, 결재선/서명 슬롯에 포함된 사람만 볼 수 있게)
+    # 3-1) 작성자인가?
     is_author = (doc.user_id == user_no)
 
+    # 3-2) 서명 슬롯 기준: 명시적으로 지정된 서명자/서명 완료자
     is_approver = False
     for slot in getattr(doc, "sign_slots", []):
+        # 이 문서의 어떤 서명 슬롯이라도 내 user_no와 연결되어 있으면 OK
         if slot.target_user_id == user_no or slot.filled_by_id == user_no:
             is_approver = True
             break
 
+    # 3-3) 결재 열(DocumentApprovalStep) 기준:
+    #      - 나에게 할당된 열(snapshot 기준)
+    #      - 이미 내가 서명한 열
     if not is_approver:
         for step in getattr(doc, "approval_steps", []):
+            # 이미 내가 서명한 경우
             if step.signed_by_user_id == user_no:
                 is_approver = True
                 break
+
+            # 스냅샷 기준 매칭 (userid / username / department)
             if step.userid_snapshot and step.userid_snapshot == userid:
                 is_approver = True
                 break
+
             if cur_username and step.username_snapshot and step.username_snapshot == cur_username:
                 is_approver = True
                 break
+
             if cur_dept and step.dept_snapshot and step.dept_snapshot == cur_dept:
                 is_approver = True
                 break
 
+    # 3-4) 필요하면 여기서 관리자/운영자 권한 같은 추가 조건도 넣을 수 있음
+    # ex) if current_user.security == '9': is_approver = True
+
+    # 3-5) 최종 권한 판정
     if not (is_author or is_approver):
         abort(403, "문서를 볼 권한이 없습니다.")
 
-    # ------------------------------------------------------------
+# ------------------------------------------------------------
     # ✅ doc master 경로 기준으로 파일 존재 여부를 계산해서 files dict 구성
-    #    ★ stored_path는 폴더/파일/상대경로 등 다양하므로 반드시 정규화
+    #    (doc.stored_path = D:\eink_docs\{userid}\approval_process\{doc_id} 가 들어간 상태 전제)
     # ------------------------------------------------------------
-    doc_dir = _resolve_doc_dir_from_stored_path(getattr(doc, "stored_path", "") or "")
-
+    doc_dir = (doc.stored_path or "").strip()
     files = {
         "doc_dir": doc_dir,
-
-        # ✅ 다운로드 (bin 제거 원하면 아래 onelayer_bin 관련도 지우면 됨)
-        "original": None,              # original.*
-        "preview_merged": None,        # preview_merged.png
-        "normalized_pdf": None,        # normalized.pdf
-        "onelayer_bmp": None,          # onelayer.bmp
-        # "onelayer_bin": None,          # onelayer.bin (원하면 유지/삭제)
+        "original": None,
+        "normalized_pdf": None,
+        "onelayer_bmp": None,
     }
 
-    # 파일명 대소문자 꼬임까지 대응하고 싶으면 glob로 잡는 게 안전
-    def _exists_case_insensitive(name: str) -> str | None:
-        if not doc_dir or not os.path.isdir(doc_dir):
-            return None
-        # 정확히 있으면 바로
-        p = os.path.join(doc_dir, name)
-        if os.path.isfile(p):
-            return name
-        # 대소문자/확장자 차이 대응
-        cands = glob.glob(os.path.join(doc_dir, name))
-        if cands:
-            return os.path.basename(cands[0])
-        # 완전 case-insensitive 탐색(윈도우면 거의 필요없지만, 서버/마운트 환경 대비)
-        low = name.lower()
-        for fn in os.listdir(doc_dir):
-            if fn.lower() == low:
-                return fn
-        return None
-
     if doc_dir and os.path.isdir(doc_dir):
-        # 1) original.* (파일명 그대로)
+        # original.* 자동 탐색 (save_doc_master_bundle에서 원본 파일명을 뭐로 저장하든 대응)
         originals = sorted(glob.glob(os.path.join(doc_dir, "original.*")))
         if originals:
             files["original"] = os.path.basename(originals[0])
@@ -2008,97 +2012,59 @@ def file_detail(doc_id):
                 if os.path.isfile(cand):
                     files["original"] = os.path.basename(cand)
 
-        # 2) preview_merged.png
-        files["preview_merged"] = _exists_case_insensitive("preview_merged.png")
+        # normalized.pdf
+        npath = os.path.join(doc_dir, "normalized.pdf")
+        if os.path.isfile(npath):
+            files["normalized_pdf"] = "normalized.pdf"
 
-        # 3) normalized.pdf
-        files["normalized_pdf"] = _exists_case_insensitive("normalized.pdf")
+        # onelayer.bmp (형이 원하는 BMP보기 대상)
+        opath = os.path.join(doc_dir, "onelayer.bmp")
+        if os.path.isfile(opath):
+            files["onelayer_bmp"] = "onelayer.bmp"
 
-        # 4) onelayer.bmp
-        files["onelayer_bmp"] = _exists_case_insensitive("onelayer.bmp")
+    # ✅ 미리보기용 URL (다운로드 화면은 기존 file_download 그대로 사용)
+    pdf_inline_url = url_for("bulletin.file_download", doc_id=doc.id, fname="normalized.pdf", inline=1)
+    onelayer_json_url = url_for("bulletin.file_onelayer", doc_id=doc.id)  # 아래 2) onelayer API 필요
+    onelayer_bmp_inline_url = url_for("bulletin.file_download", doc_id=doc.id, fname="onelayer.bmp", inline=1)
 
-        # 5) onelayer.bin (형이 안 쓴다 했으면 아래 2줄 삭제해도 됨)
-        # files["onelayer_bin"] = _exists_case_insensitive("onelayer.bin")
+    current_app.logger.debug("doc.id=%s status=%s", doc.id, doc.status)
+    current_app.logger.debug("layout_snapshot_json keys=%s", list((doc.layout_snapshot_json or {}).keys()))
+    current_app.logger.debug("metadata_json keys=%s", list((doc.metadata_json or {}).keys()))
 
-    # 4-1) 현재 pending step 계산 (첫 번째 미서명 step)
-    steps = list(getattr(doc, "approval_steps", []) or [])
-
-    def _step_key(s):
-        for k in ("step_order", "col_index", "id"):
-            v = getattr(s, k, None)
-            if v is not None:
-                return int(v)
-        return 10**9
-
-    unsigned = [s for s in steps if not getattr(s, "signed_by_user_id", None)]
-    pending_step = sorted(unsigned, key=_step_key)[0] if unsigned else None
-
-    current_col_index = None
-    if pending_step is not None:
-        current_col_index = getattr(pending_step, "col_index", None) or getattr(pending_step, "step_order", None)
-
-    # ✅ 미리보기용 URL (inline=1) - 실제 파일명(files에 들어간 값) 사용
-    preview_merged_inline_url = (
-        url_for("bulletin.file_download", doc_id=doc.id, fname=files["preview_merged"], inline=1)
-        if files["preview_merged"] else None
-    )
-    onelayer_bmp_inline_url = (
-        url_for("bulletin.file_download", doc_id=doc.id, fname=files["onelayer_bmp"], inline=1)
-        if files["onelayer_bmp"] else None
-    )
-
-    current_app.logger.debug("[detail] doc.id=%s status=%s stored_path=%r doc_dir=%r",
-                             doc.id, doc.status, doc.stored_path, doc_dir)
-    current_app.logger.debug("[detail] files=%s", files)
 
     return render_template(
         "bulletinboard/e_file_detail.html",
         doc=doc,
         files=files,
-
-        preview_merged_inline_url=preview_merged_inline_url,
+        pdf_inline_url=pdf_inline_url,
+        onelayer_json_url=onelayer_json_url,
         onelayer_bmp_inline_url=onelayer_bmp_inline_url,
-
-        pending_step=pending_step,
-        current_col_index=current_col_index,
     )
-
-
-
 
 
 def _resolve_doc_dir_from_stored_path(stored_path: str) -> str:
     """
-    stored_path 가
-    - 폴더 경로 (권장)
-    - 파일 경로 (구형)
-    - 상대경로 (userid/approval_process/doc_id 또는 .../fname)
-    어떤 형태든 최종적으로 "문서 폴더 절대경로"로 정규화한다.
+    DocumentInfo.stored_path 가
+    - 문서 마스터 폴더(권장): D:\\eink_docs\\{userid}\\approval_process\\{doc_id}
+    - 또는 파일 경로(구형): ...\\something.bmp
+    - 또는 상대경로: userid/approval_process/doc_id
+    를 모두 커버해서 "폴더" 절대경로로 정규화.
     """
     if not stored_path:
         return ""
 
     p = os.path.normpath(stored_path)
 
-    # 1) 상대경로면 루트 붙여서 먼저 절대경로로 만든다 (중요!)
-    if not os.path.isabs(p):
-        base = current_app.config.get("EINK_DOC_ROOT") or os.path.normpath(os.path.join("D:/", "eink_docs"))
-        p = os.path.normpath(os.path.join(base, p))
-
-    # 2) 이제 절대경로 기준으로 파일이면 dirname 처리
-    #    (상대 파일경로였던 케이스도 여기서 정상 판정됨)
+    # 파일이면 dirname
     if os.path.isfile(p):
         p = os.path.dirname(p)
 
-    # 3) 그래도 파일 확장자가 있고, 폴더가 아니라면 "파일경로로 간주"해서 dirname 처리
-    #    (파일이 아직 생성 전이거나, 파일 존재 체크가 애매한 케이스 방어)
-    if (not os.path.isdir(p)) and os.path.splitext(p)[1]:
-        p2 = os.path.dirname(p)
-        if p2 and os.path.isdir(p2):
-            p = p2
+    # 상대경로면 루트 붙이기
+    if not os.path.isabs(p):
+        base = current_app.config.get("EINK_DOC_ROOT") or os.path.join("D:/", "eink_docs")
+        p = os.path.normpath(os.path.join(base, p))
 
     return p
-
 
 
 def _pick_original_filename(doc_dir: str) -> str | None:
@@ -2121,6 +2087,23 @@ def _exists_in_doc_dir(doc_dir: str, fname: str) -> str | None:
     return fname if os.path.isfile(p) else None
 
 
+def _is_allowed_download_name(fname: str, original_name: str | None) -> bool:
+    """
+    경로 탈출/임의 파일 다운로드 방지.
+    - normalized.pdf, onelayer.bmp 고정 허용
+    - original.* 은 실제 존재하는 original_name만 허용
+    """
+    if not fname:
+        return False
+    if "/" in fname or "\\" in fname:
+        return False
+    if fname in ("normalized.pdf", "onelayer.bmp"):
+        return True
+    if original_name and fname == original_name and fname.startswith("original."):
+        return True
+    return False
+
+
 @bp.route("/files/<int:doc_id>/download/<path:fname>", methods=["GET"])
 @login_required
 def file_download(doc_id: int, fname: str):
@@ -2129,7 +2112,7 @@ def file_download(doc_id: int, fname: str):
 
     doc: DocumentInfo = DocumentInfo.query.get_or_404(doc_id)
 
-    # --- 권한 체크(형 코드 유지) ---
+    # 🔒 detail과 동일한 권한 체크 재사용 (간단히 복붙)
     user_no, userid = current_user_ids()
     cur_username = getattr(current_user, "username", None)
     cur_dept     = getattr(current_user, "department", None)
@@ -2162,28 +2145,22 @@ def file_download(doc_id: int, fname: str):
 
     # ✅ stored_path -> 문서 마스터 폴더
     doc_dir = _resolve_doc_dir_from_stored_path(getattr(doc, "stored_path", "") or "")
-    original_name = _pick_original_filename(doc_dir)
-
-    # --- 여기서부터 디버그 로그 (404 원인 추적용) ---
-    current_app.logger.debug("[download] doc_id=%s fname=%r stored_path=%r", doc_id, fname, doc.stored_path)
-    current_app.logger.debug("[download] doc_dir=%r isdir=%s original_name=%r", doc_dir, os.path.isdir(doc_dir), original_name)
-
     if not doc_dir or not os.path.isdir(doc_dir):
         abort(404, "document directory not found")
 
-    allowed = _is_allowed_download_name(fname, original_name)
-    current_app.logger.debug("[download] allowed=%s", allowed)
-    if not allowed:
+    original_name = _pick_original_filename(doc_dir)
+
+    # ✅ 허용 파일만
+    if not _is_allowed_download_name(fname, original_name):
         abort(404)
 
     abs_path = os.path.join(doc_dir, fname)
-    current_app.logger.debug("[download] abs_path=%r exists=%s", abs_path, os.path.isfile(abs_path))
     if not os.path.isfile(abs_path):
         abort(404)
 
+    # 미리보기(img src)도 같은 라우트로 쓰고 싶으면 inline=1로 호출
     inline = request.args.get("inline") == "1"
     return send_from_directory(doc_dir, fname, as_attachment=(not inline))
-
 
 
 @bp.route("/files/<int:doc_id>/onelayer", methods=["GET"])

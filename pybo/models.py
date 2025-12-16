@@ -818,6 +818,7 @@ class SignLayout(db.Model):
 # ─────────────────────────────────────────────────────────────
 
 # DocumentInfo: 문서 등록/결재 인스턴스
+
 class DocumentInfo(db.Model):
     __tablename__ = 'document_infos'
     __table_args__ = (
@@ -826,7 +827,7 @@ class DocumentInfo(db.Model):
             name='ck_docinfo_target_dir'
         ),
         CheckConstraint(
-            "status IN ('draft','in_review','checked','approved','rejected','uploads')",
+            "status IN ('draft','in_review','checked','approved','rejected','uploads','bulletin_files')",
             name='ck_docinfo_status'
         ),
         db.Index('idx_docinfo_queue', 'user_id', 'target_dir', 'status', 'created_at'),
@@ -841,7 +842,9 @@ class DocumentInfo(db.Model):
     doc_name = db.Column(db.String(200))
 
     orig_filename = db.Column(db.String(255), nullable=False)
-    stored_path   = db.Column(db.String(500), nullable=False)
+
+    # ✅ 빈 문자열로 먼저 생성하는 케이스 대응
+    stored_path   = db.Column(db.String(500), nullable=False, default="")
 
     target_dir = db.Column(db.String(16), nullable=False, default='in_review', index=True)
     need_approval = db.Column(db.Boolean, nullable=False, default=True)
@@ -850,54 +853,53 @@ class DocumentInfo(db.Model):
 
     expire_time = db.Column(MySQLDateTime(fsp=0))
 
+    # -------------------------------------------------------
+    # ✅ (NEW) 원본/정규화 페이지 수 (컨트롤러에서 pages=1 넘기는 그 컬럼)
+    # -------------------------------------------------------
+    pages = db.Column(db.Integer, nullable=False, default=1)
+
+    # -------------------------------------------------------
+    # ✅ (NEW) 디바이스 렌더 타겟 정보 (컨트롤러가 넘기는 width/height/mode)
+    # -------------------------------------------------------
+    width  = db.Column(db.Integer)        # ex) 480 / 1200
+    height = db.Column(db.Integer)        # ex) 800 / 1600
+    mode   = db.Column(db.String(16))     # 'BW' | 'BWRY' | 'BWRYBG'
+
+    # -------------------------------------------------------
+    # ✅ (NEW) 결재선 선택값 (route_snapshot_json과 별개로 “참조값” 유지)
+    # -------------------------------------------------------
+    route_id = db.Column(db.BigInteger, index=True)  # FK 걸고 싶으면 ApprovalRoute 테이블 생기면 FK로 변경
+
     # -----------------------------
-    # ✅ (NEW) 정규화 렌더 기준(프론트/디테일 동일 기준)
+    # ✅ 정규화 렌더 기준
     # -----------------------------
-    # 정규화 캔버스(기본 1200x1600): draft/detail 배경 PNG는 무조건 이 크기 기반
     norm_canvas_w = db.Column(db.Integer, nullable=False, default=1200)
     norm_canvas_h = db.Column(db.Integer, nullable=False, default=1600)
 
-    # 원본 문서 정보(옵션)
-    source_ext    = db.Column(db.String(16))  # "pdf","pptx","docx","xlsx","jpg"...
+    source_ext    = db.Column(db.String(16))   # "pdf","pptx","docx","jpg"...
+    # ⚠️ source_pages는 이미 pages로 충분하면 제거 가능.
+    # 남겨두고 싶으면 pages와 동일 값으로 동기화만 해도 됨.
     source_pages  = db.Column(db.Integer, default=1)
 
-    # 렌더 파라미터(정규화 생성 시 적용값을 저장)
     fit_mode  = db.Column(db.Enum('fit','fill','percent', name='doc_fit_mode'), default='fit')
-    percent   = db.Column(db.Integer)   # fit_mode='percent'일 때만 의미
-    rotate    = db.Column(db.Integer)   # 0/90/180/270 정도를 권장
+    percent   = db.Column(db.Integer)
+    rotate    = db.Column(db.Integer)
 
-    # -----------------------------
-    # ✅ (NEW) 정규화 산출물 경로들
-    # -----------------------------
-    # 정규화 PDF(유지용/다운로드용 파이프라인에서 사용 가능)
     normalized_pdf_relpath = db.Column(db.String(500))
-
-    # 정규화 페이지 PNG/BMP 저장 디렉토리(페이지별 파일은 DocumentPageAsset에서 관리)
     normalized_dir_relpath = db.Column(db.String(500))
-
-    # 빠른 접근용 “첫 장” 정규화 파일(프론트에서 1장만 필요할 때)
     normalized_front_png_relpath = db.Column(db.String(500))
     normalized_front_bmp_relpath = db.Column(db.String(500))
-
-    # 결재 완료 표지(첫 장 교체용) - “서명/직인까지 굽힌” PNG
     signed_front_png_relpath = db.Column(db.String(500))
     signed_front_bmp_relpath = db.Column(db.String(500))
 
-    # -----------------------------
-    # ✅ (NEW) 결재완료 PDF 번들(첨부까지 합친 결과)
-    # -----------------------------
-    # 1) 결재문서+첨부를 모두 합친 bundle.pdf
     bundle_pdf_relpath = db.Column(db.String(500))
-    # 2) bundle의 1페이지를 signed_front_png로 교체한 최종 approved_bundle.pdf
     approved_bundle_pdf_relpath = db.Column(db.String(500))
 
-    # -----------------------------
-    # 결재선/레이아웃 스냅샷
-    # -----------------------------
     sign_layout_id = db.Column(
         db.BigInteger,
         db.ForeignKey('sign_layouts.id', ondelete='SET NULL')
     )
+
     route_snapshot_json  = db.Column(db.JSON)
     layout_snapshot_json = db.Column(db.JSON)
     metadata_json        = db.Column(db.JSON)
@@ -910,12 +912,6 @@ class DocumentInfo(db.Model):
     user        = db.relationship('User', backref=db.backref('document_infos', lazy=True, passive_deletes=True))
     sign_layout = db.relationship('SignLayout', backref=db.backref('document_infos', lazy=True, passive_deletes=True))
 
-    @property
-    def is_publish_source(self) -> bool:
-        return (
-            self.status == 'approved'
-            and self.target_dir in ('approved', 'bulletin_files')
-        )
 
 
 
@@ -1444,3 +1440,23 @@ class DocumentDevicePageMap(db.Model):
         backref=db.backref('device_page_maps', lazy=True, passive_deletes=True)
     )
 
+
+class StampAsset(db.Model):
+    __tablename__ = "stamp_assets"
+    __table_args__ = TABLE_ARGS  # 형 프로젝트에 있는 TABLE_ARGS 그대로 사용
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    name = db.Column(db.String(120), nullable=False)          # 직인 이름
+    filename = db.Column(db.String(255), nullable=False)      # 저장 파일명
+    stored_path = db.Column(db.String(700), nullable=False)   # 절대경로 (D:\bmp_files\admin\stamp\xxx.png)
+
+    mime = db.Column(db.String(60), nullable=True)
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
+
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+
+    created_by = db.Column(db.BigInteger, nullable=True)      # user_id (FK까지는 선택)
+    created_at = db.Column(db.DateTime, nullable=False, default=kst_now_naive)

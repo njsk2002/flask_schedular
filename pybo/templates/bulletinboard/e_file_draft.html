@@ -199,6 +199,18 @@
       border-right:0;
     }
 
+    #draft-app .approval-sign-img{
+      max-width: 92%;
+      max-height: 92%;
+      object-fit: contain;
+      display:block;
+    }
+    #draft-app .approval-done-text{
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+
     /* 직인/QR/기간/메세지용 박스 공통 */
     #draft-app .layer.stamp-box,
     #draft-app .layer.qr-box,
@@ -247,6 +259,45 @@
 
     #draft-app .layer.rect-layer {
       border-style: solid !important;
+    }
+
+     /* 직인 strip (좌우 스크롤) */
+    #stamp-list.stamp-strip{
+      display:flex;
+      gap:8px;
+      overflow-x:auto;
+      padding:6px 4px;
+      border:1px solid #e9ecef;
+      border-radius:10px;
+      background:#fafafa;
+      -webkit-overflow-scrolling:touch;
+    }
+    #stamp-list .stamp-card{
+      flex:0 0 auto;
+      width:120px;
+      border:1px solid #dee2e6;
+      border-radius:10px;
+      background:#fff;
+      padding:8px;
+      cursor:pointer;
+      text-align:center;
+    }
+    #stamp-list .stamp-card.selected{
+      outline:2px solid #198754;
+      border-color:#86efac;
+    }
+    #stamp-list .stamp-card img{
+      width:100%;
+      height:80px;
+      object-fit:contain;
+      display:block;
+    }
+    #stamp-list .stamp-name{
+      margin-top:6px;
+      font-size:.8rem;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
     }
   </style>
 
@@ -478,7 +529,8 @@
             </div>
           </div>
 
-          <div id="stamp-list" class="row row-cols-3 g-1 mt-2"></div>
+          <!-- <div id="stamp-list" class="row row-cols-3 g-1 mt-2"></div> -->
+          <div id="stamp-list" class="stamp-strip mt-2"></div>
           <div class="form-text">
             · 직인은 관리자(Admin)가 서버에 등록한 파일 목록 기준으로 불러옵니다.<br>
             · 항목을 클릭한 뒤 “직인 LAY 추가”를 누르면 우측에 추가됩니다.
@@ -655,6 +707,7 @@
       "username": session.get("user_name"),
       "dept":     session.get("dept"),
       "position": session.get("position"),
+      "photo_1":  session.get("photo_1"),  
     } | tojson
   }}
 </script>
@@ -688,6 +741,7 @@ const myId       = me.userid   || me.id || '';
 const myName     = me.username || me.name || myId;
 const myDept     = me.dept     || '';
 const myPosition = me.position || '';
+const myPhoto1 = me.photo_1 || '';
 
 const state = {
   upload_id:null,
@@ -857,8 +911,10 @@ function redrawHeader(){
 async function previewOriginalOnce(file){
   const fd = new FormData();
   fd.append('file', file);
-  fd.append('width', state.uiWidth);
-  fd.append('height', state.uiHeight);
+  // fd.append('width', state.uiWidth);
+  // fd.append('height', state.uiHeight);
+  fd.append('width', PREVIEW_W);
+  fd.append('height', PREVIEW_H);
   fd.append('mode', state.mode);
   fd.append('scale', state.scale);
   fd.append('percent', state.percent);
@@ -896,6 +952,38 @@ async function previewOriginalOnce(file){
   if (state.preview.bmpUrl) { URL.revokeObjectURL(state.preview.bmpUrl); }
   state.preview.bmpUrl = null;
 }
+
+
+  // ✅ upload_id 기반으로 "현재 옵션의 normalized_png" 다시 받기 (업로드 재전송 없음)
+  async function refreshOriginalByUpload(){
+    if (!state.upload_id) return;
+
+    const body = {
+      upload_id: state.upload_id,
+      width: PREVIEW_W,
+      height: PREVIEW_H,
+      scale: state.scale,
+      percent: state.percent,
+      rotate: state.rotate,
+      page: 1
+    };
+
+    const r = await fetch('/bulletin/original_blob', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if(!r.ok) throw new Error('original_blob failed');
+
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+
+    if (state.preview.originalUrl) URL.revokeObjectURL(state.preview.originalUrl);
+    state.preview.originalUrl = url;
+
+    state.preview.dirty = false;
+  }
+
 
 /* -------------------- BMP(E-INK) 프리뷰: 버튼 클릭 시에만 -------------------- */
 /**
@@ -964,14 +1052,21 @@ $btnBmpToggle.addEventListener('click', async ()=>{
   }
 
   // bmp -> original (서버 호출 없음)
-  if (!state.preview.originalUrl) {
-    toast('원본 프리뷰가 없습니다. 파일을 다시 선택하세요.','warning');
-    return;
+  // bmp -> original
+  try{
+    // ✅ 옵션이 바뀐 상태면, 업로드 재전송 없이 normalized_png만 다시 받는다
+    if (state.preview.dirty || !state.preview.originalUrl) {
+      await refreshOriginalByUpload();
+    }
+
+    state.preview.mode = 'original';
+    $img.src = state.preview.originalUrl + '#t=' + Date.now();
+    $btnBmpToggle.textContent = 'BMP확인';
+    toast('원본 프리뷰로 전환했습니다.','info');
+  }catch(e){
+    toast('원본 프리뷰 갱신 실패','danger');
   }
-  state.preview.mode = 'original';
-  $img.src = state.preview.originalUrl + '#t=' + Date.now();
-  $btnBmpToggle.textContent = 'BMP확인';
-  toast('원본 프리뷰로 전환했습니다.','info');
+
 });
 
 
@@ -1003,61 +1098,93 @@ async function fetchUsersTo(el, dept){
   }
 }
 
+
 /* -------------------- 직인 목록 로딩 -------------------- */
 async function fetchStampList(){
-  if (state.stampOptions && state.stampOptions.length) return;
   try{
-    const r = await fetch('/bulletin/stamps');
+    const r = await fetch('/bulletin/api/stamps');
     if (!r.ok) throw 0;
     const js = await r.json();
     state.stampOptions = Array.isArray(js.stamps) ? js.stamps : [];
     renderStampList();
   }catch(e){
+    state.stampOptions = [];
+    renderStampList();
     toast('직인 목록을 불러오지 못했습니다.','danger');
   }
 }
 
 function renderStampList(){
   if (!$stampList) return;
+
   if (!state.stampOptions.length) {
-    $stampList.innerHTML = `<div class="col-12 text-muted small">등록된 직인이 없습니다.</div>`;
+    $stampList.innerHTML = `<div class="text-muted small p-2">등록된 직인이 없습니다.</div>`;
     return;
   }
 
-  $stampList.innerHTML = state.stampOptions.map(s => `
-    <div class="col">
-      <button type="button"
-              class="btn btn-light w-100 border stamp-item"
-              data-id="${s.id}">
-        <div class="ratio ratio-1x1 mb-1">
-          <img src="${s.url}" alt="${s.name||''}" class="img-fluid" style="object-fit:contain;">
-        </div>
-        <div class="small text-truncate">${s.name || s.id}</div>
-      </button>
-    </div>
-  `).join('');
+  const selectedId = state.stamp?.id;
+
+  $stampList.innerHTML = state.stampOptions.map(s => {
+    const sel = String(s.id) === String(selectedId) ? 'selected' : '';
+    return `
+      <div class="stamp-card ${sel}" data-id="${s.id}" title="${s.name||''}">
+        <img src="${s.url}" alt="${s.name||''}">
+        <div class="stamp-name">${s.name || ('ID:'+s.id)}</div>
+      </div>
+    `;
+  }).join('');
 }
 
+/* 클릭해서 “선택”만 */
 if ($stampList) {
   $stampList.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.stamp-item');
-    if (!btn) return;
-    const id  = btn.dataset.id;
+    const card = e.target.closest('.stamp-card');
+    if (!card) return;
+
+    const id = card.dataset.id;
     const item = state.stampOptions.find(s => String(s.id) === String(id));
     if (!item) return;
 
+    // 선택 표시
+    $stampList.querySelectorAll('.stamp-card').forEach(x => x.classList.remove('selected'));
+    card.classList.add('selected');
+
+    // state에 저장
     state.stamp.use  = true;
+    $stampUse.checked = true;
+
     state.stamp.id   = item.id;
     state.stamp.name = item.name || '';
     state.stamp.url  = item.url || '';
-    state.stamp.type = $stampType.value || '';
+    state.stamp.type = $stampType.value || state.stamp.type || '';
+    state.stamp.size = parseInt($stampSize.value,10) || 80;
 
-    toast(`직인 선택: ${state.stamp.name||state.stamp.id}`,'info');
+    toast(`직인 선택: ${state.stamp.name}`,'info');
   });
 }
 
 /* -------------------- 좌표 변환 -------------------- */
-const BASE_W = 1200, BASE_H = 1600;
+  // ✅ BASE = 1200x1600 고정 (원본/BMP 모두 같은 natural size를 유지)
+  const BASE_W = 1200, BASE_H = 1600;
+
+  // ✅ 미리보기(정규화 PNG)도 BASE로 고정
+  const PREVIEW_W = BASE_W, PREVIEW_H = BASE_H;
+
+  // 기존 state.uiWidth/uiHeight는 선택값을 쓰고 있었는데, 컨셉상 고정으로 간다
+  state.uiWidth  = PREVIEW_W;
+  state.uiHeight = PREVIEW_H;
+
+  // 해상도 셀렉트는 1200x1600만 허용 (UI는 남겨도 되지만 고정이 안전)
+  if ($res) {
+    $res.value = '1200x1600';
+    $res.disabled = true; // ✅ 실수로 바꾸는 것 방지
+  }
+
+  function setAspectFixedBase(){
+    $canvasWrap.style.aspectRatio = `${PREVIEW_W} / ${PREVIEW_H}`;
+  }
+  setAspectFixedBase();
+
 
 function vp() {
   const r = $canvasWrap.getBoundingClientRect();
@@ -1167,9 +1294,16 @@ function renderLayers(){
           `<div class="cell">${c._dispRole || c.role || ''}</div>`
         ).join('');
 
-        const stampCells = colsArr.map(() =>
-          `<div class="cell"></div>`
-        ).join('');
+      const stampCells = colsArr.map(c => {
+        // ✅ 작성자는 이미 결재 완료: photo_1 있으면 이미지, 없으면 "완료"
+        if ((c.role || '') === '작성') {
+          if (c.user_photo_1) {
+            return `<div class="cell"><img src="${c.user_photo_1}" alt="완료" class="approval-sign-img"></div>`;
+          }
+          return `<div class="cell"><span class="approval-done-text">완료</span></div>`;
+        }
+        return `<div class="cell"></div>`;
+      }).join('');
 
         const nameCells = colsArr.map(c =>
           `<div class="cell">${c.user_name || ''}</div>`
@@ -1698,6 +1832,7 @@ $btnDraftAdd.addEventListener('click', ()=>{
 
   let user_id = '';
   let user_name = '';
+  let user_photo_1 = '';   // ✅ 추가
 
   if (role === '작성') {
     if (!myId) {
@@ -1706,6 +1841,8 @@ $btnDraftAdd.addEventListener('click', ()=>{
     }
     user_id = myId;
     user_name = myName;
+    user_photo_1 = myPhoto1 || '';  // ✅ 작성자 photo_1
+
   } else {
     user_id = $draftUser.value || '';
     user_name = $draftUser.options[$draftUser.selectedIndex]?.text || '';
@@ -1715,7 +1852,7 @@ $btnDraftAdd.addEventListener('click', ()=>{
     }
   }
 
-  addApprovalCol({ group:'draft', dept, role, user_id, user_name });
+   addApprovalCol({ group:'draft', dept, role, user_id, user_name, user_photo_1 }); // ✅ 추가
 });
 
 $checkDept.addEventListener('change', async ()=>{
@@ -1799,12 +1936,19 @@ $btnApprovalBuild.addEventListener('click', ()=>{
 /* -------------------- 직인 / QR / 게시기간 / 메세지 이벤트 -------------------- */
 $stampUse.addEventListener('change', async ()=>{
   state.stamp.use = $stampUse.checked;
+
   if (state.stamp.use) {
     await fetchStampList();
   } else {
+    // 선택 초기화 + 레이어 제거
+    state.stamp.id = null;
+    state.stamp.name = '';
+    state.stamp.url = '';
+    $stampList?.querySelectorAll('.stamp-card').forEach(x=>x.classList.remove('selected'));
     removeLayerByType('stamp_box');
   }
 });
+
 
 $stampType.addEventListener('change', ()=>{
   state.stamp.type = $stampType.value || '';
@@ -1945,19 +2089,35 @@ $res.addEventListener('change', ()=>{
   setAspectByRes($res.value);
   renderLayers();
 });
+
+
+function markPreviewDirty(){
+  state.preview.dirty = true;
+  // 버튼에 살짝 힌트 주고 싶으면(선택):
+  $btnBmpToggle.classList.add('btn-warning');
+}
+
 $mode.addEventListener('change', ()=>{
   state.mode=$mode.value;
+  markPreviewDirty();
 });
+
 $scale.addEventListener('change', ()=>{
   state.scale=$scale.value;
   updatePercentRow();
+  markPreviewDirty();
 });
+
 $percent.addEventListener('input', ()=>{
   state.percent=parseInt($percent.value,10)||100;
+  markPreviewDirty();
 });
+
 $rotate.addEventListener('change', ()=>{
   state.rotate=parseInt($rotate.value,10)||0;
+  markPreviewDirty();
 });
+
 
 /* 도형 버튼 */
 $btnAddText.addEventListener('click', addText);
@@ -2126,11 +2286,13 @@ $btnSend.addEventListener('click', async ()=>{
 
 
 /* -------------------- 초기화 -------------------- */
-(function init(){
+(async function init(){
   updatePercentRow();
   redrawHeader();
   renderApprovalCols();
   renderLayers();
+
+  await fetchStampList();   // ✅ 처음부터 목록 로드
 })();
 })();
 </script>

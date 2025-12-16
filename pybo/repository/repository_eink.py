@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import desc, or_, and_
+from sqlalchemy import desc, or_, and_,asc
 from sqlalchemy.orm import joinedload
 from pybo import db
 import json
@@ -27,6 +27,7 @@ from ..models import (
     # ApprovalRouteStep as ApprovalRouteStepModel,
     SignSlot as SignSlotModel,
     DocumentApprovalStep as DocumentApprovalStepModel,
+    StampAsset,
     kst_now_naive as now_kst,
 )
 
@@ -92,18 +93,15 @@ def _coerce_target_dir(v: Optional[str]) -> str:
 
 def _coerce_status(v: Optional[str]) -> str:
     """
-    DocumentInfo.status 허용값:
-      - 'draft'      : 초안
-      - 'in_review'  : 결재 진행 중
-      - 'checked'    : 결재 일부 완료, 최종 승인 대기
-      - 'approved'   : 결재 완료
-      - 'rejected'   : 반려
-      - 'uploads'    : 디바이스 송출용/즉시 배포 플로우
+    DocumentInfo.status (큰 상태만)
+      - draft / in_review / checked / approved / rejected / bulletin_files
+      - (호환) uploads 는 과거 데이터 호환용으로만 남겨둠
     """
-    allowed = ("draft", "in_review", "checked", "approved", "rejected", "uploads")
+    allowed = ("draft", "in_review", "checked", "approved", "rejected", "bulletin_files", "uploads")
     out = v if v in allowed else "draft"
     _dbg("coerce_status", input=v, output=out)
     return out
+
 
 
 def _role_is_valid(role: Optional[str]) -> bool:
@@ -514,6 +512,13 @@ class RepositoryEINK:
     # ------------------------------------------------------------------
     # DocumentInfo 레코드 생성 (컨트롤러 send_file_route에서 사용)
     # ------------------------------------------------------------------
+    # repository/repository_eink.py (발췌)
+    @staticmethod
+    def _coerce_fit_mode(v: str | None) -> str:
+        v = (v or "fit").lower().strip()
+        return v if v in ("fit", "fill", "percent") else "fit"
+
+
     @staticmethod
     def create_upload_record(
         *,
@@ -521,14 +526,14 @@ class RepositoryEINK:
         device_id: Optional[str],
         orig_filename: str,
         stored_path: str,
-        target_dir: str,  # 'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
+        target_dir: str,
         need_approval: bool,
-        status: str,  # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
+        status: str,
         pages: int = 1,
         width: Optional[int] = None,
         height: Optional[int] = None,
-        mode: Optional[str] = None,  # 'BW' | 'BWRY' | 'BWRYBG'
-        scale: Optional[str] = None,  # 'fit' | 'fill' | 'percent'
+        mode: Optional[str] = None,
+        scale: Optional[str] = None,   # ✅ DB에는 fit_mode로 저장
         percent: Optional[int] = None,
         rotate: Optional[int] = None,
         route_id: Optional[int] = None,
@@ -539,64 +544,54 @@ class RepositoryEINK:
         expire_time: Optional[datetime] = None,
         final_doc_relpath: Optional[str] = None,
     ) -> int:
-        """
-        DocumentInfo 1건 생성.
-        - 현재는 BMP/메타 번들 기준으로 stored_path=bmp_path 를 저장하지만,
-          필드 구조는 정식 DocumentInfo 설계(원본/normalized.pdf/레이아웃 스냅샷)를 그대로 사용.
-        - JSON 컬럼은 dict/list 그대로 저장.
-        """
-        _dbg(
-            "create_upload_record:start",
-            device_id=device_id,
-            target_dir=target_dir,
-            status=status,
-            width=width,
-            height=height,
-            mode=mode,
-            scale=scale,
-            percent=percent,
-            rotate=rotate,
-            route_id=route_id,
-            sign_layout_id=sign_layout_id,
-        )
+
         row = DocumentInfoModel(
             user_id=user_id,
             device_id=(device_id or None),
-            doc_name=orig_filename,  # 화면용 제목은 orig_filename으로 초기화
+            doc_name=orig_filename,
             orig_filename=orig_filename,
-            stored_path=stored_path,
+
+            # ✅ 처음엔 모를 수 있으니 "" 허용(모델 default="") + 이후 update에서 채움
+            stored_path=stored_path or "",
+
             target_dir=_coerce_target_dir(target_dir),
             need_approval=bool(need_approval),
             need_stamp=False,
             status=_coerce_status(status),
             expire_time=expire_time,
-            pages=pages,
+
+            # ✅ pages 컬럼 반영
+            pages=max(1, int(pages or 1)),
+            # (선택) 기존 source_pages도 같이 맞춰두면 혼동 줄어듦
+            source_pages=max(1, int(pages or 1)),
+
+            # ✅ 디바이스 렌더 파라미터 저장
             width=width,
             height=height,
-            mode=mode,
-            scale=scale,
+            mode=(mode or None),
+
+            # ✅ scale은 fit_mode로 저장
+            fit_mode= RepositoryEINK._coerce_fit_mode(scale),
             percent=percent,
             rotate=rotate,
-            # route_id=route_id,
+
+            # ✅ route_id 저장
+            route_id=route_id,
             sign_layout_id=sign_layout_id,
+
             route_snapshot_json=_json_passthrough(route_snapshot),
             layout_snapshot_json=_json_passthrough(layout_snapshot),
             metadata_json=_json_passthrough(metadata),
             final_doc_relpath=final_doc_relpath,
+
             created_at=now_kst(),
             updated_at=now_kst(),
         )
-        try:
-            db.session.add(row)
-            db.session.commit()
-            _dbg("create_upload_record:committed", upload_id=int(row.id))
-            return int(row.id)
-        except SQLAlchemyError as e:
-            _logger().debug(
-                "[create_upload_record] DB error, rollback", exc_info=True
-            )
-            db.session.rollback()
-            raise e
+
+        db.session.add(row)
+        db.session.commit()
+        return int(row.id)
+
 
     # ------------------------------------------------------------------
     # DocumentInfo 상태/디렉터리 업데이트
@@ -605,8 +600,8 @@ class RepositoryEINK:
     def update_upload_status(
         upload_id: int,
         *,
-        status: Optional[str] = None,  # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
-        target_dir: Optional[str] = None,  # 'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
+        status: Optional[str] = None,
+        target_dir: Optional[str] = None,
         route_id: Optional[int] = None,
         sign_layout_id: Optional[int] = None,
         route_snapshot: Optional[Dict[str, Any]] = None,
@@ -614,66 +609,66 @@ class RepositoryEINK:
         metadata: Optional[Dict[str, Any]] = None,
         expire_time: Optional[datetime] = None,
         final_doc_relpath: Optional[str] = None,
-        stored_path: Optional[str] = None,  # ✅ 추가 (문서 마스터 doc_dir 같은 실제 경로)
+        stored_path: Optional[str] = None,
+
+        # ✅ (선택) 페이지 수/렌더 파라미터도 업데이트 가능하게
+        pages: Optional[int] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        mode: Optional[str] = None,
+        scale: Optional[str] = None,
+        percent: Optional[int] = None,
+        rotate: Optional[int] = None,
     ) -> bool:
-        _dbg(
-            "update_upload_status:start",
-            upload_id=upload_id,
-            status=status,
-            target_dir=target_dir,
-            route_id=route_id,
-            sign_layout_id=sign_layout_id,
-            stored_path=stored_path,  # ✅ 로그 추가
-        )
-        if not upload_id:
-            _dbg("update_upload_status:invalid_id")
+        row = db.session.get(DocumentInfoModel, upload_id)
+        if not row:
             return False
-        try:
-            row = db.session.get(DocumentInfoModel, upload_id)
-            if not row:
-                _dbg("update_upload_status:not_found", upload_id=upload_id)
-                return False
 
-            if status in ("draft", "in_review", "checked", "approved", "rejected", "uploads"):
-                row.status = status
+        if status in ("draft", "in_review", "checked", "approved", "rejected", "bulletin_files", "uploads"):
+            row.status = status
+        if target_dir in ("in_review", "checked", "approved", "uploads", "bulletin_files"):
+            row.target_dir = target_dir
 
-            if target_dir in ("in_review", "checked", "approved", "uploads", "bulletin_files"):
-                row.target_dir = target_dir
+        if route_id is not None:
+            row.route_id = route_id
+        if sign_layout_id is not None:
+            row.sign_layout_id = sign_layout_id
 
-            if route_id is not None:
-                row.route_id = route_id
-            if sign_layout_id is not None:
-                row.sign_layout_id = sign_layout_id
-            if route_snapshot is not None:
-                row.route_snapshot_json = _json_passthrough(route_snapshot)
-            if layout_snapshot is not None:
-                row.layout_snapshot_json = _json_passthrough(layout_snapshot)
-            if metadata is not None:
-                row.metadata_json = _json_passthrough(metadata)
-            if expire_time is not None:
-                row.expire_time = expire_time
-            if final_doc_relpath is not None:
-                row.final_doc_relpath = final_doc_relpath
+        if route_snapshot is not None:
+            row.route_snapshot_json = _json_passthrough(route_snapshot)
+        if layout_snapshot is not None:
+            row.layout_snapshot_json = _json_passthrough(layout_snapshot)
+        if metadata is not None:
+            row.metadata_json = _json_passthrough(metadata)
 
-            # ✅ stored_path 반영
-            if stored_path is not None:
-                row.stored_path = stored_path
+        if expire_time is not None:
+            row.expire_time = expire_time
+        if final_doc_relpath is not None:
+            row.final_doc_relpath = final_doc_relpath
+        if stored_path is not None:
+            row.stored_path = stored_path
 
-            row.updated_at = now_kst()
-            db.session.commit()
-            _dbg(
-                "update_upload_status:committed",
-                upload_id=upload_id,
-                status=row.status,
-                target_dir=row.target_dir,
-                stored_path=row.stored_path,  # ✅ 로그 추가
-            )
-            return True
+        # ✅ pages/렌더 파라미터 업데이트(필요할 때만)
+        if pages is not None:
+            row.pages = max(1, int(pages or 1))
+            row.source_pages = row.pages
+        if width is not None:
+            row.width = width
+        if height is not None:
+            row.height = height
+        if mode is not None:
+            row.mode = mode
+        if scale is not None:
+            row.fit_mode = RepositoryEINK._coerce_fit_mode(scale)
+        if percent is not None:
+            row.percent = percent
+        if rotate is not None:
+            row.rotate = rotate
 
-        except SQLAlchemyError:
-            _logger().debug("[update_upload_status] DB error, rollback", exc_info=True)
-            db.session.rollback()
-            return False
+        row.updated_at = now_kst()
+        db.session.commit()
+        return True
+
 
 
     # ------------------------------------------------------------------
@@ -1691,3 +1686,67 @@ class RepositoryEINK:
 
         return q.limit(limit).all()
 
+#######################################################
+################  STAMP    ############################
+#######################################################
+
+    @staticmethod
+    def create_stamp_asset(
+        *,
+        name: str,
+        filename: str,
+        stored_path: str,
+        created_by: Optional[int] = None,
+        mime: Optional[str] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        sort_order: int = 0,
+        is_active: bool = True,
+    ) -> int:
+        row = StampAsset(
+            name=name,
+            filename=filename,
+            stored_path=stored_path,
+            created_by=created_by,
+            mime=mime,
+            width=width,
+            height=height,
+            sort_order=int(sort_order or 0),
+            is_active=bool(is_active),
+        )
+        db.session.add(row)
+        db.session.commit()
+        return int(row.id)
+
+    @staticmethod
+    def list_stamp_assets(active_only: bool = True) -> List[StampAsset]:
+        q = db.session.query(StampAsset)
+        if active_only:
+            q = q.filter(StampAsset.is_active.is_(True))
+        return (
+            q.order_by(asc(StampAsset.sort_order), desc(StampAsset.created_at), desc(StampAsset.id))
+             .all()
+        )
+
+    @staticmethod
+    def get_stamp_asset(stamp_id: int, active_only: bool = False) -> Optional[StampAsset]:
+        q = db.session.query(StampAsset).filter(StampAsset.id == int(stamp_id))
+        if active_only:
+            q = q.filter(StampAsset.is_active.is_(True))
+        return q.first()
+
+    @staticmethod
+    def get_stamp_stored_path(stamp_id: int, active_only: bool = True) -> Optional[str]:
+        """
+        stamp_id → StampAsset.stored_path 반환.
+        active_only=True면 비활성 도장은 None 처리.
+        """
+        if not stamp_id:
+            return None
+
+        q = db.session.query(StampAsset).filter(StampAsset.id == int(stamp_id))
+        if active_only:
+            q = q.filter(StampAsset.is_active.is_(True))
+
+        row = q.first()
+        return (row.stored_path if row else None)
