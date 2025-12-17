@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload
 from pybo import db
 import json
 import os
-import logging
+import logging, inspect
 
 
 try:
@@ -1420,7 +1420,7 @@ class RepositoryEINK:
                 userid_snapshot=userid,
                 username_snapshot=username,
                 photo_1_snapshot=None,     # 필요시 User 조회해서 채워도 됨
-                status="pending",
+                status="wait",
             )
             db.session.add(row)
 
@@ -1564,6 +1564,9 @@ class RepositoryEINK:
             .filter(DocumentInfoModel.user_id == user_id)
         )
         q = RepositoryEINK._apply_common_filters(q, search, status, date_from, date_to)
+
+        # current_app.logger.debug("[ENUM] DocumentApprovalStepModel file=%s", inspect.getfile(DocumentApprovalStepModel))
+        # current_app.logger.debug("[ENUM] DocumentApprovalStepModel enums=%s", DocumentApprovalStepModel.__table__.c.status.type.enums)
         return q.limit(limit).all()
 
     # ─────────────────────────────
@@ -1750,3 +1753,341 @@ class RepositoryEINK:
 
         row = q.first()
         return (row.stored_path if row else None)
+
+
+    @staticmethod
+    def init_approval_flow(document_info_id: int, drafter_user_id: int) -> None:
+        """
+        A안 정책 초기화:
+        - 모든 step: wait
+        - 작성(step_type='작성', col_index=1 우선): done (+ signed_by, signed_at)
+        - 다음 step 1개: pending
+        - 나머지: wait
+        """
+        try:
+            steps = (DocumentApprovalStepModel.query
+                     .filter(DocumentApprovalStepModel.document_info_id == document_info_id)
+                     .order_by(DocumentApprovalStepModel.col_index.asc())
+                     .all())
+
+            if not steps:
+                return
+
+            now = now_kst()
+
+            # 1) 전체 wait로 초기화 (기존 pending 남는 것 방지)
+            for s in steps:
+                s.status = 'wait'
+
+            # 2) 작성 step 선정: (col_index=1 & 작성) 우선
+            drafter_step = None
+            for s in steps:
+                if s.col_index == 1 and s.step_type == '작성':
+                    drafter_step = s
+                    break
+            if drafter_step is None:
+                for s in steps:
+                    if s.step_type == '작성':
+                        drafter_step = s
+                        break
+            if drafter_step is None:
+                drafter_step = steps[0]  # 최후 fallback
+
+            # 3) 작성은 sendfile 순간 완료 처리
+            drafter_step.status = 'done'
+            drafter_step.signed_by_user_id = drafter_user_id
+            drafter_step.signed_at = now
+
+            # 4) 다음 step 1개만 pending
+            next_step = None
+            for s in steps:
+                if s.col_index > drafter_step.col_index:
+                    next_step = s
+                    break
+            if next_step is not None:
+                next_step.status = 'pending'
+
+            # 5) 문서 큰 상태는 in_review 유지(need_approval 문서라면)
+            doc = DocumentInfoModel.query.get(document_info_id)
+            if doc is not None:
+                if doc.status != 'in_review':
+                    doc.status = 'in_review'
+                if getattr(doc, "target_dir", None) != 'in_review':
+                    doc.target_dir = 'in_review'
+
+            db.session.commit()
+
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+
+    @staticmethod
+    def get_user_by_no(user_no: int) -> Optional[User]:
+        try:
+            return db.session.get(User, int(user_no))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _step_doc_fk_col():
+        for name in ("doc_id", "document_info_id", "document_id"):
+            if hasattr(DocumentApprovalStepModel, name):
+                return getattr(DocumentApprovalStepModel, name)
+        raise RuntimeError("DocumentApprovalStepModel has no doc fk column (doc_id/document_info_id/document_id)")
+
+
+
+    @staticmethod
+    def find_pending_step_for_actor(*, doc_id: int, actor_no: int | None, actor_userid: str | None):
+        """
+        ✅ 정확 기준:
+          - status='pending'
+          - userid_snapshot == actor_userid  (1순위)
+          - username_snapshot == actor.username (2순위 fallback)
+        """
+        doc_fk = RepositoryEINK._step_doc_fk_col()
+
+        q = (
+            db.session.query(DocumentApprovalStepModel)
+            .filter(doc_fk == int(doc_id))
+            .filter(DocumentApprovalStepModel.status == "pending")
+        )
+
+        # actor_username 확보 (username_snapshot 비교용)
+        actor_username = None
+        if actor_no is not None:
+            try:
+                u = db.session.get(User, int(actor_no))
+                actor_username = getattr(u, "username", None)
+            except Exception:
+                actor_username = None
+
+        # ✅ 매칭 조건 (userid_snapshot / username_snapshot만 사용)
+        conds = []
+
+        if actor_userid and hasattr(DocumentApprovalStepModel, "userid_snapshot"):
+            conds.append(DocumentApprovalStepModel.userid_snapshot == str(actor_userid).strip())
+
+        if actor_username and hasattr(DocumentApprovalStepModel, "username_snapshot"):
+            conds.append(DocumentApprovalStepModel.username_snapshot == str(actor_username).strip())
+
+        if not conds:
+            return None
+
+        st = (
+            q.filter(or_(*conds))
+             .order_by(asc(DocumentApprovalStepModel.col_index), asc(DocumentApprovalStepModel.id))
+             .first()
+        )
+
+        # ✅ 디버그(원인 추적용)
+        try:
+            current_app.logger.debug(
+                "[find_pending_step_for_actor] doc_id=%s actor_no=%s actor_userid=%r actor_username=%r -> found=%s col=%s",
+                doc_id, actor_no, actor_userid, actor_username,
+                bool(st),
+                getattr(st, "col_index", None) if st else None
+            )
+        except Exception:
+            pass
+
+        return st
+
+
+    @staticmethod
+    def _patch_layout_snapshot_mark(
+        *,
+        doc: DocumentInfoModel,
+        col_index: int,
+        mark_status: str,            # 'done' | 'rejected'
+        mark_text: Optional[str],    # '완료' | '반려'
+        actor_photo_1: Optional[str] # 파일명만(또는 DB값), file_management에서 basename 처리
+    ) -> Dict[str, Any]:
+        snap = doc.layout_snapshot_json if isinstance(doc.layout_snapshot_json, dict) else {}
+        editor_layers = snap.get("editor_layers") or []
+        if not isinstance(editor_layers, list):
+            return snap
+
+        for L in editor_layers:
+            if (L.get("type") or "").lower() != "approval_box":
+                continue
+            cols = L.get("columns") or []
+            if not isinstance(cols, list):
+                continue
+
+            # col_index는 1-based
+            idx0 = int(col_index) - 1
+            if idx0 < 0 or idx0 >= len(cols):
+                continue
+
+            c = cols[idx0] if isinstance(cols[idx0], dict) else {}
+            c["status"] = mark_status  # ✅ 렌더링에서 사용
+            if mark_text:
+                c["stamp_text"] = mark_text
+            # 승인 시 서명 파일이 있으면 넣어둠(없으면 렌더에서 "완료")
+            if actor_photo_1:
+                c["user_photo_1"] = actor_photo_1
+            cols[idx0] = c
+            L["columns"] = cols
+            break
+
+        snap["editor_layers"] = editor_layers
+        return snap
+
+
+    @staticmethod
+    def apply_approval_action(
+        doc_id: int,
+        actor_db_id: int,          # ✅ document_approval_steps.signed_by_user_id에 넣을 user.id
+        actor_userid: str,         # ✅ userid_snapshot 비교
+        actor_username: str,       # ✅ username_snapshot 비교
+        action: str,               # "approve" | "reject"
+        note: str | None = None,
+    ) -> dict:
+        doc = DocumentInfoModel.query.get(doc_id)
+        if not doc:
+            return {"ok": False, "why": "doc_not_found"}
+
+        steps = list(getattr(doc, "approval_steps", []) or [])
+
+        def _step_key(s):
+            for k in ("step_order", "col_index", "id"):
+                v = getattr(s, k, None)
+                if v is not None:
+                    return int(v)
+            return 10**9
+
+        steps_sorted = sorted(steps, key=_step_key)
+
+        pending_list = [s for s in steps_sorted if getattr(s, "status", None) == "pending"]
+        pending = pending_list[0] if pending_list else None
+        if not pending:
+            return {"ok": False, "why": "no_pending_step"}
+
+        p_uid = (getattr(pending, "userid_snapshot", None) or "").strip()
+        p_unm = (getattr(pending, "username_snapshot", None) or "").strip()
+        a_uid = (actor_userid or "").strip()
+        a_unm = (actor_username or "").strip()
+
+        # ✅ 정확 기준: userid_snapshot / username_snapshot 일치만 허용
+        is_match = (a_uid and p_uid and a_uid == p_uid) or (a_unm and p_unm and a_unm == p_unm)
+
+        current_app.logger.debug(
+            "[apply_approval_action] doc_id=%s action=%s pending_col=%s pending_uid=%r pending_unm=%r actor_uid=%r actor_unm=%r match=%s",
+            doc_id, action, getattr(pending, "col_index", None), p_uid, p_unm, a_uid, a_unm, is_match
+        )
+
+        if not is_match:
+            return {
+                "ok": False,
+                "why": "not_your_pending_step",
+                "pending": {"col_index": getattr(pending, "col_index", None), "userid_snapshot": p_uid, "username_snapshot": p_unm},
+                "actor": {"userid": a_uid, "username": a_unm},
+            }
+
+        now = datetime.now()  # 프로젝트가 naive KST를 쓰는 편이면 이게 가장 안전
+
+        # ✅ 승인/반려 공통: 현재 pending step에 서명자/시간은 반드시 기록
+        pending.signed_by_user_id = int(actor_db_id)  # (1) 형 요구: user.id
+        pending.signed_at = now                       # (2) 형 요구: 현재시간
+        if note is not None and hasattr(pending, "note"):
+            pending.note = note
+
+        if action == "approve":
+            pending.status = "done"
+
+            # 다음 스텝 pending 승격(있으면)
+            # - 보통 wait → pending
+            next_step = None
+            for s in steps_sorted:
+                if getattr(s, "status", None) in ("wait", "pending") and _step_key(s) > _step_key(pending):
+                    next_step = s
+                    break
+
+            if next_step and next_step.status != "done":
+                next_step.status = "pending"
+                doc.status = "in_review"
+            else:
+                # 더 이상 결재할 사람이 없으면 문서 승인 완료
+                doc.status = "approved"
+
+            db.session.commit()
+            return {
+                "ok": True,
+                "action": "approve",
+                "doc_status": doc.status,
+                "signed_step": {"id": pending.id, "col_index": getattr(pending, "col_index", None)},
+                "next_step": {"id": getattr(next_step, "id", None), "col_index": getattr(next_step, "col_index", None)} if next_step else None,
+            }
+
+        if action == "reject":
+            pending.status = "rejected"
+            doc.status = "rejected"
+
+            # (선택) 뒤 스텝을 wait로 돌리고 싶으면 여기서 정리
+            for s in steps_sorted:
+                if _step_key(s) > _step_key(pending) and getattr(s, "status", None) in ("pending", "wait"):
+                    s.status = "wait"
+
+            db.session.commit()
+            return {
+                "ok": True,
+                "action": "reject",
+                "doc_status": doc.status,
+                "signed_step": {"id": pending.id, "col_index": getattr(pending, "col_index", None)},
+            }
+
+        return {"ok": False, "why": "invalid_action", "action": action}
+    
+
+
+    @staticmethod
+    def get_approval_runtime_map(doc_id: int) -> dict[int, dict]:
+        """
+        document_approval_steps에서 col_index별 status를 읽어서
+        렌더러가 쓰기 쉬운 runtime map으로 반환.
+        return 예:
+          {2: {"status":"done","stamp_text":"완료","step_id":210}, ...}
+        """
+        try:
+            # 프로젝트 모델명에 맞게 import만 맞춰줘
+            from pybo.models import DocumentApprovalStep  # or DocumentApprovalStepModel
+        except Exception:
+            from pybo.models import DocumentApprovalStepModel as DocumentApprovalStep
+
+        try:
+            rows = (
+                DocumentApprovalStep.query
+                .filter(DocumentApprovalStep.document_info_id == int(doc_id))
+                .order_by(DocumentApprovalStep.col_index.asc())
+                .all()
+            )
+
+            out: dict[int, dict] = {}
+            for r in rows:
+                col = int(getattr(r, "col_index", 0) or 0)
+                st = (getattr(r, "status", "") or "").strip().lower()
+
+                # 텍스트 정책(원하면 여기서 바꾸면 됨)
+                stamp_text = None
+                if st in ("reject", "rejected", "deny", "denied", "returned"):
+                    stamp_text = "반려"
+                elif st in ("done", "approved", "approve", "signed"):
+                    stamp_text = "완료"
+
+                out[col] = {
+                    "status": st,
+                    "stamp_text": stamp_text,
+                    "step_id": int(getattr(r, "id", 0) or 0),
+                }
+
+            current_app.logger.debug(
+                "[approval_runtime_map] doc_id=%s steps=%s sample=%s",
+                doc_id, len(out), list(out.items())[:3]
+            )
+            return out
+
+        except Exception:
+            current_app.logger.debug("[approval_runtime_map] failed doc_id=%s", doc_id, exc_info=True)
+            return {}
+

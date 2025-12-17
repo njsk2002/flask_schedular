@@ -857,10 +857,24 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
 
                 dept = c.get("dept") or ""
                 role = c.get("role") or ""
-                username = c.get("user_name") or c.get("user_id") or ""
+                raw_name = c.get("user_name")
+                raw_id = c.get("user_id")
+                username = str(raw_name if raw_name not in (None, "") else (raw_id if raw_id is not None else ""))
+
                 label = dept or role or username
 
+                rt = c.get("runtime") or {}
+                slot_status = rt.get("status")
+                if slot_status is None:
+                    slot_status = c.get("status")
+
+                slot_stamp_text = rt.get("stamp_text")
+                if slot_stamp_text is None:
+                    slot_stamp_text = c.get("stamp_text")
+
                 slot = {
+                    "status": c.get("status") or (c.get("runtime") or {}).get("status"),
+                    "stamp_text": c.get("stamp_text") or (c.get("runtime") or {}).get("stamp_text"),
                     "id": c.get("id"),
                     "col_index": idx,
                     "group": c.get("group"),  # draft / check 등
@@ -980,24 +994,54 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
     log_layers_summary(out, where="convert_editor_layers_to_render_layers")
     return out
 
-
+def _normalize_layout_snapshot(layout_snapshot) -> dict:
+    """
+    layout_snapshot_json이 dict로 오기도 하고, JSON 문자열(TEXT)로 오기도 하므로 통일.
+    """
+    if layout_snapshot is None:
+        return {}
+    if isinstance(layout_snapshot, dict):
+        return layout_snapshot
+    if isinstance(layout_snapshot, str):
+        s = layout_snapshot.strip()
+        if not s:
+            return {}
+        try:
+            obj = json.loads(s)
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
+    return {}
 
 def apply_editor_layout_to_image(im, width: int, height: int, layout_snapshot: dict):
-    """
-    layout_snapshot_json 구조:
-    {
-      "version": 1,
-      "canvas": {...},
-      "editor_layers": [ ... ],
-      "process_map": {...},
-      "process_runtime": {...}
-    }
+    ls = layout_snapshot or {}
 
-    여기서 editor_layers만 뽑아 내부 렌더링 layers로 변환 후 apply_layers_to_image 적용.
-    """
-    editor_layers = (layout_snapshot or {}).get("editor_layers") or []
+    # 1) 구 구조 우선
+    editor_layers = ls.get("editor_layers") or ls.get("layers") or []
+
+    # 2) 신 구조(또는 혼합) 호환: layers_json 지원
+    if (not editor_layers) and ("layers_json" in ls):
+        raw = ls.get("layers_json")
+        if isinstance(raw, dict) and "layers" in raw:
+            editor_layers = raw.get("layers") or []
+        elif isinstance(raw, list):
+            editor_layers = raw
+
     layers = convert_editor_layers_to_render_layers(editor_layers)
+
+    # 🔥 디버깅 로그(필수)
+    try:
+        current_app.logger.debug(
+            "[apply_editor_layout_to_image] keys=%s editor_layers=%d internal_layers=%d",
+            list(ls.keys()),
+            len(editor_layers or []),
+            len(layers or []),
+        )
+    except Exception:
+        pass
+
     return apply_layers_to_image(im, width, height, layers)
+
 
 #-----------------------------------------------------------
 #            QR 생성 
@@ -1132,9 +1176,13 @@ def apply_layers_to_image(im, width, height, layers):
 
             border_width = max(1, int(round(2 * smin)))
 
+            # 바깥 박스: ✅ 배경을 흰색(불투명)으로 채워서 아래 레이어가 안 비치게
+            bg_white = parse_color("#ffffff", (255, 255, 255, 255))
+
             # 바깥 박스
             draw.rectangle(
                 [px, py, px + pw, py + ph],
+                fill=bg_white,              # ✅ 핵심
                 outline=border_color,
                 width=border_width,
             )
@@ -1314,29 +1362,84 @@ def apply_layers_to_image(im, width, height, layers):
                     stamp_box_size = int(round(min(col_w, stamp_row_h) * stamp_scale))
                     stamp_cx = col_x0 + col_w // 2
                     stamp_cy = stamp_y0 + stamp_row_h // 2
-                    stamp_x0 = stamp_cx - stamp_box_size // 2
-                    stamp_y0_ = stamp_cy - stamp_box_size // 2
-                    stamp_x1 = stamp_x0 + stamp_box_size
-                    stamp_y1_ = stamp_y0_ + stamp_box_size
 
-                    # ✅ [NEW] 작성(role=="작성")이면 user_photo_1을 stamp 영역에 합성
+                    stamp_box_x0 = stamp_cx - stamp_box_size // 2
+                    stamp_box_y0 = stamp_cy - stamp_box_size // 2
+                    stamp_box_x1 = stamp_box_x0 + stamp_box_size
+                    stamp_box_y1 = stamp_box_y0 + stamp_box_size
+
+                    # ✅ [ADD] 작성(role=="작성")이면 user_photo_1을 stamp 영역에 합성, 없으면 "완료"
+                    # ✅ [FIX] col_index + status 기반으로 도장/완료/반려 표시
                     try:
                         role = (S.get("role") or "").strip()
-                        photo_fn = S.get("user_photo_1")
-                        photo_path = _safe_photo_abs(photo_fn) if photo_fn else None
+                        col_index = int(S.get("col_index") or 0)
 
-                        pad = max(2, int(min(stamp_box_size, stamp_box_size) * 0.05))
-                        sign_x = stamp_x0 + pad
-                        sign_y = stamp_y0_ + pad
+                        # status는 스냅샷이면 None일 수 있음 → 기본값 ''
+                        status = (S.get("status") or "").strip().lower()
+
+                        # 사용자 서명 토큰(있으면 우선)
+                        photo_fn = (S.get("user_photo_1") or "").strip()
+                        photo_path = _safe_photo_abs(photo_fn) if photo_fn else None
+                        exists = bool(photo_path and os.path.isfile(photo_path))
+
+                        current_app.logger.debug(
+                            "[signbox:slot] group=%s col_index=%s role=%r status=%r user_id=%r "
+                            "photo_fn=%r photo_path=%r exists=%s stamp_box=(%d,%d,%d,%d)",
+                            S.get("group"), col_index, role, status, S.get("user_id"),
+                            photo_fn, photo_path, exists,
+                            stamp_box_x0, stamp_box_y0, stamp_box_x1, stamp_box_y1
+                        )
+
+                        pad = max(2, int(stamp_box_size * 0.05))
+                        sign_x = stamp_box_x0 + pad
+                        sign_y = stamp_box_y0 + pad
                         sign_w = max(1, stamp_box_size - 2 * pad)
                         sign_h = max(1, stamp_box_size - 2 * pad)
 
-                        if role == "작성":
-                            if photo_path:
-                                with Image.open(photo_path) as sig:
-                                    _paste_fit(base, sig, (sign_x, sign_y, sign_w, sign_h))
-                            else:
-                                # 없으면 "완료" 텍스트 (stamp 영역 중앙)
+                        # ---------------------------------------------------------
+                        # ✅ 표시 규칙(추천)
+                        #  - status가 done/approved면: 서명(있으면) 또는 "완료"
+                        #  - status가 reject/rejected면: "반려"
+                        #  - status가 없으면(스냅샷) : col_index==1(작성)만 기본 표시(기존과 동일)
+                        # ---------------------------------------------------------
+                        is_done = status in ("done", "approved", "approve", "signed")
+                        is_reject = status in ("reject", "rejected", "deny", "returned")
+
+                        should_draw = False
+                        draw_mode = None  # "sig" | "done" | "reject"
+
+                        if is_reject:
+                            should_draw = True
+                            draw_mode = "reject"
+                        elif is_done:
+                            should_draw = True
+                            draw_mode = "sig" if exists else "done"
+                        else:
+                            # status가 비어있으면(현재 너 로그처럼 None) → 작성칸(col_index=1)만 기본 표시
+                            if col_index == 1:
+                                should_draw = True
+                                draw_mode = "sig" if exists else "done"
+
+                        current_app.logger.debug(
+                            "[signbox:decision] col_index=%s role=%r status=%r should_draw=%s draw_mode=%s",
+                            col_index, role, status, should_draw, draw_mode
+                        )
+
+                        if should_draw:
+                            if draw_mode == "sig":
+                                try:
+                                    with Image.open(photo_path) as sig:
+                                        _paste_fit(base, sig, (sign_x, sign_y, sign_w, sign_h))
+                                    current_app.logger.debug("[signbox:render] pasted signature col_index=%s", col_index)
+                                except Exception:
+                                    current_app.logger.debug(
+                                        "[signbox:render] signature open/paste failed col_index=%s photo_path=%r",
+                                        col_index, photo_path, exc_info=True
+                                    )
+                                    # 실패하면 텍스트로 fallback
+                                    draw_mode = "done"
+
+                            if draw_mode == "done":
                                 done_txt = "완료"
                                 done_font = auto_font(
                                     done_txt,
@@ -1347,16 +1450,34 @@ def apply_layers_to_image(im, width, height, layers):
                                     height_ratio=0.6,
                                     bold=False,
                                 )
-                                # 중앙 배치
-                                try:
-                                    bbox = _AUTO_FONT_DRAW.textbbox((0, 0), done_txt, font=done_font)
-                                    tw = bbox[2] - bbox[0]
-                                    th = bbox[3] - bbox[1]
-                                except Exception:
-                                    tw, th = sign_w, sign_h
+                                bbox = _AUTO_FONT_DRAW.textbbox((0, 0), done_txt, font=done_font)
+                                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
                                 tx = sign_x + max(0, (sign_w - tw) // 2)
                                 ty = sign_y + max(0, (sign_h - th) // 2)
                                 draw.text((tx, ty), done_txt, fill=font_color, font=done_font)
+                                current_app.logger.debug("[signbox:render] drew DONE text col_index=%s", col_index)
+
+                            if draw_mode == "reject":
+                                rej_txt = "반려"
+                                rej_font = auto_font(
+                                    rej_txt,
+                                    box_w=sign_w,
+                                    box_h=sign_h,
+                                    max_px=int(sign_h * 0.7),
+                                    min_px=int(10 * smin),
+                                    height_ratio=0.6,
+                                    bold=False,
+                                )
+                                bbox = _AUTO_FONT_DRAW.textbbox((0, 0), rej_txt, font=rej_font)
+                                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                                tx = sign_x + max(0, (sign_w - tw) // 2)
+                                ty = sign_y + max(0, (sign_h - th) // 2)
+                                draw.text((tx, ty), rej_txt, fill=font_color, font=rej_font)
+                                current_app.logger.debug("[signbox:render] drew REJECT text col_index=%s", col_index)
+
+                    except Exception:
+                        current_app.logger.debug("[signbox] stamp render block failed", exc_info=True)
+
                     except Exception:
                         current_app.logger.debug("[signbox] user_photo_1 paste failed", exc_info=True)
 
@@ -1382,6 +1503,7 @@ def apply_layers_to_image(im, width, height, layers):
                         tx = col_x0 + max(0, (col_w - tw) // 2)
                         ty = center_top_bias(name_y0, name_h, th, bias=0.40)
                         draw.text((tx, ty), name_label, fill=font_color, font=name_font)
+
 
             # 왼쪽 draft: "작성부서"
             if draft_geo:
@@ -1515,10 +1637,6 @@ def apply_layers_to_image(im, width, height, layers):
             continue
 
     return base.convert("RGB")
-
-
-
-
 
 
 def composite_sign_on_slot(im_canvas, width, height, layers, slot_role, sign_img_rgba):
@@ -2283,3 +2401,150 @@ def save_device_upload_bundle(
         json.dump(meta_json, f, ensure_ascii=False, indent=2)
 
     return {"bin": bin_path, "json": json_path}
+
+
+def inject_approval_runtime_into_snapshot(layout_snapshot: dict, runtime_map: dict[int, dict]) -> int:
+    """
+    layout_snapshot 안의 approval_box.columns(여러 위치)에
+    runtime/status를 주입해서 렌더러가 slot.status를 채울 수 있게 만든다.
+    """
+    if not layout_snapshot or not runtime_map:
+        return 0
+
+    def _apply_to_columns(cols: list) -> int:
+        changed = 0
+        if not isinstance(cols, list):
+            return 0
+        for c in cols:
+            if not isinstance(c, dict):
+                continue
+            try:
+                col = int(c.get("col_index") or 0)
+            except Exception:
+                col = 0
+            if col <= 0:
+                continue
+
+            rt = runtime_map.get(col)
+            if not rt:
+                continue
+
+            # ✅ 호환을 위해 runtime + status 둘 다 세팅
+            c["status"] = rt.get("status", c.get("status"))
+            if rt.get("stamp_text") is not None:
+                c["stamp_text"] = rt.get("stamp_text")
+
+            runtime = c.get("runtime") or {}
+            runtime["status"] = rt.get("status")
+            if rt.get("stamp_text") is not None:
+                runtime["stamp_text"] = rt.get("stamp_text")
+            c["runtime"] = runtime
+
+            changed += 1
+        return changed
+
+    changed_total = 0
+
+    # 1) tpl_json.approval_box.columns
+    try:
+        cols = (((layout_snapshot.get("tpl_json") or {}).get("approval_box") or {}).get("columns")) or []
+        changed_total += _apply_to_columns(cols)
+    except Exception:
+        pass
+
+    # 2) slots_json.approval.columns
+    try:
+        cols = (((layout_snapshot.get("slots_json") or {}).get("approval") or {}).get("columns")) or []
+        changed_total += _apply_to_columns(cols)
+    except Exception:
+        pass
+
+    # 3) layers_json 내 approval_box.columns
+    try:
+        layers = layout_snapshot.get("layers_json") or []
+        if isinstance(layers, list):
+            for L in layers:
+                if not isinstance(L, dict):
+                    continue
+                if (L.get("type") or "").lower() != "approval_box":
+                    continue
+                cols = L.get("columns") or []
+                changed_total += _apply_to_columns(cols)
+    except Exception:
+        pass
+
+    try:
+        current_app.logger.debug(
+            "[inject_runtime] changed=%s keys=%s",
+            changed_total, sorted(runtime_map.keys())
+        )
+    except Exception:
+        pass
+
+    return changed_total
+
+
+
+def inject_user_photo1_into_snapshot(layout_snapshot: dict) -> int:
+    if not layout_snapshot:
+        return 0
+
+    try:
+        from pybo.models import User
+    except Exception:
+        return 0
+
+    def _fill(cols: list) -> int:
+        changed = 0
+        if not isinstance(cols, list):
+            return 0
+
+        for c in cols:
+            if not isinstance(c, dict):
+                continue
+
+            uid = c.get("user_id")
+            if not uid:
+                continue
+
+            # 이미 프론트/기존값이 있으면 그대로 두고 싶으면 여기서 skip
+            # if (c.get("user_photo_1") or "").strip():
+            #     continue
+
+            u = None
+            try:
+                if isinstance(uid, int) or (isinstance(uid, str) and uid.isdigit()):
+                    u = User.query.filter(User.id == int(uid)).first()
+                else:
+                    u = User.query.filter(User.userid == str(uid)).first()
+            except Exception:
+                u = None
+
+            new_photo = (getattr(u, "photo_1", "") or "").strip() if u else ""
+            old_photo = (c.get("user_photo_1", "") or "").strip()
+
+            if new_photo != old_photo:
+                c["user_photo_1"] = new_photo
+                changed += 1
+
+        return changed
+
+    changed_total = 0
+
+    # tpl_json.approval_box.columns
+    cols = (((layout_snapshot.get("tpl_json") or {}).get("approval_box") or {}).get("columns")) or []
+    changed_total += _fill(cols)
+
+    # slots_json.approval.columns
+    cols = (((layout_snapshot.get("slots_json") or {}).get("approval") or {}).get("columns")) or []
+    changed_total += _fill(cols)
+
+    # layers_json approval_box.columns
+    layers = layout_snapshot.get("layers_json") or []
+    if isinstance(layers, list):
+        for L in layers:
+            if isinstance(L, dict) and (L.get("type") or "").lower() == "approval_box":
+                changed_total += _fill(L.get("columns") or [])
+
+    return changed_total
+

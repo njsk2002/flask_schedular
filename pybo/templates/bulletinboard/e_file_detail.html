@@ -1,181 +1,174 @@
 {% extends "e_base.html" %}
-
 {% block content %}
 <div class="container-fluid py-3">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0">전자결재 문서 상세</h4>
-    <a href="{{ url_for('bulletin.file_table', tab='author') }}" class="btn btn-sm btn-outline-secondary">
-      목록으로
-    </a>
+    <a href="{{ url_for('bulletin.file_table', tab='author') }}" class="btn btn-sm btn-outline-secondary">목록으로</a>
   </div>
 
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5 class="card-title mb-1">
-        {{ doc.doc_name or doc.orig_filename }}
-      </h5>
-      <p class="text-muted small mb-2">
-        작성자: {{ doc.user.department or '' }} {{ doc.user.username or '' }}<br>
-        작성일: {{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}
-      </p>
+  <div class="row g-3">
+    <!-- LEFT: 메뉴/정보 -->
+    <div class="col-12 col-xl-4 col-xxl-3">
 
-      <p class="mb-0">
-        상태:
-        {% set s = doc.status %}
-        {% if s == 'draft' %}
-          <span class="badge bg-secondary">작성중</span>
-        {% elif s == 'in_review' %}
-          <span class="badge bg-info text-dark">결재진행</span>
-        {% elif s == 'checked' %}
-          <span class="badge bg-warning text-dark">검토완료</span>
-        {% elif s == 'approved' %}
-          <span class="badge bg-success">결재완료</span>
-        {% elif s == 'rejected' %}
-          <span class="badge bg-danger">반려</span>
-        {% else %}
-          <span class="badge bg-light text-muted">{{ s }}</span>
-        {% endif %}
-      </p>
-    </div>
-  </div>
+      <!-- 문서 정보 -->
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title mb-1">{{ doc.doc_name or doc.orig_filename }}</h5>
+          <p class="text-muted small mb-2">
+            작성자: {{ doc.user.department or '' }} {{ doc.user.username or '' }}<br>
+            작성일: {{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}
+          </p>
 
-  <div class="card mb-3">
-    <div class="card-header py-2">
-      <strong>결재선</strong>
-    </div>
-    <div class="card-body py-2">
-      {% if doc.approval_steps %}
-        {% for step in doc.approval_steps|sort(attribute='col_index') %}
-          <div class="small mb-1">
-            <strong>{{ step.step_type }}</strong> / {{ step.username_snapshot or '미지정' }}
-
-            {% if step.status == 'pending' %}
-              <span class="badge bg-light text-muted ms-1">대기</span>
-            {% elif step.status == 'signed' %}
-              <span class="badge bg-success ms-1">완료</span>
+          <p class="mb-0">
+            상태:
+            {% set s = doc.status %}
+            {% if s == 'draft' %}<span class="badge bg-secondary">작성중</span>
+            {% elif s == 'in_review' %}<span class="badge bg-info text-dark">결재진행</span>
+            {% elif s == 'approved' %}<span class="badge bg-success">결재완료</span>
+            {% elif s == 'rejected' %}<span class="badge bg-danger">반려</span>
+            {% else %}<span class="badge bg-light text-muted">{{ s }}</span>
             {% endif %}
+          </p>
+        </div>
+      </div>
 
-            {% if step.signed_at %}
-              <span class="text-muted ms-2">({{ step.signed_at.strftime('%Y-%m-%d %H:%M') }})</span>
+      <!-- 결재/반려 버튼 -->
+      <div class="card mt-3">
+        <div class="card-header py-2"><strong>처리</strong></div>
+        <div class="card-body">
+          {% if can_act %}
+            <div class="d-grid gap-2">
+              <button id="btnApprove" class="btn btn-primary btn-sm">결재</button>
+              <button id="btnReject" class="btn btn-outline-danger btn-sm">반려</button>
+            </div>
+            <div class="text-muted small mt-2">
+              * 결재/반려 시 해당 칸에 도장(또는 완료/반려)이 찍히고 미리보기가 갱신됩니다.
+            </div>
+          {% else %}
+            <div class="text-muted small">
+              현재 사용자에게 대기(pending)된 결재 단계가 없습니다.
+              {% if pending_step %}
+                <div class="mt-1">
+                  다음 대기: <strong>{{ pending_step.step_type }}</strong> / {{ pending_step.username_snapshot or '미지정' }}
+                </div>
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 결재선 -->
+      <div class="card mt-3">
+        <div class="card-header py-2"><strong>결재선</strong></div>
+        <div class="card-body py-2">
+          {% if doc.approval_steps %}
+            {% for step in doc.approval_steps|sort(attribute='col_index') %}
+              <div class="small mb-1">
+                <strong>{{ step.step_type }}</strong> / {{ step.username_snapshot or '미지정' }}
+                {% if step.status == 'pending' %}
+                  <span class="badge bg-warning text-dark ms-1">대기</span>
+                {% elif step.status == 'done' %}
+                  <span class="badge bg-success ms-1">완료</span>
+                {% elif step.status == 'rejected' %}
+                  <span class="badge bg-danger ms-1">반려</span>
+                {% else %}
+                  <span class="badge bg-light text-muted ms-1">{{ step.status }}</span>
+                {% endif %}
+                {% if step.signed_at %}
+                  <span class="text-muted ms-2">({{ step.signed_at.strftime('%Y-%m-%d %H:%M') }})</span>
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted small mb-0">결재선 정보가 없습니다.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 파일 다운로드 -->
+      <div class="card mt-3">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <strong>파일</strong>
+        </div>
+        <div class="card-body py-2">
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if files.original %}
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname=files.original) }}">
+                원본: {{ files.original }}
+              </a>
+            {% endif %}
+            {% if files.preview_merged %}
+              <a class="btn btn-sm btn-outline-dark"
+                 href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname=files.preview_merged) }}">
+                {{ files.preview_merged }}
+              </a>
+            {% endif %}
+            {% if files.normalized_pdf %}
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname='normalized.pdf') }}">
+                normalized.pdf
+              </a>
+            {% endif %}
+            {% if files.onelayer_bmp %}
+              <a class="btn btn-sm btn-outline-success"
+                 href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname='onelayer.bmp') }}">
+                onelayer.bmp
+              </a>
             {% endif %}
           </div>
-        {% endfor %}
-      {% else %}
-        <p class="text-muted small mb-0">결재선 정보가 없습니다.</p>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ===== 다운로드(5종) + 미리보기 토글 ===== #}
-  <div class="card mb-3">
-    <div class="card-header py-2 d-flex justify-content-between align-items-center">
-      <strong>파일</strong>
-
-      <div class="btn-group btn-group-sm" role="group" aria-label="preview toggle">
-        <button id="btnOriginal" type="button" class="btn btn-outline-primary">원본 보기</button>
-        <button id="btnBmp" type="button" class="btn btn-outline-success">BMP 보기</button>
-      </div>
-    </div>
-
-    <div class="card-body py-2">
-      <div class="d-flex flex-wrap gap-2 align-items-center">
-
-        {# 1) 원본 파일(original.*) #}
-        {% if files.original %}
-          <a class="btn btn-sm btn-outline-primary"
-             href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname=files.original) }}">
-            원본파일: {{ files.original }}
-          </a>
-        {% endif %}
-
-        {# 2) preview_merged.png #}
-        {% if files.preview_merged %}
-          <a class="btn btn-sm btn-outline-dark"
-            href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname=files.preview_merged) }}">
-            {{ files.preview_merged }}
-          </a>
-        {% endif %}
-
-
-        {# 3) normalized.pdf #}
-        {% if files.normalized_pdf %}
-          <a class="btn btn-sm btn-outline-secondary"
-             href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname='normalized.pdf') }}">
-            normalized.pdf
-          </a>
-        {% endif %}
-
-        {# 4) onelayer.bmp #}
-        {% if files.onelayer_bmp %}
-          <a class="btn btn-sm btn-outline-success"
-             href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname='onelayer.bmp') }}">
-            onelayer.bmp
-          </a>
-        {% endif %}
-
-        {# 5) onelayer.bin #}
-        {% if files.onelayer_bin %}
-          <a class="btn btn-sm btn-outline-warning"
-             href="{{ url_for('bulletin.file_download', doc_id=doc.id, fname='onelayer.bin') }}">
-            onelayer.bin
-          </a>
-        {% endif %}
-
+        </div>
       </div>
 
-      {% if not files.original and not files.preview_merged and not files.normalized_pdf and not files.onelayer_bmp and not files.onelayer_bin %}
-        <div class="text-muted small mt-2">표시할 파일이 없습니다.</div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ===== 미리보기 영역: (1) preview_merged.png / (2) onelayer.bmp ===== #}
-  <div class="card mb-3">
-    <div class="card-header py-2">
-      <strong>미리보기</strong>
-      <span class="text-muted small ms-2" id="previewHint"></span>
     </div>
 
-    <div class="card-body">
-      {# --- 원본 보기 Pane: preview_merged.png --- #}
-      <div id="paneOriginal" style="display:block;">
-        {% if preview_merged_inline_url %}
-          <div class="border rounded p-2 bg-light" style="max-width:980px; margin:0 auto;">
-            <img
-              src="{{ preview_merged_inline_url }}"
-              style="max-width:100%; height:auto; display:block;"
-              alt="preview_merged.png preview">
+    <!-- RIGHT: 미리보기 -->
+    <div class="col-12 col-xl-8 col-xxl-9">
+      <div class="card">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <div>
+            <strong>미리보기</strong>
+            <span class="text-muted small ms-2" id="previewHint"></span>
           </div>
-        {% else %}
-          <div class="text-muted small">preview_merged.png가 없습니다.</div>
-        {% endif %}
-      </div>
-
-      {# --- BMP 보기 Pane: onelayer.bmp --- #}
-      <div id="paneBmp" style="display:none;">
-        {% if onelayer_bmp_inline_url %}
-          <div class="border rounded p-2 bg-light" style="max-width:980px; margin:0 auto;">
-            <img
-              src="{{ onelayer_bmp_inline_url }}"
-              style="max-width:100%; height:auto; display:block;"
-              alt="onelayer.bmp preview">
+          <div class="btn-group btn-group-sm" role="group">
+            <button id="btnOriginal" type="button" class="btn btn-outline-primary">원본 보기</button>
+            <button id="btnBmp" type="button" class="btn btn-outline-success">BMP 보기</button>
           </div>
-        {% else %}
-          <div class="text-muted small">onelayer.bmp가 없습니다.</div>
-        {% endif %}
+        </div>
+        <div class="card-body">
+          <div id="paneOriginal" style="display:block;">
+            {% if preview_merged_inline_url %}
+              <div class="border rounded p-2 bg-light">
+                <img src="{{ preview_merged_inline_url }}" style="max-width:100%; height:auto; display:block;">
+              </div>
+            {% else %}
+              <div class="text-muted small">preview_merged.png가 없습니다.</div>
+            {% endif %}
+          </div>
+
+          <div id="paneBmp" style="display:none;">
+            {% if onelayer_bmp_inline_url %}
+              <div class="border rounded p-2 bg-light">
+                <img src="{{ onelayer_bmp_inline_url }}" style="max-width:100%; height:auto; display:block;">
+              </div>
+            {% else %}
+              <div class="text-muted small">onelayer.bmp가 없습니다.</div>
+            {% endif %}
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
+  </div>
 </div>
 
 <script>
+  // preview toggle
   const btnOriginal = document.getElementById("btnOriginal");
   const btnBmp = document.getElementById("btnBmp");
   const paneOriginal = document.getElementById("paneOriginal");
   const paneBmp = document.getElementById("paneBmp");
   const previewHint = document.getElementById("previewHint");
-
   function setActive(which) {
     if (which === "original") {
       paneOriginal.style.display = "block";
@@ -191,11 +184,26 @@
       previewHint.textContent = "onelayer.bmp";
     }
   }
-
   btnOriginal?.addEventListener("click", () => setActive("original"));
   btnBmp?.addEventListener("click", () => setActive("bmp"));
-
-  // 기본: 원본 보기
   setActive("original");
+
+  // approve/reject
+  const btnApprove = document.getElementById("btnApprove");
+  const btnReject = document.getElementById("btnReject");
+
+  async function postAction(url, confirmText) {
+    if (!confirm(confirmText)) return;
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }});
+    if (r.ok) location.reload();
+    else alert("처리에 실패했습니다.");
+  }
+
+  btnApprove?.addEventListener("click", () => postAction(
+    "{{ url_for('bulletin.approve_file', doc_id=doc.id) }}", "결재 처리할까요?"
+  ));
+  btnReject?.addEventListener("click", () => postAction(
+    "{{ url_for('bulletin.reject_file', doc_id=doc.id) }}", "반려 처리할까요?"
+  ));
 </script>
 {% endblock %}

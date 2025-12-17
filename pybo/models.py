@@ -943,9 +943,10 @@ class DocumentApprovalStep(db.Model):
 
     # 1~5 열
     col_index = db.Column(db.Integer, nullable=False)  # 1..5
-
     # 단계(작성/검토/승인)
     step_type = db.Column(db.Enum('작성','검토','승인', name='approval_step_type'), nullable=False)
+
+
 
     # 스냅샷(그 시점의 부서/이름/사진 등)
     dept_snapshot      = db.Column(db.String(150))
@@ -953,8 +954,13 @@ class DocumentApprovalStep(db.Model):
     username_snapshot  = db.Column(db.String(150))
     photo_1_snapshot   = db.Column(db.String(500))
 
-    # 진행 상태
-    status = db.Column(db.Enum('pending','signed', name='approval_sign_status'), nullable=False, default='pending')
+    # 진행 상태 (A안)
+    status = db.Column(
+        db.Enum('wait', 'pending', 'done', 'checked', 'reviewed', 'approved', name='approval_sign_status'),
+        nullable=False,
+        default='wait'
+    )
+
     signed_by_user_id = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='SET NULL'))
     signed_at         = db.Column(MySQLDateTime(fsp=0))
 

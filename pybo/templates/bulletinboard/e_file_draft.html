@@ -4,16 +4,13 @@
 <div class="container-fluid py-3" id="draft-app">
 
   <!-- 헤더 -->
-  <div class="d-flex align-items-center justify-content-between mb-3">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
     <div class="d-flex align-items-center gap-3">
-      <h3 class="mb-0">E-Ink 파일 작성 · 검토 · 배포 (단일)</h3>
+      <h3 class="mb-0">게시판 파일 작성</h3>
       <span class="badge text-bg-secondary" id="device-badge">대상 장치 선택 전</span>
     </div>
-    <div class="d-flex gap-2">
-      <button class="btn btn-outline-secondary" id="btn-save-draft">임시저장</button>
-      <!-- 🔹 원본/BMP 토글 버튼 -->
+    <div class="d-flex gap-2 flex-wrap">
       <button class="btn btn-outline-dark" id="btn-bmp-toggle">BMP확인</button>
-      <button class="btn btn-outline-primary" id="btn-export-editor" title="편집 레이어를 이미지에 굽기(서버 빌드)">편집결과 내보내기</button>
       <button class="btn btn-success" id="btn-send">전송/배포</button>
     </div>
   </div>
@@ -21,18 +18,72 @@
   <!-- 토스트 -->
   <div id="toast-area" class="position-fixed top-0 end-0 p-3" style="z-index:1080;"></div>
 
-  <!-- 스타일 -->
+  <!-- ✅ Busy Modal -->
+  <div class="modal fade" id="busyModal" tabindex="-1" aria-hidden="true"
+      data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg">
+        <div class="modal-header">
+          <div class="d-flex align-items-center gap-2">
+            <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+            <h5 class="modal-title mb-0" id="busyTitle">현재 파일 생성중입니다</h5>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="small text-muted mb-2" id="busyDesc">처리 중...</div>
+
+          <div class="progress" style="height:10px;">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                id="busyBar" style="width: 12%"></div>
+          </div>
+
+          <div class="d-flex justify-content-between mt-2">
+            <small class="text-muted" id="busyStep">준비중</small>
+            <small class="text-muted" id="busyPct">12%</small>
+          </div>
+
+          <div class="mt-3 p-2 rounded bg-light small" id="busyLog"
+              style="max-height:140px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
+            · 요청을 처리하는 중입니다...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <style>
+    /* ===== Layout ===== */
+    #draft-app .left-panel{
+      position: sticky;
+      top: 12px;                 /* 헤더 아래로 살짝 띄우기 */
+      height: calc(100vh - 24px);/* 화면 거의 풀로 */
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 4px;
+    }
+    @media (max-width: 1199.98px){
+      #draft-app .left-panel{
+        position: static;
+        height: auto;
+        max-height: none;
+        overflow: visible;
+        padding-right: 0;
+      }
+    }
+
     /* ===== canvas / layers ===== */
     #draft-app .tool-btn { padding:.35rem .6rem; }
 
     #draft-app .canvas-wrap {
       background:#f8f9fa;
       border:1px solid #dee2e6;
-      border-radius:.5rem;
+      border-radius:.75rem;
       position:relative;
       overflow:hidden;
-      min-height:360px;
+      min-height: 520px;
+    }
+    @media (max-width: 576px){
+      #draft-app .canvas-wrap{ min-height: 360px; }
     }
 
     #draft-app .preview-img {
@@ -84,7 +135,7 @@
       left:0;
       font-size:12px;
       color:#0d6efd;
-      background:rgba(255,255,255,.8);
+      background:rgba(255,255,255,.85);
       padding:0 .25rem;
       border-radius:3px;
       pointer-events:none;
@@ -92,10 +143,14 @@
 
     #draft-app .layer.selected { outline:2px solid #198754; }
 
-    #draft-app .props small { color:#6c757d; }
-    #draft-app .hidden { display:none !important; }
+    /* ===== Editor line ===== */
+    #draft-app #editor strong{ font-size: 1rem; }
+    #draft-app #editor .props{
+      background:#fff;
+      min-width: 280px;
+    }
 
-    /* ===== 결재 박스 전용 스타일 ===== */
+    /* ===== 결재 박스 ===== */
     #draft-app .layer.approval-box {
       border:1px solid #000;
       background:#ffffff;
@@ -104,8 +159,6 @@
     #draft-app .approval-grid {
       position:absolute;
       inset:0;
-      margin:0;
-      padding:0;
       display:flex;
       font-size:11px;
       color:#000;
@@ -113,15 +166,12 @@
       box-sizing:border-box;
     }
 
-    /* 🔹 side 폭을 열 개수 기준으로 비율 조정 */
     #draft-app .approval-side {
       flex: var(--cols, 1) 1 0;
       display:flex;
       border-left:1px solid #000;
     }
-    #draft-app .approval-side:first-child {
-      border-left:0;
-    }
+    #draft-app .approval-side:first-child { border-left:0; }
 
     #draft-app .approval-side .dept-col {
       width:18%;
@@ -133,11 +183,10 @@
       justify-content:center;
       box-sizing:border-box;
     }
-
     #draft-app .approval-side .dept-vert-text {
       writing-mode:vertical-rl;
       text-orientation:mixed;
-      font-weight:600;
+      font-weight:700;
       letter-spacing:1px;
     }
 
@@ -148,25 +197,20 @@
       box-sizing:border-box;
     }
 
-    /* 🔹 3단 구조: header / stamp / name */
     #draft-app .approval-side .header-row,
     #draft-app .approval-side .stamp-row,
-    #draft-app .approval-side .name-row {
-      display:flex;
-    }
+    #draft-app .approval-side .name-row { display:flex; }
 
     #draft-app .approval-side .header-row {
       flex: 1 1 0;
       border-bottom:1px solid #000;
       background:#f1f3f5;
     }
-
     #draft-app .approval-side .stamp-row {
       flex: 3 1 0;
       border-bottom:1px solid #000;
       background:#ffffff;
     }
-
     #draft-app .approval-side .name-row {
       flex: 1 1 0;
       background:#ffffff;
@@ -183,21 +227,11 @@
       text-align:center;
       word-break:keep-all;
     }
-
-    #draft-app .approval-side .header-row .cell {
-      font-weight:600;
-      background:#f8f9fa;
-    }
-
-    #draft-app .approval-side .name-row .cell {
-      font-size:10px;
-    }
-
+    #draft-app .approval-side .header-row .cell { font-weight:700; background:#f8f9fa; }
+    #draft-app .approval-side .name-row .cell { font-size:10px; }
     #draft-app .approval-side .header-row .cell:last-child,
     #draft-app .approval-side .stamp-row .cell:last-child,
-    #draft-app .approval-side .name-row .cell:last-child {
-      border-right:0;
-    }
+    #draft-app .approval-side .name-row .cell:last-child { border-right:0; }
 
     #draft-app .approval-sign-img{
       max-width: 92%;
@@ -207,11 +241,10 @@
     }
     #draft-app .approval-done-text{
       font-size: 12px;
-      font-weight: 700;
+      font-weight: 800;
     }
 
-
-    /* 직인/QR/기간/메세지용 박스 공통 */
+    /* 직인/QR/기간/메세지용 박스 */
     #draft-app .layer.stamp-box,
     #draft-app .layer.qr-box,
     #draft-app .layer.period-box,
@@ -233,42 +266,14 @@
       word-break: keep-all;
     }
 
-    /* 🔹 텍스트/선/사각형을 프론트에서 “보이게” */
-    #draft-app .layer.text-layer {
-      background: rgba(255,255,255,.55);
-    }
-    #draft-app .text-content {
-      position:absolute;
-      inset:0;
-      padding:2px 4px;
-      display:flex;
-      align-items:center;
-      overflow:hidden;
-      white-space:pre-wrap;
-      word-break:break-word;
-    }
-
-    #draft-app .layer.line-layer {
-      border: none !important;
-      background: transparent !important;
-    }
-    #draft-app .line-content {
-      position:absolute;
-      inset:0;
-    }
-
-    #draft-app .layer.rect-layer {
-      border-style: solid !important;
-    }
-
-     /* 직인 strip (좌우 스크롤) */
+    /* 직인 strip */
     #stamp-list.stamp-strip{
       display:flex;
       gap:8px;
       overflow-x:auto;
       padding:6px 4px;
       border:1px solid #e9ecef;
-      border-radius:10px;
+      border-radius:12px;
       background:#fafafa;
       -webkit-overflow-scrolling:touch;
     }
@@ -276,12 +281,14 @@
       flex:0 0 auto;
       width:120px;
       border:1px solid #dee2e6;
-      border-radius:10px;
+      border-radius:12px;
       background:#fff;
       padding:8px;
       cursor:pointer;
       text-align:center;
+      transition: transform .08s ease;
     }
+    #stamp-list .stamp-card:hover{ transform: translateY(-1px); }
     #stamp-list .stamp-card.selected{
       outline:2px solid #198754;
       border-color:#86efac;
@@ -304,7 +311,7 @@
   <div class="row g-3">
 
     <!-- 설정 영역 -->
-    <div class="col-12 col-xl-4 order-2 order-xl-1">
+    <div class="col-12 col-xl-4 order-2 order-xl-1 left-panel">
 
       <!-- 1) 파일 -->
       <div class="card shadow-sm">
@@ -319,7 +326,7 @@
               <input type="text" class="form-control" id="input-filename" placeholder="파일명(표시용)" readonly>
             </div>
             <div class="col-4">
-              <select id="select-device" class="form-select">
+              <select id="select-device" class="form-select" disabled>
                 <option value="">대상 장치(E01~E06)</option>
                 <option value="E01">E01</option>
                 <option value="E02">E02</option>
@@ -330,7 +337,7 @@
               </select>
             </div>
           </div>
-          <input type="text" id="input-memo" class="form-control" placeholder="메모(옵션)">
+          <!-- <input type="text" id="input-memo" class="form-control" placeholder="메모(옵션)" disabled> -->
         </div>
       </div>
 
@@ -339,22 +346,23 @@
         <div class="card-header"><strong>옵션</strong></div>
         <div class="card-body d-flex flex-column gap-2">
           <div class="row g-2">
-            <div class="col-6">
+            <!-- <div class="col-6">
               <label class="form-label mb-1 small">해상도</label>
               <select class="form-select" id="select-res">
                 <option value="480x800">480×800</option>
-                <option value="800x480" >800×480</option>
+                <option value="800x480">800×480</option>
                 <option value="1200x1600" selected>1200×1600</option>
               </select>
             </div>
             <div class="col-6">
               <label class="form-label mb-1 small">컬러/팔레트</label>
-              <select class="form-select" id="select-mode">
+              <select class="form-select" id="select-mode" disabled>
                 <option value="BWRYBG" selected>6색 (BWRYBG)</option>
                 <option value="BWRY">3색 (BWRY)</option>
                 <option value="BW">흑백 (BW)</option>
               </select>
-            </div>
+            </div> -->
+
             <div class="col-6">
               <label class="form-label mb-1 small">스케일</label>
               <select class="form-select" id="select-scale">
@@ -363,10 +371,12 @@
                 <option value="percent">PERCENT</option>
               </select>
             </div>
-            <div class="col-6 percent-wrap hidden">
+
+            <div class="col-6 percent-wrap d-none">
               <label class="form-label mb-1 small">배율(%)</label>
               <input type="range" min="50" max="200" value="100" id="range-percent" class="form-range">
             </div>
+
             <div class="col-6">
               <label class="form-label mb-1 small">회전</label>
               <select class="form-select" id="select-rotate">
@@ -376,12 +386,13 @@
                 <option value="270">270°</option>
               </select>
             </div>
-            <div class="col-6 d-flex align-items-end">
+
+            <!-- <div class="col-6 d-flex align-items-end">
               <div class="small text-muted">
-                · 옵션 변경은 저장/전송/내보내기 시 적용<br>
-                · 미리보기는 자동 갱신하지 않음
+                · 스케일/회전 변경 시 BMP 프리뷰 자동 갱신<br>
+                · “BMP확인” 버튼으로 원본/변환 토글
               </div>
-            </div>
+            </div> -->
           </div>
         </div>
       </div>
@@ -402,13 +413,13 @@
           <div class="mb-3 border rounded p-2">
             <div class="fw-bold mb-1">작성부서</div>
             <div class="row g-2 align-items-end">
-              <div class="col-6">
+              <div class="col-4">
                 <label class="form-label mb-1">부서</label>
                 <select id="sel-draft-dept" class="form-select form-select-sm" disabled>
                   <option value="">(작성부서 선택)</option>
                 </select>
               </div>
-              <div class="col-6">
+              <div class="col-4">
                 <label class="form-label mb-1">역할</label>
                 <select id="sel-draft-role" class="form-select form-select-sm" disabled>
                   <option value="">(선택)</option>
@@ -417,11 +428,8 @@
                   <option value="승인">승인</option>
                 </select>
               </div>
-            </div>
-
-            <div class="row g-2 mt-2" id="draft-user-row">
-              <div class="col-12">
-                <label class="form-label mb-1">담당자 (검토/승인일 때)</label>
+              <div class="col-4">
+                <label class="form-label mb-1">담당자</label>
                 <select id="sel-draft-user" class="form-select form-select-sm" disabled>
                   <option value="">(담당자 선택)</option>
                 </select>
@@ -443,13 +451,13 @@
           <div class="mb-3 border rounded p-2">
             <div class="fw-bold mb-1">확인부서</div>
             <div class="row g-2 align-items-end">
-              <div class="col-6">
+              <div class="col-4">
                 <label class="form-label mb-1">부서</label>
                 <select id="sel-check-dept" class="form-select form-select-sm" disabled>
                   <option value="">(확인부서 선택)</option>
                 </select>
               </div>
-              <div class="col-6">
+              <div class="col-4">
                 <label class="form-label mb-1">역할</label>
                 <select id="sel-check-role" class="form-select form-select-sm" disabled>
                   <option value="">(선택)</option>
@@ -457,10 +465,7 @@
                   <option value="승인">승인</option>
                 </select>
               </div>
-            </div>
-
-            <div class="row g-2 mt-2">
-              <div class="col-12">
+              <div class="col-4">
                 <label class="form-label mb-1">담당자</label>
                 <select id="sel-check-user" class="form-select form-select-sm" disabled>
                   <option value="">(담당자 선택)</option>
@@ -506,14 +511,14 @@
           </div>
         </div>
         <div class="card-body small">
-          <div class="mb-2">
+          <!-- <div class="mb-2">
             <label class="form-label mb-1">직인 종류</label>
             <select id="sel-stamp-type" class="form-select form-select-sm">
               <option value="">(선택)</option>
               <option value="company">회사 직인</option>
               <option value="dept">부서 직인</option>
             </select>
-          </div>
+          </div> -->
 
           <div class="row g-2 mt-2">
             <div class="col-6">
@@ -529,10 +534,8 @@
             </div>
           </div>
 
-          <!-- <div id="stamp-list" class="row row-cols-3 g-1 mt-2"></div> -->
           <div id="stamp-list" class="stamp-strip mt-2"></div>
           <div class="form-text">
-            · 직인은 관리자(Admin)가 서버에 등록한 파일 목록 기준으로 불러옵니다.<br>
             · 항목을 클릭한 뒤 “직인 LAY 추가”를 누르면 우측에 추가됩니다.
           </div>
         </div>
@@ -627,66 +630,28 @@
 
     </div><!-- /설정 col -->
 
-    <!-- 에디터 영역 -->
+    <!-- ✅ 에디터/프리뷰 영역 (요청대로 최소 UI) -->
     <div class="col-12 col-xl-8 order-1 order-xl-2">
       <div class="card shadow-sm h-100">
-        <div class="card-header d-flex align-items-center justify-content-between">
-          <strong>미리보기 & 편집</strong>
-          <div class="d-flex align-items-center gap-2">
-            <div class="btn-group" role="group">
-              <button class="btn btn-outline-secondary tool-btn" id="nav-prev" disabled>이전</button>
-              <button class="btn btn-outline-secondary tool-btn" id="nav-next" disabled>이후</button>
-            </div>
-            <span class="small" id="page-ind">1 / 1</span>
-          </div>
-        </div>
         <div class="card-body d-flex flex-column gap-2">
 
-          <!-- 에디터 툴바 -->
-          <div class="editor-toolbar border rounded p-2 d-flex align-items-center gap-2">
-            <div class="btn-group" role="group">
-              <button class="btn btn-outline-dark tool-btn" id="btn-add-text" title="텍스트 추가">T</button>
-              <button class="btn btn-outline-dark tool-btn" id="btn-add-line" title="선 추가">─</button>
-              <button class="btn btn-outline-dark tool-btn" id="btn-add-rect" title="박스 추가">▭</button>
-              <button class="btn btn-outline-danger tool-btn" id="btn-del" title="선택 삭제">삭제</button>
+          <div id="editor" class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <strong>미리보기 &amp; 편집</strong>
+            <button class="btn btn-outline-danger btn-sm tool-btn" id="btn-del" title="선택 삭제">삭제</button>
+
+            <div class="props small border rounded p-2 ms-auto">
+              <div class="d-flex gap-3 flex-wrap">
+                <div>X: <span id="prop-x">-</span></div>
+                <div>Y: <span id="prop-y">-</span></div>
+                <div>W: <span id="prop-w">-</span></div>
+                <div>H: <span id="prop-h">-</span></div>
+              </div>
             </div>
-            <div class="vr mx-2"></div>
-            <select id="font-family" class="form-select form-select-sm" style="width:auto;">
-              <option value="Pretendard,Arial,Helvetica,sans-serif" selected>Pretendard/기본</option>
-              <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
-              <option value="'Nanum Gothic', sans-serif">나눔고딕</option>
-              <option value="'Nanum Myeongjo', serif">나눔명조</option>
-              <option value="'Roboto', sans-serif">Roboto</option>
-            </select>
-            <input type="number" id="font-size" class="form-control form-control-sm" value="28" min="8" max="120" style="width:90px;">
-            <select id="font-weight" class="form-select form-select-sm" style="width:auto;">
-              <option value="400">보통</option>
-              <option value="600">세미볼드</option>
-              <option value="700">볼드</option>
-            </select>
-            <input type="color" id="font-color" class="form-control form-control-color" value="#000000" title="텍스트 색상">
-            <div class="vr mx-2"></div>
-            <button class="btn btn-outline-secondary tool-btn" id="btn-align-left">좌</button>
-            <button class="btn btn-outline-secondary tool-btn" id="btn-align-center">중</button>
-            <button class="btn btn-outline-secondary tool-btn" id="btn-align-right">우</button>
           </div>
 
-          <!-- 프리뷰 캔버스 -->
-          <div class="canvas-wrap" id="canvas-wrap" style="aspect-ratio: 5 / 3;">
+          <div class="canvas-wrap" id="canvas-wrap" style="aspect-ratio: 3 / 4;">
             <img id="preview-img" class="preview-img" alt="미리보기">
             <div class="stage" id="stage"></div>
-          </div>
-
-          <!-- 선택 레이어 속성 -->
-          <div class="props small border rounded p-2">
-            <div class="d-flex gap-3 flex-wrap">
-              <div>X: <span id="prop-x">-</span></div>
-              <div>Y: <span id="prop-y">-</span></div>
-              <div>W: <span id="prop-w">-</span></div>
-              <div>H: <span id="prop-h">-</span></div>
-              <div>Type: <span id="prop-type">-</span></div>
-              <div>Text: <input type="text" id="prop-text" class="form-control form-control-sm" style="width:280px;" placeholder="선택된 텍스트 내용"></div>
-            </div>
           </div>
 
         </div>
@@ -697,7 +662,6 @@
 </div>
 {% endblock %}
 
-
 {% block script %}
 <script type="application/json" id="me-json">
   {{
@@ -707,14 +671,16 @@
       "username": session.get("user_name"),
       "dept":     session.get("dept"),
       "position": session.get("position"),
-      "photo_1":  session.get("photo_1"),  
+      "photo_1":  session.get("photo_1"),
     } | tojson
   }}
 </script>
 
 <script>
 (()=>{
-/* -------------------- 유틸/상태 -------------------- */
+/* -------------------- helpers -------------------- */
+function on(el, evt, fn, opts){ if (!el) return; el.addEventListener(evt, fn, opts); }
+
 const toJSON = id => {
   try{
     const t=document.getElementById(id);
@@ -736,67 +702,48 @@ const toast = (msg,type='info')=>{
   setTimeout(()=>el.remove(), 4000);
 };
 
+/* -------------------- me/state -------------------- */
 const me = toJSON('me-json') || {};
 const myId       = me.userid   || me.id || '';
 const myName     = me.username || me.name || myId;
 const myDept     = me.dept     || '';
-const myPosition = me.position || '';
-const myPhoto1 = me.photo_1 || '';
+const myPhoto1   = me.photo_1  || '';
 
 const state = {
   upload_id:null,
   pages:1,
   page:1,
-  uiWidth:800,
-  uiHeight:480,
+
+  // BASE는 1200x1600 고정
+  uiWidth:1200,
+  uiHeight:1600,
+
   mode:'BWRYBG',
   scale:'fit',
   percent:100,
   rotate:0,
+
   device_id:'',
   file_name:'',
   memo:'',
+
   useEditor:true,
   layers:[],
   selected:null,
   lastBox:null,
 
-  // 🔹 미리보기 모드: original(원본 변환) / bmp(E-ink 변환)
-  preview: {
-    mode: 'original',
-    originalUrl: null,
-    bmpUrl: null
-  },
+  preview: { mode:'original', originalUrl:null, bmpUrl:null, dirty:false },
 
-  stamp:{
-    use:false,
-    type:'',
-    id:null,
-    name:'',
-    url:'',
-    size:80
-  },
-  qrcode:{
-    text:'',
-    size:120
-  },
-  period:{
-    from_date:'',
-    from_time:'',
-    to_date:'',
-    to_time:'',
-    label:'',
-    font_size:18
-  },
+  stamp:{ use:false, type:'', id:null, name:'', url:'', size:80 },
+  qrcode:{ text:'', size:120 },
+  period:{ from_date:'', from_time:'', to_date:'', to_time:'', label:'', font_size:18 },
   message:'',
   message_font_size:18,
 
   approvalUse:false,
   approvalCols:[],
-
   stampOptions:[]
 };
-
 
 /* -------------------- DOM -------------------- */
 const $devBadge   = document.getElementById('device-badge');
@@ -804,6 +751,7 @@ const $file       = document.getElementById('file-input');
 const $fn         = document.getElementById('input-filename');
 const $memo       = document.getElementById('input-memo');
 const $dev        = document.getElementById('select-device');
+
 const $res        = document.getElementById('select-res');
 const $mode       = document.getElementById('select-mode');
 const $scale      = document.getElementById('select-scale');
@@ -811,39 +759,18 @@ const $percentWrap= document.querySelector('.percent-wrap');
 const $percent    = document.getElementById('range-percent');
 const $rotate     = document.getElementById('select-rotate');
 
-const $toolbar    = document.querySelector('.editor-toolbar');
 const $canvasWrap = document.getElementById('canvas-wrap');
-const $img        = document.getElementById('preview-img'); $img.draggable=false;
+const $img        = document.getElementById('preview-img'); if ($img) $img.draggable=false;
 const $stage      = document.getElementById('stage');
-const $pageInd    = document.getElementById('page-ind');
 
-const $btnPrev    = document.getElementById('nav-prev');
-const $btnNext    = document.getElementById('nav-next');
-const $btnSave    = document.getElementById('btn-save-draft');
-const $btnExport  = document.getElementById('btn-export-editor');
 const $btnSend    = document.getElementById('btn-send');
 const $btnBmpToggle = document.getElementById('btn-bmp-toggle');
-
-const $btnAddText = document.getElementById('btn-add-text');
-const $btnAddLine = document.getElementById('btn-add-line');
-const $btnAddRect = document.getElementById('btn-add-rect');
 const $btnDel     = document.getElementById('btn-del');
-
-const $fontFamily = document.getElementById('font-family');
-const $fontSize   = document.getElementById('font-size');
-const $fontWeight = document.getElementById('font-weight');
-const $fontColor  = document.getElementById('font-color');
-
-const $alignL     = document.getElementById('btn-align-left');
-const $alignC     = document.getElementById('btn-align-center');
-const $alignR     = document.getElementById('btn-align-right');
 
 const $px         = document.getElementById('prop-x');
 const $py         = document.getElementById('prop-y');
 const $pw         = document.getElementById('prop-w');
 const $ph         = document.getElementById('prop-h');
-const $ptype      = document.getElementById('prop-type');
-const $ptext      = document.getElementById('prop-text');
 
 /* 결재 DOM */
 const $ckApproval     = document.getElementById('ck-approval');
@@ -883,45 +810,143 @@ const $msgInput   = document.getElementById('input-message');
 const $msgFont    = document.getElementById('input-message-font');
 const $btnMsgAdd  = document.getElementById('btn-message-add');
 
-
-/* -------------------- 기본 UI -------------------- */
-function setAspectByRes(resStr){
-  const [w,h]=resStr.split('x').map(Number);
-  state.uiWidth=w; state.uiHeight=h;
-  $canvasWrap.style.aspectRatio = `${w} / ${h}`;
+/* -------------------- UI helpers -------------------- */
+function redrawHeader(){
+  if ($fn) $fn.value = state.file_name || '';
+  if ($devBadge) $devBadge.textContent = state.device_id ? `대상: ${state.device_id}` : '대상 장치 선택 전';
 }
-setAspectByRes($res.value);
 
 function updatePercentRow(){
-  $percentWrap.classList.toggle('hidden', $scale.value!=='percent');
+  if (!$percentWrap) return;
+  $percentWrap.classList.toggle('d-none', $scale?.value !== 'percent');
 }
 
-function redrawHeader(){
-  $pageInd.textContent = `${state.page} / ${state.pages}`;
-  $fn.value = state.file_name || '';
-  $devBadge.textContent = state.device_id ? `대상: ${state.device_id}` : '대상 장치 선택 전';
+/* -------------------- Busy Modal -------------------- */
+let _busy = { modal:null, timer:null, pct:12 };
+
+function _ensureBusyModal(){
+  const el = document.getElementById('busyModal');
+  if (!el) return null;
+  if (!_busy.modal) _busy.modal = new bootstrap.Modal(el);
+  return _busy.modal;
 }
 
-/* -------------------- 서버 연동: “원본” 프리뷰 (최초 1회) -------------------- */
-/**
- * 정책:
- * - 파일 최초 선택 시 /bulletin/preview_blob 딱 1회 호출
- * - 이후 레이어/이동/옵션변경으로는 절대 호출하지 않음
- */
+function busyStart(title='현재 파일 생성중입니다', desc='처리 중...', firstStep='준비중'){
+  const m = _ensureBusyModal();
+  if (!m) return;
+
+  _busy.pct = 12;
+
+  document.getElementById('busyTitle').textContent = title;
+  document.getElementById('busyDesc').textContent  = desc;
+  document.getElementById('busyStep').textContent  = firstStep;
+  document.getElementById('busyPct').textContent   = `${_busy.pct}%`;
+  document.getElementById('busyBar').style.width   = `${_busy.pct}%`;
+
+  const log = document.getElementById('busyLog');
+  log.textContent = `· ${firstStep}`;
+
+  if (_busy.timer) clearInterval(_busy.timer);
+  _busy.timer = setInterval(()=>{
+    _busy.pct = Math.min(95, _busy.pct + (Math.random() < 0.6 ? 1 : 2));
+    document.getElementById('busyPct').textContent = `${_busy.pct}%`;
+    document.getElementById('busyBar').style.width = `${_busy.pct}%`;
+  }, 450);
+
+  m.show();
+}
+
+function busyStep(stepText){
+  const el = document.getElementById('busyStep');
+  const log = document.getElementById('busyLog');
+  if (el) el.textContent = stepText;
+  if (log){
+    log.textContent += `\n· ${stepText}`;
+    log.scrollTop = log.scrollHeight;
+  }
+}
+
+function busyEnd(ok=true, last='완료'){
+  const m = _ensureBusyModal();
+  if (!m) return;
+
+  if (_busy.timer) { clearInterval(_busy.timer); _busy.timer = null; }
+
+  document.getElementById('busyPct').textContent = `100%`;
+  document.getElementById('busyBar').style.width = `100%`;
+  busyStep(last);
+
+  setTimeout(()=> m.hide(), 350);
+}
+
+async function runWithBusy(fn, {title, desc, firstStep, doneStep}){
+  busyStart(title, desc, firstStep);
+  try{
+    const out = await fn();
+    busyEnd(true, doneStep || '완료');
+    return out;
+  }catch(e){
+    busyEnd(false, '실패');
+    throw e;
+  }
+}
+
+/* -------------------- BASE/viewport -------------------- */
+const BASE_W = 1200, BASE_H = 1600;
+const PREVIEW_W = BASE_W, PREVIEW_H = BASE_H;
+state.uiWidth  = PREVIEW_W;
+state.uiHeight = PREVIEW_H;
+
+if ($res){
+  $res.value = '1200x1600';
+  $res.disabled = true;
+}
+if ($canvasWrap){
+  $canvasWrap.style.aspectRatio = `${PREVIEW_W} / ${PREVIEW_H}`;
+}
+
+function vp() {
+  const r = $canvasWrap.getBoundingClientRect();
+  const scale = Math.min(r.width/state.uiWidth, r.height/state.uiHeight);
+  const vw = state.uiWidth*scale, vh = state.uiHeight*scale;
+  const left=(r.width-vw)/2, top=(r.height-vh)/2;
+  return { left, top, width: vw, height: vh, kx: vw/BASE_W, ky: vh/BASE_H };
+}
+
+function pxToBase(nx, ny, nw, nh){
+  const v=vp();
+  return {
+    x: Math.round(nx / v.kx),
+    y: Math.round(ny / v.ky),
+    w: Math.round(nw / v.kx),
+    h: Math.round(nh / v.ky),
+  };
+}
+
+function baseToPx(bx,by,bw,bh){
+  const v=vp();
+  return { x: bx * v.kx, y: by * v.ky, w: bw * v.kx, h: bh * v.ky };
+}
+
+function rememberBox(b){ state.lastBox = { x:b.x, y:b.y, w:b.w, h:b.h }; }
+function autoPlaceBox({w=300,h=150,gap=16} = {}){
+  if (!state.lastBox) return { x:80, y: Math.round(BASE_H*0.1), w, h };
+  return { x: state.lastBox.x, y: state.lastBox.y + state.lastBox.h + gap, w: state.lastBox.w, h: state.lastBox.h };
+}
+
+/* -------------------- Preview: original once -------------------- */
 async function previewOriginalOnce(file){
   const fd = new FormData();
   fd.append('file', file);
-  // fd.append('width', state.uiWidth);
-  // fd.append('height', state.uiHeight);
   fd.append('width', PREVIEW_W);
   fd.append('height', PREVIEW_H);
   fd.append('mode', state.mode);
   fd.append('scale', state.scale);
   fd.append('percent', state.percent);
   fd.append('rotate', state.rotate);
-  fd.append('raw', 1);                 // 🔹 무조건 “원본 변환” 먼저
+  fd.append('raw', 1);
   fd.append('page', 1);
-  fd.append('layers', JSON.stringify([])); // 최초엔 레이어 굽지 않음
+  fd.append('layers', JSON.stringify([]));
 
   const r = await fetch('/bulletin/preview_blob', { method:'POST', body:fd });
   if(!r.ok) throw new Error('preview_blob failed');
@@ -933,64 +958,52 @@ async function previewOriginalOnce(file){
   state.pages = Number.isFinite(pages) && pages>0 ? pages : 1;
   state.page = 1;
 
-  // 단일 모드 정책: 멀티 페이지여도 서버 재호출 금지 → 네비 비활성 유지
-  $btnPrev.disabled = true;
-  $btnNext.disabled = true;
-
   const blob = await r.blob();
   const url = URL.createObjectURL(blob);
 
   if (state.preview.originalUrl) URL.revokeObjectURL(state.preview.originalUrl);
   state.preview.originalUrl = url;
 
-  // 원본 모드로 세팅
+  // 원본 모드
   state.preview.mode = 'original';
-  $img.src = url + '#t=' + Date.now();
-  $btnBmpToggle.textContent = 'BMP확인';
+  state.preview.dirty = false;
+  if ($img) $img.src = url + '#t=' + Date.now();
+  if ($btnBmpToggle) $btnBmpToggle.textContent = 'BMP확인';
 
-  // BMP 캐시는 새 파일이면 폐기
-  if (state.preview.bmpUrl) { URL.revokeObjectURL(state.preview.bmpUrl); }
+  // BMP 캐시 폐기
+  if (state.preview.bmpUrl) URL.revokeObjectURL(state.preview.bmpUrl);
   state.preview.bmpUrl = null;
 }
 
+async function refreshOriginalByUpload(){
+  if (!state.upload_id) return;
 
-  // ✅ upload_id 기반으로 "현재 옵션의 normalized_png" 다시 받기 (업로드 재전송 없음)
-  async function refreshOriginalByUpload(){
-    if (!state.upload_id) return;
+  const body = {
+    upload_id: state.upload_id,
+    width: PREVIEW_W,
+    height: PREVIEW_H,
+    scale: state.scale,
+    percent: state.percent,
+    rotate: state.rotate,
+    page: 1
+  };
 
-    const body = {
-      upload_id: state.upload_id,
-      width: PREVIEW_W,
-      height: PREVIEW_H,
-      scale: state.scale,
-      percent: state.percent,
-      rotate: state.rotate,
-      page: 1
-    };
+  const r = await fetch('/bulletin/original_blob', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  if(!r.ok) throw new Error('original_blob failed');
 
-    const r = await fetch('/bulletin/original_blob', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body)
-    });
-    if(!r.ok) throw new Error('original_blob failed');
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
 
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
+  if (state.preview.originalUrl) URL.revokeObjectURL(state.preview.originalUrl);
+  state.preview.originalUrl = url;
+  state.preview.dirty = false;
+}
 
-    if (state.preview.originalUrl) URL.revokeObjectURL(state.preview.originalUrl);
-    state.preview.originalUrl = url;
-
-    state.preview.dirty = false;
-  }
-
-
-/* -------------------- BMP(E-INK) 프리뷰: 버튼 클릭 시에만 -------------------- */
-/**
- * 전용 endpoint 가정: /bulletin/review_blob
- * - 여기서는 현재 레이어를 “굽기”해서 BMP 스타일 결과를 받아오는 용도
- * - 자동 호출 없음, 버튼 클릭 시에만 호출
- */
+/* -------------------- BMP preview -------------------- */
 async function buildBmpPreview(){
   if (!state.upload_id) {
     toast('BMP 확인을 위해 먼저 파일을 선택하세요.','warning');
@@ -1030,20 +1043,26 @@ async function buildBmpPreview(){
   state.preview.bmpUrl = url;
 
   state.preview.mode = 'bmp';
-  $img.src = url + '#t=' + Date.now();
-  $btnBmpToggle.textContent = '원본확인';
+  state.preview.dirty = false;
+  if ($img) $img.src = url + '#t=' + Date.now();
+  if ($btnBmpToggle) $btnBmpToggle.textContent = '원본확인';
 }
 
-/* 토글 버튼 */
-$btnBmpToggle.addEventListener('click', async ()=>{
-  if (!state.upload_id) {
-    toast('먼저 파일을 선택하세요.','warning');
-    return;
-  }
+function markPreviewDirty(){ state.preview.dirty = true; }
 
+/* BMP 토글 */
+on($btnBmpToggle, 'click', async ()=>{
+  if (!state.upload_id) { toast('먼저 파일을 선택하세요.','warning'); return; }
+
+  // original -> bmp
   if (state.preview.mode === 'original') {
     try{
-      await buildBmpPreview();
+      await runWithBusy(()=>buildBmpPreview(),{
+        title:'현재 파일 생성중입니다',
+        desc:'BMP(E-Ink) 프리뷰를 생성하고 있습니다.',
+        firstStep:'BMP 변환 요청',
+        doneStep:'BMP 프리뷰 준비 완료'
+      });
       toast('BMP(E-Ink) 프리뷰로 전환했습니다.','info');
     }catch(e){
       toast('BMP 프리뷰 생성 실패','danger');
@@ -1051,183 +1070,26 @@ $btnBmpToggle.addEventListener('click', async ()=>{
     return;
   }
 
-  // bmp -> original (서버 호출 없음)
   // bmp -> original
   try{
-    // ✅ 옵션이 바뀐 상태면, 업로드 재전송 없이 normalized_png만 다시 받는다
     if (state.preview.dirty || !state.preview.originalUrl) {
-      await refreshOriginalByUpload();
+      await runWithBusy(()=>refreshOriginalByUpload(),{
+        title:'현재 파일 생성중입니다',
+        desc:'원본 프리뷰를 갱신하고 있습니다.',
+        firstStep:'원본 갱신 요청',
+        doneStep:'원본 프리뷰 준비 완료'
+      });
     }
-
     state.preview.mode = 'original';
-    $img.src = state.preview.originalUrl + '#t=' + Date.now();
-    $btnBmpToggle.textContent = 'BMP확인';
+    if ($img) $img.src = state.preview.originalUrl + '#t=' + Date.now();
+    if ($btnBmpToggle) $btnBmpToggle.textContent = 'BMP확인';
     toast('원본 프리뷰로 전환했습니다.','info');
   }catch(e){
     toast('원본 프리뷰 갱신 실패','danger');
   }
-
 });
 
-
-/* -------------------- 부서/사용자 로딩 -------------------- */
-async function fetchDepartmentsTo(el){
-  try{
-    const r=await fetch('/bulletin/departments');
-    if(!r.ok) throw 0;
-    const js=await r.json();
-    const arr=Array.isArray(js.departments)?js.departments:[];
-    el.innerHTML = `<option value="">(부서 선택)</option>` +
-      arr.map(d=>`<option value="${d}">${d}</option>`).join('');
-  }catch(e){
-    el.innerHTML = `<option value="">(부서 선택)</option>`;
-  }
-}
-
-async function fetchUsersTo(el, dept){
-  try{
-    const r=await fetch('/bulletin/users?'+new URLSearchParams({department:dept||''}));
-    if(!r.ok) throw 0;
-    const js=await r.json();
-    const arr=Array.isArray(js.users)?js.users:[];
-    const label = u => (u.username||u.userid||u.id);
-    el.innerHTML = `<option value="">(직원 선택)</option>` +
-      arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
-  }catch(e){
-    el.innerHTML = `<option value="">(직원 선택)</option>`;
-  }
-}
-
-
-/* -------------------- 직인 목록 로딩 -------------------- */
-async function fetchStampList(){
-  try{
-    const r = await fetch('/bulletin/api/stamps');
-    if (!r.ok) throw 0;
-    const js = await r.json();
-    state.stampOptions = Array.isArray(js.stamps) ? js.stamps : [];
-    renderStampList();
-  }catch(e){
-    state.stampOptions = [];
-    renderStampList();
-    toast('직인 목록을 불러오지 못했습니다.','danger');
-  }
-}
-
-function renderStampList(){
-  if (!$stampList) return;
-
-  if (!state.stampOptions.length) {
-    $stampList.innerHTML = `<div class="text-muted small p-2">등록된 직인이 없습니다.</div>`;
-    return;
-  }
-
-  const selectedId = state.stamp?.id;
-
-  $stampList.innerHTML = state.stampOptions.map(s => {
-    const sel = String(s.id) === String(selectedId) ? 'selected' : '';
-    return `
-      <div class="stamp-card ${sel}" data-id="${s.id}" title="${s.name||''}">
-        <img src="${s.url}" alt="${s.name||''}">
-        <div class="stamp-name">${s.name || ('ID:'+s.id)}</div>
-      </div>
-    `;
-  }).join('');
-}
-
-/* 클릭해서 “선택”만 */
-if ($stampList) {
-  $stampList.addEventListener('click', (e)=>{
-    const card = e.target.closest('.stamp-card');
-    if (!card) return;
-
-    const id = card.dataset.id;
-    const item = state.stampOptions.find(s => String(s.id) === String(id));
-    if (!item) return;
-
-    // 선택 표시
-    $stampList.querySelectorAll('.stamp-card').forEach(x => x.classList.remove('selected'));
-    card.classList.add('selected');
-
-    // state에 저장
-    state.stamp.use  = true;
-    $stampUse.checked = true;
-
-    state.stamp.id   = item.id;
-    state.stamp.name = item.name || '';
-    state.stamp.url  = item.url || '';
-    state.stamp.type = $stampType.value || state.stamp.type || '';
-    state.stamp.size = parseInt($stampSize.value,10) || 80;
-
-    toast(`직인 선택: ${state.stamp.name}`,'info');
-  });
-}
-
-/* -------------------- 좌표 변환 -------------------- */
-  // ✅ BASE = 1200x1600 고정 (원본/BMP 모두 같은 natural size를 유지)
-  const BASE_W = 1200, BASE_H = 1600;
-
-  // ✅ 미리보기(정규화 PNG)도 BASE로 고정
-  const PREVIEW_W = BASE_W, PREVIEW_H = BASE_H;
-
-  // 기존 state.uiWidth/uiHeight는 선택값을 쓰고 있었는데, 컨셉상 고정으로 간다
-  state.uiWidth  = PREVIEW_W;
-  state.uiHeight = PREVIEW_H;
-
-  // 해상도 셀렉트는 1200x1600만 허용 (UI는 남겨도 되지만 고정이 안전)
-  if ($res) {
-    $res.value = '1200x1600';
-    $res.disabled = true; // ✅ 실수로 바꾸는 것 방지
-  }
-
-  function setAspectFixedBase(){
-    $canvasWrap.style.aspectRatio = `${PREVIEW_W} / ${PREVIEW_H}`;
-  }
-  setAspectFixedBase();
-
-
-function vp() {
-  const r = $canvasWrap.getBoundingClientRect();
-  const scale = Math.min(r.width/state.uiWidth, r.height/state.uiHeight);
-  const vw = state.uiWidth*scale, vh = state.uiHeight*scale;
-  const left=(r.width-vw)/2, top=(r.height-vh)/2;
-  return { left, top, width: vw, height: vh, kx: vw/BASE_W, ky: vh/BASE_H };
-}
-
-function pxToBase(nx, ny, nw, nh){
-  const v=vp();
-  return {
-    x: Math.round(nx / v.kx),
-    y: Math.round(ny / v.ky),
-    w: Math.round(nw / v.kx),
-    h: Math.round(nh / v.ky),
-  };
-}
-
-function baseToPx(bx,by,bw,bh){
-  const v=vp();
-  return {
-    x: bx * v.kx,
-    y: by * v.ky,
-    w: bw * v.kx,
-    h: bh * v.ky
-  };
-}
-
-function autoPlaceBox({w=300,h=150,gap=16} = {}){
-  if (!state.lastBox) return { x:80, y: Math.round(BASE_H*0.1), w, h };
-  return {
-    x: state.lastBox.x,
-    y: state.lastBox.y + state.lastBox.h + gap,
-    w: state.lastBox.w,
-    h: state.lastBox.h
-  };
-}
-function rememberBox(b){
-  state.lastBox = { x:b.x, y:b.y, w:b.w, h:b.h };
-}
-
-/* -------------------- 레이어 렌더링 (프론트 전용) -------------------- */
+/* -------------------- layers rendering -------------------- */
 function layerTitle(L){
   switch(L.type){
     case 'approval_box': return 'APPROVAL';
@@ -1254,7 +1116,38 @@ function labelRoles(cols){
   });
 }
 
+function updatePropPanelFromEl(el){
+  const nx=parseFloat(el.style.left)||0,
+        ny=parseFloat(el.style.top)||0,
+        nw=parseFloat(el.style.width)||0,
+        nh=parseFloat(el.style.height)||0;
+  const base = pxToBase(nx,ny,nw,nh);
+  if ($px) $px.textContent = base.x;
+  if ($py) $py.textContent = base.y;
+  if ($pw) $pw.textContent = base.w;
+  if ($ph) $ph.textContent = base.h;
+}
+
+function updatePropPanel(){
+  const L=state.selected;
+  if ($px) $px.textContent = L? L.x:'-';
+  if ($py) $py.textContent = L? L.y:'-';
+  if ($pw) $pw.textContent = L? L.w:'-';
+  if ($ph) $ph.textContent = L? L.h:'-';
+}
+
+function selectLayerByEl(el){
+  const id = el?.dataset?.id;
+  state.selected = state.layers.find(l => String(l.id) === String(id)) || null;
+  document.querySelectorAll('#stage .layer').forEach(n=>{
+    n.classList.toggle('selected', n === el);
+  });
+  updatePropPanel();
+}
+
 function renderLayers(){
+  if (!$stage || !$canvasWrap) return;
+
   $stage.style.pointerEvents = 'auto';
   $stage.style.userSelect = 'none';
 
@@ -1275,14 +1168,12 @@ function renderLayers(){
     el.style.height=px.h+'px';
     el.dataset.id=L.id;
 
-    // 타입별 프론트 렌더링
     if (L.type === 'approval_box') {
       el.classList.add('approval-box');
 
       const cols = Array.isArray(L.columns) ? L.columns : [];
       const leftRaw  = cols.filter(c=>c.group==='draft');
       const rightRaw = cols.filter(c=>c.group==='check');
-
       const left  = labelRoles(leftRaw);
       const right = labelRoles(rightRaw);
 
@@ -1294,16 +1185,15 @@ function renderLayers(){
           `<div class="cell">${c._dispRole || c.role || ''}</div>`
         ).join('');
 
-      const stampCells = colsArr.map(c => {
-        // ✅ 작성자는 이미 결재 완료: photo_1 있으면 이미지, 없으면 "완료"
-        if ((c.role || '') === '작성') {
-          if (c.user_photo_1) {
-            return `<div class="cell"><img src="${c.user_photo_1}" alt="완료" class="approval-sign-img"></div>`;
+        const stampCells = colsArr.map(c => {
+          if ((c.role || '') === '작성') {
+            if (c.user_photo_1) {
+              return `<div class="cell"><img src="${c.user_photo_1}" alt="완료" class="approval-sign-img"></div>`;
+            }
+            return `<div class="cell"><span class="approval-done-text">완료</span></div>`;
           }
-          return `<div class="cell"><span class="approval-done-text">완료</span></div>`;
-        }
-        return `<div class="cell"></div>`;
-      }).join('');
+          return `<div class="cell"></div>`;
+        }).join('');
 
         const nameCells = colsArr.map(c =>
           `<div class="cell">${c.user_name || ''}</div>`
@@ -1313,9 +1203,7 @@ function renderLayers(){
 
         return `
           <div class="approval-side ${sideClass}" style="--cols:${colsCount};">
-            <div class="dept-col">
-              <div class="dept-vert-text">${deptLabel}</div>
-            </div>
+            <div class="dept-col"><div class="dept-vert-text">${deptLabel}</div></div>
             <div class="cols-wrap">
               <div class="header-row">${headerCells}</div>
               <div class="stamp-row">${stampCells}</div>
@@ -1338,8 +1226,6 @@ function renderLayers(){
       el.classList.add('stamp-box');
       const s = L.stamp || {};
       const label = s.name || s.type || 'STAMP';
-
-      // 가능하면 이미지도 표시
       const imgHtml = s.url ? `<img src="${s.url}" alt="${label}" style="max-width:100%;max-height:100%;object-fit:contain;">` : '';
       el.innerHTML = `
         <div class="title">${layerTitle(L)}</div>
@@ -1375,49 +1261,12 @@ function renderLayers(){
         <div class="handle"></div>
         <div class="meta-content" style="font-size:${fs}px;">${txt}</div>
       `;
-
-    } else if (L.type === 'text') {
-      el.classList.add('text-layer');
-      const text = (L.text ?? '').toString();
-      const fs = L.fontSize || 28;
-      const fw = L.fontWeight || '400';
-      const ff = L.fontFamily || 'Pretendard,Arial,Helvetica,sans-serif';
-      const col = L.color || '#000000';
-      const align = L.align || 'left';
-      const jc = (align==='center') ? 'center' : (align==='right' ? 'flex-end' : 'flex-start');
-      el.innerHTML = `
-        <div class="title">${layerTitle(L)}</div>
-        <div class="handle"></div>
-        <div class="text-content"
-             style="font-size:${fs}px;font-weight:${fw};font-family:${ff};color:${col};justify-content:${jc};text-align:${align};">
-          ${escapeHtml(text)}
-        </div>
-      `;
-
-    } else if (L.type === 'line') {
-      el.classList.add('line-layer');
-      const col = L.color || '#000000';
-      el.innerHTML = `
-        <div class="title">${layerTitle(L)}</div>
-        <div class="handle"></div>
-        <div class="line-content" style="background:${col};"></div>
-      `;
-
-    } else if (L.type === 'rect') {
-      el.classList.add('rect-layer');
-      const stroke = L.stroke || '#0d6efd';
-      const fill = L.fill || 'rgba(13,110,253,.04)';
-      el.style.border = `2px solid ${stroke}`;
-      el.style.background = fill;
-      el.innerHTML = `<div class="title">${layerTitle(L)}</div><div class="handle"></div>`;
-
     } else {
       el.innerHTML = `<div class="title">${layerTitle(L)}</div><div class="handle"></div>`;
     }
 
     $stage.appendChild(el);
 
-    // 드래그/리사이즈: 프론트에서만 커밋 (서버 호출 없음)
     let mode=null, sx=0, sy=0, sl=0, st=0, sw=0, sh=0;
 
     el.addEventListener('pointerdown', e=>{
@@ -1455,116 +1304,30 @@ function renderLayers(){
       const base = pxToBase(nx,ny,nw,nh);
       L.x=base.x; L.y=base.y; L.w=base.w; L.h=base.h;
       updatePropPanel();
-      renderLayers();     // 프론트만 갱신
+      renderLayers();
       rememberBox(L);
+
+      // 레이어 이동/리사이즈는 프리뷰 옵션과 별개지만,
+      // BMP를 다시 보려면 재빌드가 필요하니 dirty 표시
+      markPreviewDirty();
     };
     el.addEventListener('pointerup', ()=>{ if(mode){ mode=null; commit(); } });
     el.addEventListener('pointerleave', ()=>{ if(mode){ mode=null; commit(); } });
     el.addEventListener('lostpointercapture', ()=>{ mode=null; });
     el.addEventListener('pointercancel', ()=>{ mode=null; });
-
-    el.addEventListener('dblclick', ()=>{ if (L.type==='text') { $ptext.focus(); } });
   });
 
   updatePropPanel();
 }
 
-function escapeHtml(s){
-  return String(s)
-    .replaceAll('&','&amp;')
-    .replaceAll('<','&lt;')
-    .replaceAll('>','&gt;')
-    .replaceAll('"','&quot;')
-    .replaceAll("'","&#39;")
-    .replaceAll('\n','<br>');
-}
-
-function selectLayerByEl(el){
-  const id = el?.dataset?.id;
-  state.selected = state.layers.find(l => String(l.id) === String(id)) || null;
-  document.querySelectorAll('#stage .layer').forEach(n=>{
-    n.classList.toggle('selected', n === el);
-  });
-  updatePropPanel();
-}
-
-function updatePropPanelFromEl(el){
-  const nx=parseFloat(el.style.left)||0,
-        ny=parseFloat(el.style.top)||0,
-        nw=parseFloat(el.style.width)||0,
-        nh=parseFloat(el.style.height)||0;
-  const base = pxToBase(nx,ny,nw,nh);
-  $px.textContent = base.x;
-  $py.textContent = base.y;
-  $pw.textContent = base.w;
-  $ph.textContent = base.h;
-}
-
-function updatePropPanel(){
-  const L=state.selected;
-  $px.textContent = L? L.x:'-';
-  $py.textContent = L? L.y:'-';
-  $pw.textContent = L? L.w:'-';
-  $ph.textContent = L? L.h:'-';
-  $ptype.textContent = L? L.type.toUpperCase():'-';
-  $ptext.value = (L && L.type==='text') ? (L.text||'') : '';
-}
-
-/* -------------------- 에디터 도형 -------------------- */
-function ensureEditorOn(){
-  state.useEditor = true;
-  if ($toolbar) $toolbar.classList.remove('hidden');
-}
-
-function addText(){
-  ensureEditorOn();
-  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: Math.round(BASE_H*0.1), gap: 10 });
-  const L={
-    id:'L'+Date.now().toString(16),
-    type:'text',
-    text:'새 텍스트',
-    x:pos.x, y:pos.y, w:pos.w, h:pos.h,
-    fontFamily:$fontFamily.value,
-    fontSize:parseInt($fontSize.value,10)||28,
-    fontWeight:$fontWeight.value,
-    color:$fontColor.value,
-    align:'left'
-  };
-  state.layers.push(L);
-  state.selected=L;
-  rememberBox(L);
-  renderLayers();  // 프론트만
-}
-
-function addLine(){
-  ensureEditorOn();
-  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.6), h: 4, gap: 8 });
-  const L={
-    id:'L'+Date.now().toString(16),
-    type:'line',
-    x:pos.x, y:pos.y, w:pos.w, h:4,
-    color:'#000000'
-  };
-  state.layers.push(L);
-  state.selected=L;
-  rememberBox(L);
-  renderLayers();
-}
-
-function addRect(){
-  ensureEditorOn();
-  const pos = autoPlaceBox({ w: Math.round(BASE_W*0.3), h: Math.round(BASE_H*0.2), gap: 8 });
-  const L={
-    id:'L'+Date.now().toString(16),
-    type:'rect',
-    x:pos.x, y:pos.y, w:pos.w, h:pos.h,
-    stroke:'#0d6efd',
-    fill:'rgba(13,110,253,.04)'
-  };
-  state.layers.push(L);
-  state.selected=L;
-  rememberBox(L);
-  renderLayers();
+function removeLayerByType(type){
+  const before = state.layers.length;
+  state.layers = state.layers.filter(l => l.type !== type);
+  if (before !== state.layers.length) {
+    if (state.selected && state.selected.type === type) state.selected = null;
+    renderLayers();
+    markPreviewDirty();
+  }
 }
 
 function delSel(){
@@ -1572,25 +1335,101 @@ function delSel(){
   state.layers = state.layers.filter(l=> l!==state.selected);
   state.selected = null;
   renderLayers();
+  markPreviewDirty();
 }
+on($btnDel, 'click', delSel);
 
-function removeLayerByType(type){
-  const before = state.layers.length;
-  state.layers = state.layers.filter(l => l.type !== type);
-  if (before !== state.layers.length) {
-    if (state.selected && state.selected.type === type) {
-      state.selected = null;
-    }
-    renderLayers();
+/* -------------------- departments/users -------------------- */
+async function fetchDepartmentsTo(el){
+  try{
+    const r=await fetch('/bulletin/departments');
+    if(!r.ok) throw 0;
+    const js=await r.json();
+    const arr=Array.isArray(js.departments)?js.departments:[];
+    el.innerHTML = `<option value="">(부서 선택)</option>` +
+      arr.map(d=>`<option value="${d}">${d}</option>`).join('');
+  }catch(e){
+    el.innerHTML = `<option value="">(부서 선택)</option>`;
   }
 }
 
-/* -------------------- 직인/QR/기간/메세지 LAY -------------------- */
-function ensureStampLayer(){
-  if (!state.stamp.use || !state.stamp.id) {
-    removeLayerByType('stamp_box');
+async function fetchUsersTo(el, dept){
+  try{
+    const r=await fetch('/bulletin/users?'+new URLSearchParams({department:dept||''}));
+    if(!r.ok) throw 0;
+    const js=await r.json();
+    const arr=Array.isArray(js.users)?js.users:[];
+    const label = u => (u.username||u.userid||u.id);
+    el.innerHTML = `<option value="">(직원 선택)</option>` +
+      arr.map(u=>`<option value="${u.userid||u.id}">${label(u)}</option>`).join('');
+  }catch(e){
+    el.innerHTML = `<option value="">(직원 선택)</option>`;
+  }
+}
+
+/* -------------------- stamps -------------------- */
+async function fetchStampList(){
+  try{
+    const r = await fetch('/bulletin/api/stamps');
+    if (!r.ok) throw 0;
+    const js = await r.json();
+    state.stampOptions = Array.isArray(js.stamps) ? js.stamps : [];
+    renderStampList();
+  }catch(e){
+    state.stampOptions = [];
+    renderStampList();
+    toast('직인 목록을 불러오지 못했습니다.','danger');
+  }
+}
+
+function renderStampList(){
+  if (!$stampList) return;
+
+  if (!state.stampOptions.length) {
+    $stampList.innerHTML = `<div class="text-muted small p-2">등록된 직인이 없습니다.</div>`;
     return;
   }
+
+  const selectedId = state.stamp?.id;
+
+  $stampList.innerHTML = state.stampOptions.map(s => {
+    const sel = String(s.id) === String(selectedId) ? 'selected' : '';
+    return `
+      <div class="stamp-card ${sel}" data-id="${s.id}" title="${s.name||''}">
+        <img src="${s.url}" alt="${s.name||''}">
+        <div class="stamp-name">${s.name || ('ID:'+s.id)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+on($stampList, 'click', (e)=>{
+  const card = e.target.closest('.stamp-card');
+  if (!card) return;
+
+  const id = card.dataset.id;
+  const item = state.stampOptions.find(s => String(s.id) === String(id));
+  if (!item) return;
+
+  $stampList.querySelectorAll('.stamp-card').forEach(x => x.classList.remove('selected'));
+  card.classList.add('selected');
+
+  state.stamp.use  = true;
+  if ($stampUse) $stampUse.checked = true;
+
+  state.stamp.id   = item.id;
+  state.stamp.name = item.name || '';
+  state.stamp.url  = item.url || '';
+  state.stamp.type = ($stampType && $stampType.value) ? $stampType.value : (state.stamp.type || '');
+  state.stamp.size = parseInt($stampSize?.value,10) || 80;
+
+  toast(`직인 선택: ${state.stamp.name}`,'info');
+});
+
+/* -------------------- meta layers (stamp/qr/period/message) -------------------- */
+function ensureStampLayer(){
+  if (!state.stamp.use || !state.stamp.id) { removeLayerByType('stamp_box'); return; }
+
   let L = state.layers.find(l => l.type === 'stamp_box');
   const size = state.stamp.size || 80;
   const w = size, h = size;
@@ -1598,13 +1437,7 @@ function ensureStampLayer(){
   const y = BASE_H - h - 80;
 
   if (!L) {
-    L = {
-      id: 'STAMP-'+Date.now().toString(16),
-      type: 'stamp_box',
-      x, y, w, h,
-      stamp: { ...state.stamp },
-      size
-    };
+    L = { id: 'STAMP-'+Date.now().toString(16), type:'stamp_box', x, y, w, h, stamp: { ...state.stamp }, size };
     state.layers.push(L);
   } else {
     L.stamp = { ...state.stamp };
@@ -1614,106 +1447,76 @@ function ensureStampLayer(){
   state.selected = L;
   rememberBox(L);
   renderLayers();
+  markPreviewDirty();
 }
 
 function ensureQrLayer(){
   const text = (state.qrcode.text || '').trim();
-  if (!text) {
-    removeLayerByType('qr_box');
-    return;
-  }
+  if (!text) { removeLayerByType('qr_box'); return; }
 
   let L = state.layers.find(l => l.type === 'qr_box');
   const size = state.qrcode.size || 120;
   const w = size, h = size;
-  const x = BASE_W - w - 80;
-  const y = 80;
+  const x = 80;
+  const y = BASE_H - h - 80;
 
   if (!L) {
-    L = {
-      id:'QR-'+Date.now().toString(16),
-      type:'qr_box',
-      x, y, w, h,
-      text,
-      size
-    };
+    L = { id:'QR-'+Date.now().toString(16), type:'qr_box', x, y, w, h, text, size };
     state.layers.push(L);
   } else {
-    L.text = text;
-    L.size = size;
-    L.w = w; L.h = h;
+    L.text = text; L.size = size; L.w = w; L.h = h;
   }
   renderLayers();
+  markPreviewDirty();
 }
 
 function ensurePeriodLayer(){
   const label = (state.period.label || '').trim();
-  if (!label) {
-    removeLayerByType('period_box');
-    return;
-  }
+  if (!label) { removeLayerByType('period_box'); return; }
 
   let L = state.layers.find(l => l.type === 'period_box');
-  const w = 420;
-  const h = 60;
-  const x = 80;
-  const y = BASE_H - h - 110;
+  const w = 420, h = 60;
+  const x = 80, y = BASE_H - h - 110;
   const fontSize = state.period.font_size || 18;
 
   if (!L) {
-    L = {
-      id:'PERIOD-'+Date.now().toString(16),
-      type:'period_box',
-      x, y, w, h,
-      text: label,
-      fontSize
-    };
+    L = { id:'PERIOD-'+Date.now().toString(16), type:'period_box', x, y, w, h, text: label, fontSize };
     state.layers.push(L);
   } else {
-    L.text = label;
-    L.fontSize = fontSize;
+    L.text = label; L.fontSize = fontSize;
   }
   renderLayers();
+  markPreviewDirty();
 }
 
 function ensureMessageLayer(){
   const text = (state.message || '').trim();
-  if (!text) {
-    removeLayerByType('message_box');
-    return;
-  }
+  if (!text) { removeLayerByType('message_box'); return; }
 
   let L = state.layers.find(l => l.type === 'message_box');
-  const w = BASE_W - 160;
-  const h = 60;
-  const x = 80;
-  const y = BASE_H - h - 40;
+  const w = BASE_W - 160, h = 60;
+  const x = 80, y = BASE_H - h - 40;
   const fontSize = state.message_font_size || 18;
 
   if (!L) {
-    L = {
-      id:'MSG-'+Date.now().toString(16),
-      type:'message_box',
-      x, y, w, h,
-      text,
-      fontSize
-    };
+    L = { id:'MSG-'+Date.now().toString(16), type:'message_box', x, y, w, h, text, fontSize };
     state.layers.push(L);
   } else {
-    L.text = text;
-    L.fontSize = fontSize;
+    L.text = text; L.fontSize = fontSize;
   }
   renderLayers();
+  markPreviewDirty();
 }
 
-/* -------------------- 결재 열/레이어 -------------------- */
-function addApprovalCol({ group, dept, role, user_id, user_name }) {
+/* -------------------- approval columns + layer -------------------- */
+function addApprovalCol({ group, dept, role, user_id, user_name, user_photo_1='' }) {
   const id = 'AC-' + Date.now().toString(16) + '-' + Math.random().toString(16).slice(2,6);
-  state.approvalCols.push({ id, group, dept, role, user_id, user_name });
+  state.approvalCols.push({ id, col_id:id, group, dept, role, user_id, user_name, user_photo_1 });
   renderApprovalCols();
 }
 
 function renderApprovalCols() {
+  if (!$approvalColsUl) return;
   $approvalColsUl.innerHTML = '';
   if (state.approvalCols.length === 0) {
     $approvalColsUl.innerHTML = '<li class="list-group-item small text-muted">결재 열이 아직 없습니다.</li>';
@@ -1726,9 +1529,7 @@ function renderApprovalCols() {
     const groupLabel = (c.group === 'draft') ? '작성부서' : '확인부서';
 
     li.innerHTML = `
-      <span>
-        ${idx+1}. [${groupLabel}] ${c.dept} / ${c.role} / ${c.user_name || '(담당자 미정)'}
-      </span>
+      <span>${idx+1}. [${groupLabel}] ${c.dept} / ${c.role} / ${c.user_name || '(담당자 미정)'}</span>
       <span class="btn-group btn-group-sm">
         <button type="button" class="btn btn-outline-secondary" data-act="up" data-id="${c.id}">△</button>
         <button type="button" class="btn btn-outline-secondary" data-act="down" data-id="${c.id}">▽</button>
@@ -1739,7 +1540,7 @@ function renderApprovalCols() {
   });
 }
 
-$approvalColsUl.addEventListener('click', (e)=>{
+on($approvalColsUl, 'click', (e)=>{
   const btn = e.target.closest('button[data-act]');
   if (!btn) return;
   const act = btn.dataset.act;
@@ -1747,165 +1548,125 @@ $approvalColsUl.addEventListener('click', (e)=>{
   const idx = state.approvalCols.findIndex(c=>c.id===id);
   if (idx === -1) return;
 
-  if (act === 'del') {
-    state.approvalCols.splice(idx,1);
-  } else if (act === 'up' && idx > 0) {
-    [state.approvalCols[idx-1], state.approvalCols[idx]] = [state.approvalCols[idx], state.approvalCols[idx-1]];
-  } else if (act === 'down' && idx < state.approvalCols.length-1) {
-    [state.approvalCols[idx+1], state.approvalCols[idx]] = [state.approvalCols[idx], state.approvalCols[idx+1]];
-  }
+  if (act === 'del') state.approvalCols.splice(idx,1);
+  else if (act === 'up' && idx > 0) [state.approvalCols[idx-1], state.approvalCols[idx]] = [state.approvalCols[idx], state.approvalCols[idx-1]];
+  else if (act === 'down' && idx < state.approvalCols.length-1) [state.approvalCols[idx+1], state.approvalCols[idx]] = [state.approvalCols[idx], state.approvalCols[idx+1]];
+
   renderApprovalCols();
+  markPreviewDirty();
 });
 
-$ckApproval.addEventListener('change', async ()=>{
-  if ($ckApproval.checked && !myId) {
-    toast('로그인 사용자 정보를 찾을 수 없습니다. 먼저 로그인하세요.','danger');
-    $ckApproval.checked = false;
-    return;
-  }
+on($ckApproval, 'change', async ()=>{
+  if ($ckApproval.checked && !myId) { toast('로그인 사용자 정보를 찾을 수 없습니다.','danger'); $ckApproval.checked=false; return; }
 
   state.approvalUse = $ckApproval.checked;
-  const on = state.approvalUse;
+  const onFlag = state.approvalUse;
 
   [$draftDept, $draftRole, $draftUser, $btnDraftAdd,
    $checkDept, $checkRole, $checkUser, $btnCheckAdd].forEach(el=>{
     if (!el) return;
-    el.disabled = !on;
+    el.disabled = !onFlag;
   });
 
-  if (on) {
-    await Promise.all([
-      fetchDepartmentsTo($draftDept),
-      fetchDepartmentsTo($checkDept)
-    ]);
-
-    if (myDept) {
-      const options = Array.from($draftDept.options);
-      const found = options.find(o => o.value === myDept);
+  if (onFlag) {
+    await Promise.all([ fetchDepartmentsTo($draftDept), fetchDepartmentsTo($checkDept) ]);
+    if (myDept && $draftDept) {
+      const found = Array.from($draftDept.options).find(o => o.value === myDept);
       if (found) $draftDept.value = myDept;
     }
   } else {
     state.approvalCols = [];
     renderApprovalCols();
+    removeLayerByType('approval_box');
   }
+
+  markPreviewDirty();
 });
 
-$draftDept.addEventListener('change', async ()=>{
+on($draftDept, 'change', async ()=>{
   const dept = $draftDept.value || '';
-  const role = $draftRole.value;
+  const role = $draftRole?.value || '';
   if ((role === '검토' || role === '승인') && dept) {
     await fetchUsersTo($draftUser, dept);
-    $draftUser.disabled = false;
+    if ($draftUser) $draftUser.disabled = false;
   } else {
-    $draftUser.disabled = true;
-    $draftUser.innerHTML = '<option value="">(담당자 선택)</option>';
+    if ($draftUser){ $draftUser.disabled = true; $draftUser.innerHTML = '<option value="">(담당자 선택)</option>'; }
   }
 });
 
-$draftRole.addEventListener('change', async ()=>{
-  const dept = $draftDept.value || '';
-  const role = $draftRole.value || '';
-
+on($draftRole, 'change', async ()=>{
+  const dept = $draftDept?.value || '';
+  const role = $draftRole?.value || '';
   if (!dept || !role) {
-    $draftUser.disabled = true;
-    $draftUser.innerHTML = '<option value="">(담당자 선택)</option>';
+    if ($draftUser){ $draftUser.disabled = true; $draftUser.innerHTML = '<option value="">(담당자 선택)</option>'; }
     return;
   }
-
   if (role === '작성') {
-    $draftUser.disabled = true;
-    $draftUser.innerHTML = '<option value="">(담당자 선택)</option>';
+    if ($draftUser){ $draftUser.disabled = true; $draftUser.innerHTML = '<option value="">(담당자 선택)</option>'; }
   } else {
     await fetchUsersTo($draftUser, dept);
-    $draftUser.disabled = false;
+    if ($draftUser) $draftUser.disabled = false;
   }
 });
 
-$btnDraftAdd.addEventListener('click', ()=>{
-  const dept = $draftDept.value || '';
-  const role = $draftRole.value || '';
+on($btnDraftAdd, 'click', ()=>{
+  const dept = $draftDept?.value || '';
+  const role = $draftRole?.value || '';
+  if (!dept || !role) { toast('작성부서와 역할을 먼저 선택하세요.','warning'); return; }
 
-  if (!dept || !role) {
-    toast('작성부서와 역할을 먼저 선택하세요.','warning');
-    return;
-  }
-
-  let user_id = '';
-  let user_name = '';
-  let user_photo_1 = '';   // ✅ 추가
+  let user_id = '', user_name = '', user_photo_1 = '';
 
   if (role === '작성') {
-    if (!myId) {
-      toast('로그인 사용자 정보를 찾을 수 없습니다.','danger');
-      return;
-    }
-    user_id = myId;
-    user_name = myName;
-    user_photo_1 = myPhoto1 || '';  // ✅ 작성자 photo_1
-
+    if (!myId) { toast('로그인 사용자 정보를 찾을 수 없습니다.','danger'); return; }
+    user_id = myId; user_name = myName; user_photo_1 = myPhoto1 || '';
   } else {
-    user_id = $draftUser.value || '';
-    user_name = $draftUser.options[$draftUser.selectedIndex]?.text || '';
-    if (!user_id) {
-      toast('검토/승인 담당자를 선택하세요.','warning');
-      return;
-    }
+    user_id = $draftUser?.value || '';
+    user_name = $draftUser?.options?.[$draftUser.selectedIndex]?.text || '';
+    if (!user_id) { toast('검토/승인 담당자를 선택하세요.','warning'); return; }
   }
 
-   addApprovalCol({ group:'draft', dept, role, user_id, user_name, user_photo_1 }); // ✅ 추가
+  addApprovalCol({ group:'draft', dept, role, user_id, user_name, user_photo_1 });
 });
 
-$checkDept.addEventListener('change', async ()=>{
+on($checkDept, 'change', async ()=>{
   const dept = $checkDept.value || '';
   if (!dept) {
-    $checkUser.disabled = true;
-    $checkUser.innerHTML = '<option value="">(담당자 선택)</option>';
+    if ($checkUser){ $checkUser.disabled = true; $checkUser.innerHTML = '<option value="">(담당자 선택)</option>'; }
     return;
   }
   await fetchUsersTo($checkUser, dept);
-  $checkUser.disabled = false;
+  if ($checkUser) $checkUser.disabled = false;
 });
 
-$btnCheckAdd.addEventListener('click', ()=>{
-  const dept = $checkDept.value || '';
-  const role = $checkRole.value || '';
-  const user_id = $checkUser.value || '';
-  const user_name = $checkUser.options[$checkUser.selectedIndex]?.text || '';
+on($btnCheckAdd, 'click', ()=>{
+  const dept = $checkDept?.value || '';
+  const role = $checkRole?.value || '';
+  const user_id = $checkUser?.value || '';
+  const user_name = $checkUser?.options?.[$checkUser.selectedIndex]?.text || '';
 
-  if (!dept || !role) {
-    toast('확인부서와 역할을 선택하세요.','warning');
-    return;
-  }
-  if (!user_id) {
-    toast('확인부서 담당자를 선택하세요.','warning');
-    return;
-  }
+  if (!dept || !role) { toast('확인부서와 역할을 선택하세요.','warning'); return; }
+  if (!user_id) { toast('확인부서 담당자를 선택하세요.','warning'); return; }
 
   addApprovalCol({ group:'check', dept, role, user_id, user_name });
 });
 
-$btnApprovalClear.addEventListener('click', ()=>{
+on($btnApprovalClear, 'click', ()=>{
   state.approvalCols = [];
   renderApprovalCols();
-  // 결재 박스 레이어도 함께 제거(원하면)
   removeLayerByType('approval_box');
+  markPreviewDirty();
 });
 
-$btnApprovalBuild.addEventListener('click', ()=>{
-  if (!state.approvalUse) {
-    toast('먼저 결재기능을 사용으로 켜세요.','warning');
-    return;
-  }
-  if (state.approvalCols.length === 0) {
-    toast('추가된 결재 열이 없습니다.','warning');
-    return;
-  }
+on($btnApprovalBuild, 'click', ()=>{
+  if (!state.approvalUse) { toast('먼저 결재기능을 사용으로 켜세요.','warning'); return; }
+  if (state.approvalCols.length === 0) { toast('추가된 결재 열이 없습니다.','warning'); return; }
 
   const totalCols = state.approvalCols.length;
   const w = Math.min(BASE_W - 160, 160 * totalCols);
   const h = 180;
   const x = Math.round((BASE_W - w) / 2);
-  const y = BASE_H - h - 80;
+  const y = 180;
+  // const y = BASE_H - h - 80;
 
   let L = state.layers.find(l => l.type === 'approval_box');
   if (!L) {
@@ -1914,78 +1675,53 @@ $btnApprovalBuild.addEventListener('click', ()=>{
       type: 'approval_box',
       x, y, w, h,
       columns: [],
-      tpl: {
-        row_ratio: [1, 3, 1],
-        stamp_scale: 0.8,
-        dept_col_ratio: 0.18
-      }
+      tpl: { row_ratio:[1,3,1], stamp_scale:0.8, dept_col_ratio:0.18 }
     };
     state.layers.push(L);
   }
 
-  L.columns = state.approvalCols.map(c => ({ ...c }));
+  // cols normalize (col_id/col_index/group/role/user_id/user_name/dept/photo)
+  L.columns = normalizeApprovalCols(state.approvalCols);
 
   state.selected = L;
   rememberBox(L);
   renderLayers();
-
+  markPreviewDirty();
   toast('결재 LAY가 미리보기에 추가되었습니다.','success');
 });
 
-
-/* -------------------- 직인 / QR / 게시기간 / 메세지 이벤트 -------------------- */
-$stampUse.addEventListener('change', async ()=>{
+/* -------------------- stamp/qr/period/message events -------------------- */
+on($stampUse, 'change', async ()=>{
   state.stamp.use = $stampUse.checked;
-
-  if (state.stamp.use) {
-    await fetchStampList();
-  } else {
-    // 선택 초기화 + 레이어 제거
-    state.stamp.id = null;
-    state.stamp.name = '';
-    state.stamp.url = '';
-    $stampList?.querySelectorAll('.stamp-card').forEach(x=>x.classList.remove('selected'));
+  if (state.stamp.use) await fetchStampList();
+  else {
+    state.stamp.id=null; state.stamp.name=''; state.stamp.url='';
+    if ($stampList) $stampList.querySelectorAll('.stamp-card').forEach(x=>x.classList.remove('selected'));
     removeLayerByType('stamp_box');
   }
+  markPreviewDirty();
 });
 
-
-$stampType.addEventListener('change', ()=>{
+on($stampType, 'change', ()=>{
   state.stamp.type = $stampType.value || '';
   const L = state.layers.find(l => l.type === 'stamp_box');
-  if (L) {
-    L.stamp = { ...(L.stamp || {}), type: state.stamp.type };
-    renderLayers();
-  }
+  if (L) { L.stamp = { ...(L.stamp || {}), type: state.stamp.type }; renderLayers(); markPreviewDirty(); }
 });
 
-$stampSize.addEventListener('change', ()=>{
-  state.stamp.size = parseInt($stampSize.value,10) || 80;
-});
+on($stampSize, 'change', ()=>{ state.stamp.size = parseInt($stampSize.value,10) || 80; markPreviewDirty(); });
 
-$btnStampAdd.addEventListener('click', ()=>{
-  if (!state.stamp.id) {
-    toast('먼저 직인 항목을 선택하세요.','warning');
-    return;
-  }
+on($btnStampAdd, 'click', ()=>{
+  if (!state.stamp.id) { toast('먼저 직인 항목을 선택하세요.','warning'); return; }
   state.stamp.size = parseInt($stampSize.value,10) || 80;
   ensureStampLayer();
 });
 
-$qrText.addEventListener('input', ()=>{
-  state.qrcode.text = ($qrText.value || '').trim();
-});
+on($qrText, 'input', ()=>{ state.qrcode.text = ($qrText.value || '').trim(); markPreviewDirty(); });
+on($qrSize, 'change', ()=>{ state.qrcode.size = parseInt($qrSize.value,10) || 120; markPreviewDirty(); });
 
-$qrSize.addEventListener('change', ()=>{
-  state.qrcode.size = parseInt($qrSize.value,10) || 120;
-});
-
-$btnQrAdd.addEventListener('click', ()=>{
+on($btnQrAdd, 'click', ()=>{
   const text = (state.qrcode.text || '').trim();
-  if (!text) {
-    toast('QR 내용 텍스트를 입력하세요.','warning');
-    return;
-  }
+  if (!text) { toast('QR 내용 텍스트를 입력하세요.','warning'); return; }
   state.qrcode.size = parseInt($qrSize.value,10) || 120;
   ensureQrLayer();
 });
@@ -2001,78 +1737,66 @@ function formatPeriodLabel(){
   return `${fdComp} ${ft} ~ ${tdComp} ${tt}`;
 }
 function onPeriodChange(){
-  state.period.from_date = $periodFrom.value || '';
-  state.period.to_date   = $periodTo.value   || '';
-  state.period.from_time = $periodFromTime.value || '';
-  state.period.to_time   = $periodToTime.value   || '';
+  state.period.from_date = $periodFrom?.value || '';
+  state.period.to_date   = $periodTo?.value   || '';
+  state.period.from_time = $periodFromTime?.value || '';
+  state.period.to_time   = $periodToTime?.value   || '';
   state.period.label     = formatPeriodLabel();
+  markPreviewDirty();
 }
+on($periodFrom, 'change', onPeriodChange);
+on($periodTo, 'change', onPeriodChange);
+on($periodFromTime, 'change', onPeriodChange);
+on($periodToTime, 'change', onPeriodChange);
 
-$periodFrom.addEventListener('change', onPeriodChange);
-$periodTo.addEventListener('change', onPeriodChange);
-$periodFromTime.addEventListener('change', onPeriodChange);
-$periodToTime.addEventListener('change', onPeriodChange);
+on($periodFont, 'change', ()=>{ state.period.font_size = parseInt($periodFont.value,10) || 18; markPreviewDirty(); });
 
-$periodFont.addEventListener('change', ()=>{
-  state.period.font_size = parseInt($periodFont.value,10) || 18;
-});
-
-$btnPeriodAdd.addEventListener('click', ()=>{
+on($btnPeriodAdd, 'click', ()=>{
   onPeriodChange();
-  if (!state.period.label) {
-    toast('게시기간을 먼저 설정하세요.','warning');
-    return;
-  }
+  if (!state.period.label) { toast('게시기간을 먼저 설정하세요.','warning'); return; }
   state.period.font_size = parseInt($periodFont.value,10) || 18;
   ensurePeriodLayer();
 });
 
-$msgInput.addEventListener('input', ()=>{
+on($msgInput, 'input', ()=>{
   const v = $msgInput.value || '';
   if (v.length>100) $msgInput.value = v.slice(0,100);
   state.message = $msgInput.value;
+  markPreviewDirty();
 });
+on($msgFont, 'change', ()=>{ state.message_font_size = parseInt($msgFont.value,10) || 18; markPreviewDirty(); });
 
-$msgFont.addEventListener('change', ()=>{
-  state.message_font_size = parseInt($msgFont.value,10) || 18;
-});
-
-$btnMsgAdd.addEventListener('click', ()=>{
+on($btnMsgAdd, 'click', ()=>{
   const text = (state.message || '').trim();
-  if (!text) {
-    toast('메세지를 먼저 입력하세요.','warning');
-    return;
-  }
+  if (!text) { toast('메세지를 먼저 입력하세요.','warning'); return; }
   state.message_font_size = parseInt($msgFont.value,10) || 18;
   ensureMessageLayer();
 });
 
-
-/* -------------------- 파일/옵션 이벤트 -------------------- */
-$file.addEventListener('change', async (ev)=>{
+/* -------------------- file/device/options -------------------- */
+on($file, 'change', async (ev)=>{
   const f=ev.target.files?.[0];
   if(!f) return;
 
-  // 새 파일이면 상태 초기화
+  // reset
   state.file_name = f.name;
-  state.page=1;
-  state.pages=1;
-  state.layers = [];
-  state.selected = null;
-  state.approvalCols = [];
-  state.approvalUse = false;
-  $ckApproval.checked = false;
+  state.page=1; state.pages=1;
+  state.layers = []; state.selected = null;
+  state.approvalCols = []; state.approvalUse = false;
+  if ($ckApproval) $ckApproval.checked = false;
   renderApprovalCols();
 
   try{
-    await previewOriginalOnce(f); // ✅ 딱 1번만 호출
+    await runWithBusy(()=>previewOriginalOnce(f),{
+      title:'현재 파일 생성중입니다',
+      desc:'원본 프리뷰를 생성하고 있습니다.',
+      firstStep:'원본 변환 요청',
+      doneStep:'원본 프리뷰 준비 완료'
+    });
+
     redrawHeader();
     renderLayers();
     toast('원본 프리뷰 준비 완료','success');
-
-    if (state.pages > 1) {
-      toast('단일 호출 정책으로 멀티페이지 이동은 비활성입니다.','warning');
-    }
   }catch(e){
     toast('미리보기 실패','danger');
   }finally{
@@ -2080,180 +1804,87 @@ $file.addEventListener('change', async (ev)=>{
   }
 });
 
-$dev.addEventListener('change', ()=>{
+on($dev, 'change', ()=>{
   state.device_id = $dev.value || '';
   redrawHeader();
 });
 
-$res.addEventListener('change', ()=>{
-  setAspectByRes($res.value);
-  renderLayers();
-});
+updatePercentRow();
 
-
-function markPreviewDirty(){
-  state.preview.dirty = true;
-  // 버튼에 살짝 힌트 주고 싶으면(선택):
-  $btnBmpToggle.classList.add('btn-warning');
-}
-
-$mode.addEventListener('change', ()=>{
-  state.mode=$mode.value;
-  markPreviewDirty();
-});
-
-$scale.addEventListener('change', ()=>{
-  state.scale=$scale.value;
+on($scale, 'change', async ()=>{
+  state.scale = $scale.value;
   updatePercentRow();
   markPreviewDirty();
+
+  try{
+    await applyTransformAndRefreshPreview('스케일 변경');
+    toast('프리뷰가 갱신되었습니다.','info');
+  }catch(e){
+    toast('프리뷰 갱신 실패','danger');
+  }
 });
 
-$percent.addEventListener('input', ()=>{
+on($rotate, 'change', async ()=>{
+  state.rotate = parseInt($rotate.value,10) || 0;
+  markPreviewDirty();
+
+  try{
+    await applyTransformAndRefreshPreview('회전 변경');
+    toast('프리뷰가 갱신되었습니다.','info');
+  }catch(e){
+    toast('프리뷰 갱신 실패','danger');
+  }
+});
+
+
+on($percent, 'input', ()=>{
   state.percent=parseInt($percent.value,10)||100;
   markPreviewDirty();
 });
 
-$rotate.addEventListener('change', ()=>{
-  state.rotate=parseInt($rotate.value,10)||0;
+on($mode, 'change', ()=>{
+  state.mode=$mode.value;
   markPreviewDirty();
 });
 
-
-/* 도형 버튼 */
-$btnAddText.addEventListener('click', addText);
-$btnAddLine.addEventListener('click', addLine);
-$btnAddRect.addEventListener('click', addRect);
-$btnDel.addEventListener('click', delSel);
-
-/* 텍스트 속성: 프론트 렌더만 갱신 */
-$fontFamily.addEventListener('change', ()=>{
-  const L=state.selected;
-  if (!L || L.type!=='text') return;
-  L.fontFamily = $fontFamily.value;
-  renderLayers();
-});
-$fontSize.addEventListener('change', ()=>{
-  const L=state.selected;
-  if (!L || L.type!=='text') return;
-  L.fontSize = parseInt($fontSize.value,10)||28;
-  renderLayers();
-});
-$fontWeight.addEventListener('change', ()=>{
-  const L=state.selected;
-  if (!L || L.type!=='text') return;
-  L.fontWeight = $fontWeight.value;
-  renderLayers();
-});
-$fontColor.addEventListener('change', ()=>{
-  const L=state.selected;
-  if (!L || L.type!=='text') return;
-  L.color = $fontColor.value;
-  renderLayers();
-});
-$alignL.addEventListener('click', ()=>{
-  const L=state.selected;
-  if(!L || L.type!=='text') return;
-  L.align='left';
-  renderLayers();
-});
-$alignC.addEventListener('click', ()=>{
-  const L=state.selected;
-  if(!L || L.type!=='text') return;
-  L.align='center';
-  renderLayers();
-});
-$alignR.addEventListener('click', ()=>{
-  const L=state.selected;
-  if(!L || L.type!=='text') return;
-  L.align='right';
-  renderLayers();
-});
-$ptext.addEventListener('input', ()=>{
-  const L=state.selected;
-  if (!L || L.type!=='text') return;
-  L.text = $ptext.value;
-  renderLayers();
-});
-
-
-/* -------------------- 저장/배포 (그대로: 서버 호출) -------------------- */
+/* -------------------- sendfile -------------------- */
 const saveOrSendCommon = async (url, body) =>{
   const r=await fetch(url,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body)
   });
-  const js=await r.json();
+  const js=await r.json().catch(()=> ({}));
   if(!r.ok) throw new Error(js?.message||url+' fail');
   return js;
 };
 
-$btnSave.addEventListener('click', async ()=>{
-  if (!state.upload_id) {
-    toast('저장할 파일이 없습니다. 먼저 파일을 선택하세요.','warning');
-    return;
-  }
-  const body = {
-    upload_id: state.upload_id,
-    device_id: state.device_id || null,
-    memo: $memo.value || '',
-    filename: state.file_name || '',
-    params: {
-      width: state.uiWidth,
-      height: state.uiHeight,
-      mode: state.mode,
-      scale: state.scale,
-      percent: state.percent,
-      rotate: state.rotate
-    },
-    editor_layers: state.useEditor ? state.layers : [],
-    meta: {
-      approval: { use: state.approvalUse, columns: state.approvalCols },
-      stamp: state.stamp,
-      qrcode: state.qrcode,
-      period: state.period,
-      message: { text: state.message, font_size: state.message_font_size }
-    }
-  };
-  try{
-    await saveOrSendCommon('/bulletin/save_draft', body);
-    toast('저장 완료','success');
-  }catch(e){
-    toast('저장 실패','danger');
-  }
-});
+function normalizeApprovalCols(cols){
+  const arr = Array.isArray(cols) ? cols : [];
+  return arr.map((c, idx) => {
+    const col_id = (c.col_id || c.id || ('COL-' + Date.now().toString(16) + '-' + idx));
+    return {
+      col_id,
+      id: col_id,
+      col_index: Number.isFinite(+c.col_index) ? +c.col_index : (idx + 1),
+      group: (c.group || '').trim(),
+      role: (c.role || '').trim(),
+      user_id: (c.user_id ?? ''),
+      user_name: (c.user_name ?? ''),
+      dept: (c.dept ?? ''),
+      user_photo_1: (c.user_photo_1 ?? ''),
+    };
+  }).map((c, idx) => ({ ...c, col_index: idx + 1 }));
+}
 
-$btnExport.addEventListener('click', async ()=>{
-  if (!state.upload_id) {
-    toast('파일을 먼저 선택하세요.','warning');
-    return;
-  }
-  try{
-    const r=await fetch('/bulletin/editor_export',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ upload_id:state.upload_id, layers: state.layers })
-    });
-    if(!r.ok) throw 0;
-    toast('편집결과 내보내기 요청 완료','info');
-  }catch(e){
-    toast('내보내기 실패','danger');
-  }
-});
-
-$btnSend.addEventListener('click', async ()=>{
-  if (!state.upload_id) {
-    toast('전송할 파일이 없습니다.','warning');
-    return;
-  }
-  if (!state.device_id) {
-    toast('대상 장치를 선택하세요.','warning');
-    return;
-  }
+on($btnSend, 'click', async ()=>{
+  if (!state.upload_id) { toast('전송할 파일이 없습니다.','warning'); return; }
   if (state.approvalUse && state.approvalCols.length === 0) {
     toast('결재를 사용할 경우, 결재 열을 1개 이상 추가해야 합니다.','warning');
     return;
   }
+
+  state.approvalCols = normalizeApprovalCols(state.approvalCols);
 
   const body = {
     upload_id: state.upload_id,
@@ -2266,7 +1897,7 @@ $btnSend.addEventListener('click', async ()=>{
     percent: state.percent,
     rotate: state.rotate,
     editor_layers: state.useEditor ? state.layers : [],
-    memo: $memo.value || '',
+    memo: ($memo && $memo.value) ? $memo.value : '',
     meta: {
       approval: { use: state.approvalUse, columns: state.approvalCols },
       stamp: state.stamp,
@@ -2277,22 +1908,58 @@ $btnSend.addEventListener('click', async ()=>{
   };
 
   try{
-    const js=await saveOrSendCommon('/bulletin/sendfile', body);
-    toast(`전송 요청 완료 (job #${js.job_id||'-'})`,'success');
+    const js = await runWithBusy(()=>saveOrSendCommon('/bulletin/sendfile', body),{
+      title:'현재 파일 생성중입니다',
+      desc:'서버에 파일을 저장하고 배포 데이터를 만들고 있습니다.',
+      firstStep:'전송 요청',
+      doneStep:'전송 완료'
+    });
+
+    toast(`전송 완료 (doc_id=${js.upload_row_id || '-'})`,'success');
+
+    if (js.upload_row_id) {
+      window.location.href = `/bulletin/files/${js.upload_row_id}`;
+    }
   }catch(e){
     toast('전송 실패','danger');
   }
 });
 
+async function applyTransformAndRefreshPreview(reasonText){
+  if (!state.upload_id) return;
 
-/* -------------------- 초기화 -------------------- */
+  await runWithBusy(async ()=>{
+    // 1) 원본을 먼저 새 옵션으로 갱신
+    busyStep(`${reasonText} → 원본 프리뷰 갱신`);
+    await refreshOriginalByUpload();
+
+    // 2) 현재 화면이 BMP 모드면 BMP도 다시 생성
+    if (state.preview.mode === 'bmp') {
+      busyStep(`${reasonText} → BMP 프리뷰 빌드`);
+      await buildBmpPreview(); // 이 함수가 mode를 bmp로 유지하고 img도 bmp로 세팅함
+      return;
+    }
+
+    // 3) 현재 화면이 원본 모드면 원본을 다시 표시
+    state.preview.mode = 'original';
+    if ($img) $img.src = state.preview.originalUrl + '#t=' + Date.now();
+    if ($btnBmpToggle) $btnBmpToggle.textContent = 'BMP확인';
+  },{
+    title:'현재 파일 생성중입니다',
+    desc:'변경된 옵션을 프리뷰에 반영 중입니다.',
+    firstStep: `${reasonText} 처리 시작`,
+    doneStep: '프리뷰 갱신 완료'
+  });
+}
+
+
+/* -------------------- init -------------------- */
 (async function init(){
   updatePercentRow();
   redrawHeader();
   renderApprovalCols();
   renderLayers();
-
-  await fetchStampList();   // ✅ 처음부터 목록 로드
+  await fetchStampList();
 })();
 })();
 </script>
