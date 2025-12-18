@@ -4,12 +4,12 @@ from __future__ import annotations
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import desc, or_, and_
+from sqlalchemy import desc, or_, and_,asc
 from sqlalchemy.orm import joinedload
 from pybo import db
 import json
 import os
-import logging
+import logging, inspect
 
 
 try:
@@ -27,6 +27,7 @@ from ..models import (
     # ApprovalRouteStep as ApprovalRouteStepModel,
     SignSlot as SignSlotModel,
     DocumentApprovalStep as DocumentApprovalStepModel,
+    StampAsset,
     kst_now_naive as now_kst,
 )
 
@@ -92,18 +93,15 @@ def _coerce_target_dir(v: Optional[str]) -> str:
 
 def _coerce_status(v: Optional[str]) -> str:
     """
-    DocumentInfo.status 허용값:
-      - 'draft'      : 초안
-      - 'in_review'  : 결재 진행 중
-      - 'checked'    : 결재 일부 완료, 최종 승인 대기
-      - 'approved'   : 결재 완료
-      - 'rejected'   : 반려
-      - 'uploads'    : 디바이스 송출용/즉시 배포 플로우
+    DocumentInfo.status (큰 상태만)
+      - draft / in_review / checked / approved / rejected / bulletin_files
+      - (호환) uploads 는 과거 데이터 호환용으로만 남겨둠
     """
-    allowed = ("draft", "in_review", "checked", "approved", "rejected", "uploads")
+    allowed = ("draft", "in_review", "checked", "approved", "rejected", "bulletin_files", "uploads")
     out = v if v in allowed else "draft"
     _dbg("coerce_status", input=v, output=out)
     return out
+
 
 
 def _role_is_valid(role: Optional[str]) -> bool:
@@ -514,6 +512,13 @@ class RepositoryEINK:
     # ------------------------------------------------------------------
     # DocumentInfo 레코드 생성 (컨트롤러 send_file_route에서 사용)
     # ------------------------------------------------------------------
+    # repository/repository_eink.py (발췌)
+    @staticmethod
+    def _coerce_fit_mode(v: str | None) -> str:
+        v = (v or "fit").lower().strip()
+        return v if v in ("fit", "fill", "percent") else "fit"
+
+
     @staticmethod
     def create_upload_record(
         *,
@@ -521,14 +526,14 @@ class RepositoryEINK:
         device_id: Optional[str],
         orig_filename: str,
         stored_path: str,
-        target_dir: str,  # 'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
+        target_dir: str,
         need_approval: bool,
-        status: str,  # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
+        status: str,
         pages: int = 1,
         width: Optional[int] = None,
         height: Optional[int] = None,
-        mode: Optional[str] = None,  # 'BW' | 'BWRY' | 'BWRYBG'
-        scale: Optional[str] = None,  # 'fit' | 'fill' | 'percent'
+        mode: Optional[str] = None,
+        scale: Optional[str] = None,   # ✅ DB에는 fit_mode로 저장
         percent: Optional[int] = None,
         rotate: Optional[int] = None,
         route_id: Optional[int] = None,
@@ -539,64 +544,54 @@ class RepositoryEINK:
         expire_time: Optional[datetime] = None,
         final_doc_relpath: Optional[str] = None,
     ) -> int:
-        """
-        DocumentInfo 1건 생성.
-        - 현재는 BMP/메타 번들 기준으로 stored_path=bmp_path 를 저장하지만,
-          필드 구조는 정식 DocumentInfo 설계(원본/normalized.pdf/레이아웃 스냅샷)를 그대로 사용.
-        - JSON 컬럼은 dict/list 그대로 저장.
-        """
-        _dbg(
-            "create_upload_record:start",
-            device_id=device_id,
-            target_dir=target_dir,
-            status=status,
-            width=width,
-            height=height,
-            mode=mode,
-            scale=scale,
-            percent=percent,
-            rotate=rotate,
-            route_id=route_id,
-            sign_layout_id=sign_layout_id,
-        )
+
         row = DocumentInfoModel(
             user_id=user_id,
             device_id=(device_id or None),
-            doc_name=orig_filename,  # 화면용 제목은 orig_filename으로 초기화
+            doc_name=orig_filename,
             orig_filename=orig_filename,
-            stored_path=stored_path,
+
+            # ✅ 처음엔 모를 수 있으니 "" 허용(모델 default="") + 이후 update에서 채움
+            stored_path=stored_path or "",
+
             target_dir=_coerce_target_dir(target_dir),
             need_approval=bool(need_approval),
             need_stamp=False,
             status=_coerce_status(status),
             expire_time=expire_time,
-            pages=pages,
+
+            # ✅ pages 컬럼 반영
+            pages=max(1, int(pages or 1)),
+            # (선택) 기존 source_pages도 같이 맞춰두면 혼동 줄어듦
+            source_pages=max(1, int(pages or 1)),
+
+            # ✅ 디바이스 렌더 파라미터 저장
             width=width,
             height=height,
-            mode=mode,
-            scale=scale,
+            mode=(mode or None),
+
+            # ✅ scale은 fit_mode로 저장
+            fit_mode= RepositoryEINK._coerce_fit_mode(scale),
             percent=percent,
             rotate=rotate,
-            # route_id=route_id,
+
+            # ✅ route_id 저장
+            route_id=route_id,
             sign_layout_id=sign_layout_id,
+
             route_snapshot_json=_json_passthrough(route_snapshot),
             layout_snapshot_json=_json_passthrough(layout_snapshot),
             metadata_json=_json_passthrough(metadata),
             final_doc_relpath=final_doc_relpath,
+
             created_at=now_kst(),
             updated_at=now_kst(),
         )
-        try:
-            db.session.add(row)
-            db.session.commit()
-            _dbg("create_upload_record:committed", upload_id=int(row.id))
-            return int(row.id)
-        except SQLAlchemyError as e:
-            _logger().debug(
-                "[create_upload_record] DB error, rollback", exc_info=True
-            )
-            db.session.rollback()
-            raise e
+
+        db.session.add(row)
+        db.session.commit()
+        return int(row.id)
+
 
     # ------------------------------------------------------------------
     # DocumentInfo 상태/디렉터리 업데이트
@@ -605,8 +600,8 @@ class RepositoryEINK:
     def update_upload_status(
         upload_id: int,
         *,
-        status: Optional[str] = None,  # 'draft' | 'in_review' | 'checked' | 'approved' | 'rejected' | 'uploads'
-        target_dir: Optional[str] = None,  # 'uploads' | 'in_review' | 'checked' | 'approved' | 'bulletin_files'
+        status: Optional[str] = None,
+        target_dir: Optional[str] = None,
         route_id: Optional[int] = None,
         sign_layout_id: Optional[int] = None,
         route_snapshot: Optional[Dict[str, Any]] = None,
@@ -614,66 +609,66 @@ class RepositoryEINK:
         metadata: Optional[Dict[str, Any]] = None,
         expire_time: Optional[datetime] = None,
         final_doc_relpath: Optional[str] = None,
-        stored_path: Optional[str] = None,  # ✅ 추가 (문서 마스터 doc_dir 같은 실제 경로)
+        stored_path: Optional[str] = None,
+
+        # ✅ (선택) 페이지 수/렌더 파라미터도 업데이트 가능하게
+        pages: Optional[int] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        mode: Optional[str] = None,
+        scale: Optional[str] = None,
+        percent: Optional[int] = None,
+        rotate: Optional[int] = None,
     ) -> bool:
-        _dbg(
-            "update_upload_status:start",
-            upload_id=upload_id,
-            status=status,
-            target_dir=target_dir,
-            route_id=route_id,
-            sign_layout_id=sign_layout_id,
-            stored_path=stored_path,  # ✅ 로그 추가
-        )
-        if not upload_id:
-            _dbg("update_upload_status:invalid_id")
+        row = db.session.get(DocumentInfoModel, upload_id)
+        if not row:
             return False
-        try:
-            row = db.session.get(DocumentInfoModel, upload_id)
-            if not row:
-                _dbg("update_upload_status:not_found", upload_id=upload_id)
-                return False
 
-            if status in ("draft", "in_review", "checked", "approved", "rejected", "uploads"):
-                row.status = status
+        if status in ("draft", "in_review", "checked", "approved", "rejected", "bulletin_files", "uploads"):
+            row.status = status
+        if target_dir in ("in_review", "checked", "approved", "uploads", "bulletin_files"):
+            row.target_dir = target_dir
 
-            if target_dir in ("in_review", "checked", "approved", "uploads", "bulletin_files"):
-                row.target_dir = target_dir
+        if route_id is not None:
+            row.route_id = route_id
+        if sign_layout_id is not None:
+            row.sign_layout_id = sign_layout_id
 
-            if route_id is not None:
-                row.route_id = route_id
-            if sign_layout_id is not None:
-                row.sign_layout_id = sign_layout_id
-            if route_snapshot is not None:
-                row.route_snapshot_json = _json_passthrough(route_snapshot)
-            if layout_snapshot is not None:
-                row.layout_snapshot_json = _json_passthrough(layout_snapshot)
-            if metadata is not None:
-                row.metadata_json = _json_passthrough(metadata)
-            if expire_time is not None:
-                row.expire_time = expire_time
-            if final_doc_relpath is not None:
-                row.final_doc_relpath = final_doc_relpath
+        if route_snapshot is not None:
+            row.route_snapshot_json = _json_passthrough(route_snapshot)
+        if layout_snapshot is not None:
+            row.layout_snapshot_json = _json_passthrough(layout_snapshot)
+        if metadata is not None:
+            row.metadata_json = _json_passthrough(metadata)
 
-            # ✅ stored_path 반영
-            if stored_path is not None:
-                row.stored_path = stored_path
+        if expire_time is not None:
+            row.expire_time = expire_time
+        if final_doc_relpath is not None:
+            row.final_doc_relpath = final_doc_relpath
+        if stored_path is not None:
+            row.stored_path = stored_path
 
-            row.updated_at = now_kst()
-            db.session.commit()
-            _dbg(
-                "update_upload_status:committed",
-                upload_id=upload_id,
-                status=row.status,
-                target_dir=row.target_dir,
-                stored_path=row.stored_path,  # ✅ 로그 추가
-            )
-            return True
+        # ✅ pages/렌더 파라미터 업데이트(필요할 때만)
+        if pages is not None:
+            row.pages = max(1, int(pages or 1))
+            row.source_pages = row.pages
+        if width is not None:
+            row.width = width
+        if height is not None:
+            row.height = height
+        if mode is not None:
+            row.mode = mode
+        if scale is not None:
+            row.fit_mode = RepositoryEINK._coerce_fit_mode(scale)
+        if percent is not None:
+            row.percent = percent
+        if rotate is not None:
+            row.rotate = rotate
 
-        except SQLAlchemyError:
-            _logger().debug("[update_upload_status] DB error, rollback", exc_info=True)
-            db.session.rollback()
-            return False
+        row.updated_at = now_kst()
+        db.session.commit()
+        return True
+
 
 
     # ------------------------------------------------------------------
@@ -1425,7 +1420,7 @@ class RepositoryEINK:
                 userid_snapshot=userid,
                 username_snapshot=username,
                 photo_1_snapshot=None,     # 필요시 User 조회해서 채워도 됨
-                status="pending",
+                status="wait",
             )
             db.session.add(row)
 
@@ -1569,6 +1564,9 @@ class RepositoryEINK:
             .filter(DocumentInfoModel.user_id == user_id)
         )
         q = RepositoryEINK._apply_common_filters(q, search, status, date_from, date_to)
+
+        # current_app.logger.debug("[ENUM] DocumentApprovalStepModel file=%s", inspect.getfile(DocumentApprovalStepModel))
+        # current_app.logger.debug("[ENUM] DocumentApprovalStepModel enums=%s", DocumentApprovalStepModel.__table__.c.status.type.enums)
         return q.limit(limit).all()
 
     # ─────────────────────────────
@@ -1690,4 +1688,406 @@ class RepositoryEINK:
         q = q.distinct(DocumentInfoModel.id)
 
         return q.limit(limit).all()
+
+#######################################################
+################  STAMP    ############################
+#######################################################
+
+    @staticmethod
+    def create_stamp_asset(
+        *,
+        name: str,
+        filename: str,
+        stored_path: str,
+        created_by: Optional[int] = None,
+        mime: Optional[str] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
+        sort_order: int = 0,
+        is_active: bool = True,
+    ) -> int:
+        row = StampAsset(
+            name=name,
+            filename=filename,
+            stored_path=stored_path,
+            created_by=created_by,
+            mime=mime,
+            width=width,
+            height=height,
+            sort_order=int(sort_order or 0),
+            is_active=bool(is_active),
+        )
+        db.session.add(row)
+        db.session.commit()
+        return int(row.id)
+
+    @staticmethod
+    def list_stamp_assets(active_only: bool = True) -> List[StampAsset]:
+        q = db.session.query(StampAsset)
+        if active_only:
+            q = q.filter(StampAsset.is_active.is_(True))
+        return (
+            q.order_by(asc(StampAsset.sort_order), desc(StampAsset.created_at), desc(StampAsset.id))
+             .all()
+        )
+
+    @staticmethod
+    def get_stamp_asset(stamp_id: int, active_only: bool = False) -> Optional[StampAsset]:
+        q = db.session.query(StampAsset).filter(StampAsset.id == int(stamp_id))
+        if active_only:
+            q = q.filter(StampAsset.is_active.is_(True))
+        return q.first()
+
+    @staticmethod
+    def get_stamp_stored_path(stamp_id: int, active_only: bool = True) -> Optional[str]:
+        """
+        stamp_id → StampAsset.stored_path 반환.
+        active_only=True면 비활성 도장은 None 처리.
+        """
+        if not stamp_id:
+            return None
+
+        q = db.session.query(StampAsset).filter(StampAsset.id == int(stamp_id))
+        if active_only:
+            q = q.filter(StampAsset.is_active.is_(True))
+
+        row = q.first()
+        return (row.stored_path if row else None)
+
+
+    @staticmethod
+    def init_approval_flow(document_info_id: int, drafter_user_id: int) -> None:
+        """
+        A안 정책 초기화:
+        - 모든 step: wait
+        - 작성(step_type='작성', col_index=1 우선): done (+ signed_by, signed_at)
+        - 다음 step 1개: pending
+        - 나머지: wait
+        """
+        try:
+            steps = (DocumentApprovalStepModel.query
+                     .filter(DocumentApprovalStepModel.document_info_id == document_info_id)
+                     .order_by(DocumentApprovalStepModel.col_index.asc())
+                     .all())
+
+            if not steps:
+                return
+
+            now = now_kst()
+
+            # 1) 전체 wait로 초기화 (기존 pending 남는 것 방지)
+            for s in steps:
+                s.status = 'wait'
+
+            # 2) 작성 step 선정: (col_index=1 & 작성) 우선
+            drafter_step = None
+            for s in steps:
+                if s.col_index == 1 and s.step_type == '작성':
+                    drafter_step = s
+                    break
+            if drafter_step is None:
+                for s in steps:
+                    if s.step_type == '작성':
+                        drafter_step = s
+                        break
+            if drafter_step is None:
+                drafter_step = steps[0]  # 최후 fallback
+
+            # 3) 작성은 sendfile 순간 완료 처리
+            drafter_step.status = 'done'
+            drafter_step.signed_by_user_id = drafter_user_id
+            drafter_step.signed_at = now
+
+            # 4) 다음 step 1개만 pending
+            next_step = None
+            for s in steps:
+                if s.col_index > drafter_step.col_index:
+                    next_step = s
+                    break
+            if next_step is not None:
+                next_step.status = 'pending'
+
+            # 5) 문서 큰 상태는 in_review 유지(need_approval 문서라면)
+            doc = DocumentInfoModel.query.get(document_info_id)
+            if doc is not None:
+                if doc.status != 'in_review':
+                    doc.status = 'in_review'
+                if getattr(doc, "target_dir", None) != 'in_review':
+                    doc.target_dir = 'in_review'
+
+            db.session.commit()
+
+        except SQLAlchemyError:
+            db.session.rollback()
+            raise
+
+    @staticmethod
+    def get_user_by_no(user_no: int) -> Optional[User]:
+        try:
+            return db.session.get(User, int(user_no))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _step_doc_fk_col():
+        for name in ("doc_id", "document_info_id", "document_id"):
+            if hasattr(DocumentApprovalStepModel, name):
+                return getattr(DocumentApprovalStepModel, name)
+        raise RuntimeError("DocumentApprovalStepModel has no doc fk column (doc_id/document_info_id/document_id)")
+
+
+
+    @staticmethod
+    def find_pending_step_for_actor(*, doc_id: int, actor_no: int | None, actor_userid: str | None):
+        """
+        ✅ 정확 기준:
+          - status='pending'
+          - userid_snapshot == actor_userid  (1순위)
+          - username_snapshot == actor.username (2순위 fallback)
+        """
+        doc_fk = RepositoryEINK._step_doc_fk_col()
+
+        q = (
+            db.session.query(DocumentApprovalStepModel)
+            .filter(doc_fk == int(doc_id))
+            .filter(DocumentApprovalStepModel.status == "pending")
+        )
+
+        # actor_username 확보 (username_snapshot 비교용)
+        actor_username = None
+        if actor_no is not None:
+            try:
+                u = db.session.get(User, int(actor_no))
+                actor_username = getattr(u, "username", None)
+            except Exception:
+                actor_username = None
+
+        # ✅ 매칭 조건 (userid_snapshot / username_snapshot만 사용)
+        conds = []
+
+        if actor_userid and hasattr(DocumentApprovalStepModel, "userid_snapshot"):
+            conds.append(DocumentApprovalStepModel.userid_snapshot == str(actor_userid).strip())
+
+        if actor_username and hasattr(DocumentApprovalStepModel, "username_snapshot"):
+            conds.append(DocumentApprovalStepModel.username_snapshot == str(actor_username).strip())
+
+        if not conds:
+            return None
+
+        st = (
+            q.filter(or_(*conds))
+             .order_by(asc(DocumentApprovalStepModel.col_index), asc(DocumentApprovalStepModel.id))
+             .first()
+        )
+
+        # ✅ 디버그(원인 추적용)
+        try:
+            current_app.logger.debug(
+                "[find_pending_step_for_actor] doc_id=%s actor_no=%s actor_userid=%r actor_username=%r -> found=%s col=%s",
+                doc_id, actor_no, actor_userid, actor_username,
+                bool(st),
+                getattr(st, "col_index", None) if st else None
+            )
+        except Exception:
+            pass
+
+        return st
+
+
+    @staticmethod
+    def _patch_layout_snapshot_mark(
+        *,
+        doc: DocumentInfoModel,
+        col_index: int,
+        mark_status: str,            # 'done' | 'rejected'
+        mark_text: Optional[str],    # '완료' | '반려'
+        actor_photo_1: Optional[str] # 파일명만(또는 DB값), file_management에서 basename 처리
+    ) -> Dict[str, Any]:
+        snap = doc.layout_snapshot_json if isinstance(doc.layout_snapshot_json, dict) else {}
+        editor_layers = snap.get("editor_layers") or []
+        if not isinstance(editor_layers, list):
+            return snap
+
+        for L in editor_layers:
+            if (L.get("type") or "").lower() != "approval_box":
+                continue
+            cols = L.get("columns") or []
+            if not isinstance(cols, list):
+                continue
+
+            # col_index는 1-based
+            idx0 = int(col_index) - 1
+            if idx0 < 0 or idx0 >= len(cols):
+                continue
+
+            c = cols[idx0] if isinstance(cols[idx0], dict) else {}
+            c["status"] = mark_status  # ✅ 렌더링에서 사용
+            if mark_text:
+                c["stamp_text"] = mark_text
+            # 승인 시 서명 파일이 있으면 넣어둠(없으면 렌더에서 "완료")
+            if actor_photo_1:
+                c["user_photo_1"] = actor_photo_1
+            cols[idx0] = c
+            L["columns"] = cols
+            break
+
+        snap["editor_layers"] = editor_layers
+        return snap
+
+
+    @staticmethod
+    def apply_approval_action(
+        doc_id: int,
+        actor_db_id: int,          # ✅ document_approval_steps.signed_by_user_id에 넣을 user.id
+        actor_userid: str,         # ✅ userid_snapshot 비교
+        actor_username: str,       # ✅ username_snapshot 비교
+        action: str,               # "approve" | "reject"
+        note: str | None = None,
+    ) -> dict:
+        doc = DocumentInfoModel.query.get(doc_id)
+        if not doc:
+            return {"ok": False, "why": "doc_not_found"}
+
+        steps = list(getattr(doc, "approval_steps", []) or [])
+
+        def _step_key(s):
+            for k in ("step_order", "col_index", "id"):
+                v = getattr(s, k, None)
+                if v is not None:
+                    return int(v)
+            return 10**9
+
+        steps_sorted = sorted(steps, key=_step_key)
+
+        pending_list = [s for s in steps_sorted if getattr(s, "status", None) == "pending"]
+        pending = pending_list[0] if pending_list else None
+        if not pending:
+            return {"ok": False, "why": "no_pending_step"}
+
+        p_uid = (getattr(pending, "userid_snapshot", None) or "").strip()
+        p_unm = (getattr(pending, "username_snapshot", None) or "").strip()
+        a_uid = (actor_userid or "").strip()
+        a_unm = (actor_username or "").strip()
+
+        # ✅ 정확 기준: userid_snapshot / username_snapshot 일치만 허용
+        is_match = (a_uid and p_uid and a_uid == p_uid) or (a_unm and p_unm and a_unm == p_unm)
+
+        current_app.logger.debug(
+            "[apply_approval_action] doc_id=%s action=%s pending_col=%s pending_uid=%r pending_unm=%r actor_uid=%r actor_unm=%r match=%s",
+            doc_id, action, getattr(pending, "col_index", None), p_uid, p_unm, a_uid, a_unm, is_match
+        )
+
+        if not is_match:
+            return {
+                "ok": False,
+                "why": "not_your_pending_step",
+                "pending": {"col_index": getattr(pending, "col_index", None), "userid_snapshot": p_uid, "username_snapshot": p_unm},
+                "actor": {"userid": a_uid, "username": a_unm},
+            }
+
+        now = datetime.now()  # 프로젝트가 naive KST를 쓰는 편이면 이게 가장 안전
+
+        # ✅ 승인/반려 공통: 현재 pending step에 서명자/시간은 반드시 기록
+        pending.signed_by_user_id = int(actor_db_id)  # (1) 형 요구: user.id
+        pending.signed_at = now                       # (2) 형 요구: 현재시간
+        if note is not None and hasattr(pending, "note"):
+            pending.note = note
+
+        if action == "approve":
+            pending.status = "done"
+
+            # 다음 스텝 pending 승격(있으면)
+            # - 보통 wait → pending
+            next_step = None
+            for s in steps_sorted:
+                if getattr(s, "status", None) in ("wait", "pending") and _step_key(s) > _step_key(pending):
+                    next_step = s
+                    break
+
+            if next_step and next_step.status != "done":
+                next_step.status = "pending"
+                doc.status = "in_review"
+            else:
+                # 더 이상 결재할 사람이 없으면 문서 승인 완료
+                doc.status = "approved"
+
+            db.session.commit()
+            return {
+                "ok": True,
+                "action": "approve",
+                "doc_status": doc.status,
+                "signed_step": {"id": pending.id, "col_index": getattr(pending, "col_index", None)},
+                "next_step": {"id": getattr(next_step, "id", None), "col_index": getattr(next_step, "col_index", None)} if next_step else None,
+            }
+
+        if action == "reject":
+            pending.status = "rejected"
+            doc.status = "rejected"
+
+            # (선택) 뒤 스텝을 wait로 돌리고 싶으면 여기서 정리
+            for s in steps_sorted:
+                if _step_key(s) > _step_key(pending) and getattr(s, "status", None) in ("pending", "wait"):
+                    s.status = "wait"
+
+            db.session.commit()
+            return {
+                "ok": True,
+                "action": "reject",
+                "doc_status": doc.status,
+                "signed_step": {"id": pending.id, "col_index": getattr(pending, "col_index", None)},
+            }
+
+        return {"ok": False, "why": "invalid_action", "action": action}
+    
+
+
+    @staticmethod
+    def get_approval_runtime_map(doc_id: int) -> dict[int, dict]:
+        """
+        document_approval_steps에서 col_index별 status를 읽어서
+        렌더러가 쓰기 쉬운 runtime map으로 반환.
+        return 예:
+          {2: {"status":"done","stamp_text":"완료","step_id":210}, ...}
+        """
+        try:
+            # 프로젝트 모델명에 맞게 import만 맞춰줘
+            from pybo.models import DocumentApprovalStep  # or DocumentApprovalStepModel
+        except Exception:
+            from pybo.models import DocumentApprovalStepModel as DocumentApprovalStep
+
+        try:
+            rows = (
+                DocumentApprovalStep.query
+                .filter(DocumentApprovalStep.document_info_id == int(doc_id))
+                .order_by(DocumentApprovalStep.col_index.asc())
+                .all()
+            )
+
+            out: dict[int, dict] = {}
+            for r in rows:
+                col = int(getattr(r, "col_index", 0) or 0)
+                st = (getattr(r, "status", "") or "").strip().lower()
+
+                # 텍스트 정책(원하면 여기서 바꾸면 됨)
+                stamp_text = None
+                if st in ("reject", "rejected", "deny", "denied", "returned"):
+                    stamp_text = "반려"
+                elif st in ("done", "approved", "approve", "signed"):
+                    stamp_text = "완료"
+
+                out[col] = {
+                    "status": st,
+                    "stamp_text": stamp_text,
+                    "step_id": int(getattr(r, "id", 0) or 0),
+                }
+
+            current_app.logger.debug(
+                "[approval_runtime_map] doc_id=%s steps=%s sample=%s",
+                doc_id, len(out), list(out.items())[:3]
+            )
+            return out
+
+        except Exception:
+            current_app.logger.debug("[approval_runtime_map] failed doc_id=%s", doc_id, exc_info=True)
+            return {}
 

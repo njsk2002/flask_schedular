@@ -13,6 +13,9 @@
 
   <!-- 검색/필터 영역 -->
   <form class="row g-2 mb-3" method="get" action="{{ url_for('bulletin.file_table') }}">
+
+    <input type="hidden" name="page" value="1">
+
     <input type="hidden" name="tab" value="{{ tab }}">
     <div class="col-md-4">
       <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm"
@@ -44,8 +47,8 @@
   <!-- 탭 -->
   <ul class="nav nav-tabs mb-3">
     <li class="nav-item">
-      <a class="nav-link {% if tab == 'author' %}active{% endif %}"
-         href="{{ url_for('bulletin.file_table', tab='author') }}">결재작성문서</a>
+    <a class="nav-link {% if tab == 'author' %}active{% endif %}"
+      href="{{ url_for('bulletin.file_table', tab='author', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">결재작성문서</a>
     </li>
     <li class="nav-item">
       <a class="nav-link {% if tab == 'pending' %}active{% endif %}"
@@ -73,18 +76,10 @@
       border: 1px solid transparent;
       white-space: nowrap;
     }
-    .approval-chip-signed {
-      background-color: #198754;
-      color: #fff;
-    }
-    .approval-chip-pending {
-      border-color: #adb5bd;
-      color: #6c757d;
-      background-color: #fff;
-    }
-    .status-badge {
-      font-size: .7rem;
-    }
+    .approval-chip-done { background-color: #0d6efd; color: #fff; }    /* 파랑 */
+    .approval-chip-pending { background-color: #198754; color: #fff; } /* 초록 */
+    .approval-chip-wait { background-color: #6c757d; color: #fff; }    /* 회색 */
+    .status-badge { font-size: .7rem; }
   </style>
 
   <!-- Tab 1: 결재작성문서 -->
@@ -128,9 +123,14 @@
             </td>
             <td>
               {% for step in doc.approval_steps|sort(attribute='col_index') %}
-                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
-                <span class="approval-chip {{ chip_class }}"
-                      data-signed-at="{{ step.signed_at or '' }}">
+                {% if step.status == 'done' %}
+                  {% set chip_class = 'approval-chip-done' %}
+                {% elif step.status == 'pending' %}
+                  {% set chip_class = 'approval-chip-pending' %}
+                {% else %}
+                  {% set chip_class = 'approval-chip-wait' %}
+                {% endif %}
+                <span class="approval-chip {{ chip_class }}">
                   {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
                 </span>
               {% endfor %}
@@ -146,6 +146,31 @@
           {% endfor %}
         </tbody>
       </table>
+
+      {% if pager.pages > 1 %}
+        <nav class="mt-2">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+            </li>
+
+            {# 간단형: 1..pages #}
+            {% for p in range(1, pager.pages + 1) %}
+              <li class="page-item {% if p == pager.page %}active{% endif %}">
+                <a class="page-link"
+                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+              </li>
+            {% endfor %}
+
+            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+            </li>
+          </ul>
+        </nav>
+        {% endif %}
+
     </div>
   </div>
   {% endif %}
@@ -193,9 +218,14 @@
             </td>
             <td>
               {% for step in doc.approval_steps|sort(attribute='col_index') %}
-                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
-                <span class="approval-chip {{ chip_class }}"
-                      data-signed-at="{{ step.signed_at or '' }}">
+                {% if step.status == 'done' %}
+                  {% set chip_class = 'approval-chip-done' %}
+                {% elif step.status == 'pending' %}
+                  {% set chip_class = 'approval-chip-pending' %}
+                {% else %}
+                  {% set chip_class = 'approval-chip-wait' %}
+                {% endif %}
+                <span class="approval-chip {{ chip_class }}">
                   {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
                 </span>
               {% endfor %}
@@ -211,6 +241,29 @@
           {% endfor %}
         </tbody>
       </table>
+      {% if pager.pages > 1 %}
+        <nav class="mt-2">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+            </li>
+
+            {# 간단형: 1..pages #}
+            {% for p in range(1, pager.pages + 1) %}
+              <li class="page-item {% if p == pager.page %}active{% endif %}">
+                <a class="page-link"
+                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+              </li>
+            {% endfor %}
+
+            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+            </li>
+          </ul>
+        </nav>
+        {% endif %}      
     </div>
   </div>
   {% endif %}
@@ -258,9 +311,14 @@
             </td>
             <td>
               {% for step in doc.approval_steps|sort(attribute='col_index') %}
-                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
-                <span class="approval-chip {{ chip_class }}"
-                      data-signed-at="{{ step.signed_at or '' }}">
+                {% if step.status == 'done' %}
+                  {% set chip_class = 'approval-chip-done' %}
+                {% elif step.status == 'pending' %}
+                  {% set chip_class = 'approval-chip-pending' %}
+                {% else %}
+                  {% set chip_class = 'approval-chip-wait' %}
+                {% endif %}
+                <span class="approval-chip {{ chip_class }}">
                   {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
                 </span>
               {% endfor %}
@@ -276,6 +334,29 @@
           {% endfor %}
         </tbody>
       </table>
+      {% if pager.pages > 1 %}
+        <nav class="mt-2">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+            </li>
+
+            {# 간단형: 1..pages #}
+            {% for p in range(1, pager.pages + 1) %}
+              <li class="page-item {% if p == pager.page %}active{% endif %}">
+                <a class="page-link"
+                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+              </li>
+            {% endfor %}
+
+            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+            </li>
+          </ul>
+        </nav>
+        {% endif %}     
     </div>
   </div>
   {% endif %}
@@ -314,9 +395,14 @@
             </td>
             <td>
               {% for step in doc.approval_steps|sort(attribute='col_index') %}
-                {% set chip_class = 'approval-chip-pending' if step.status == 'pending' else 'approval-chip-signed' %}
-                <span class="approval-chip {{ chip_class }}"
-                      data-signed-at="{{ step.signed_at or '' }}">
+                {% if step.status == 'done' %}
+                  {% set chip_class = 'approval-chip-done' %}
+                {% elif step.status == 'pending' %}
+                  {% set chip_class = 'approval-chip-pending' %}
+                {% else %}
+                  {% set chip_class = 'approval-chip-wait' %}
+                {% endif %}
+                <span class="approval-chip {{ chip_class }}">
                   {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
                 </span>
               {% endfor %}
@@ -334,6 +420,29 @@
           {% endfor %}
         </tbody>
       </table>
+      {% if pager.pages > 1 %}
+        <nav class="mt-2">
+          <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+            </li>
+
+            {# 간단형: 1..pages #}
+            {% for p in range(1, pager.pages + 1) %}
+              <li class="page-item {% if p == pager.page %}active{% endif %}">
+                <a class="page-link"
+                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+              </li>
+            {% endfor %}
+
+            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+              <a class="page-link"
+                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+            </li>
+          </ul>
+        </nav>
+        {% endif %}
     </div>
   </div>
   {% endif %}
