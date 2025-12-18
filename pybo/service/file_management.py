@@ -738,6 +738,23 @@ def load_user_sign_rgba(user_id: int):
     guess = os.path.join(base, f"{user_id}.png") if base else f"{user_id}.png"
     return _open_rgba(guess)
 
+def load_stamp_rgba(stamp_id: int):
+    """
+    stamp_id → DB 조회 → stored_path 로 이미지 오픈(RGBA)
+    """
+    if not stamp_id or RepositoryEINK is None:
+        return None
+
+    try:
+        stored_path = RepositoryEINK.get_stamp_stored_path(int(stamp_id), active_only=True)
+        if not stored_path:
+            return None
+
+        # ✅ 상대경로 대응 (SIGN 로직 재사용)
+        return _open_rgba(_resolve_sign_path(stored_path))
+    except Exception:
+        return None
+
 
 def load_sign_image_for_current():
     """
@@ -840,10 +857,24 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
 
                 dept = c.get("dept") or ""
                 role = c.get("role") or ""
-                username = c.get("user_name") or c.get("user_id") or ""
+                raw_name = c.get("user_name")
+                raw_id = c.get("user_id")
+                username = str(raw_name if raw_name not in (None, "") else (raw_id if raw_id is not None else ""))
+
                 label = dept or role or username
 
+                rt = c.get("runtime") or {}
+                slot_status = rt.get("status")
+                if slot_status is None:
+                    slot_status = c.get("status")
+
+                slot_stamp_text = rt.get("stamp_text")
+                if slot_stamp_text is None:
+                    slot_stamp_text = c.get("stamp_text")
+
                 slot = {
+                    "status": c.get("status") or (c.get("runtime") or {}).get("status"),
+                    "stamp_text": c.get("stamp_text") or (c.get("runtime") or {}).get("stamp_text"),
                     "id": c.get("id"),
                     "col_index": idx,
                     "group": c.get("group"),  # draft / check 등
@@ -851,6 +882,7 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
                     "role": role,
                     "user_id": c.get("user_id"),
                     "user_name": username,
+                    "user_photo_1": c.get("user_photo_1"),
                     "x_rel": x_rel,
                     "y_rel": y_rel,
                     "w_rel": w_rel,
@@ -918,6 +950,7 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
 
         # 4) stamp_box → stamp layer (직인/도장)
         if ltype == "stamp_box":
+            stamp = L.get("stamp") or {}
             out.append(
                 {
                     "type": "stamp",
@@ -927,9 +960,17 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
                     "w": L.get("w", 150),
                     "h": L.get("h", 150),
                     "upload_token": L.get("upload_token"),
+
+                    # ✅ 핵심: DB lookup용 키 유지
+                    "stamp_id": stamp.get("id"),
+                    "stamp_url": stamp.get("url"),
+                    "stamp_size": stamp.get("size") or L.get("size"),
+                    "stamp_type": stamp.get("type"),   # company/user 등
+                    "stamp_name": stamp.get("name"),
                 }
             )
             continue
+
 
         # 5) qr_box → qr layer (QR 코드)
         if ltype == "qr_box":
@@ -953,24 +994,54 @@ def convert_editor_layers_to_render_layers(editor_layers: list[dict]) -> list[di
     log_layers_summary(out, where="convert_editor_layers_to_render_layers")
     return out
 
-
+def _normalize_layout_snapshot(layout_snapshot) -> dict:
+    """
+    layout_snapshot_json이 dict로 오기도 하고, JSON 문자열(TEXT)로 오기도 하므로 통일.
+    """
+    if layout_snapshot is None:
+        return {}
+    if isinstance(layout_snapshot, dict):
+        return layout_snapshot
+    if isinstance(layout_snapshot, str):
+        s = layout_snapshot.strip()
+        if not s:
+            return {}
+        try:
+            obj = json.loads(s)
+            return obj if isinstance(obj, dict) else {}
+        except Exception:
+            return {}
+    return {}
 
 def apply_editor_layout_to_image(im, width: int, height: int, layout_snapshot: dict):
-    """
-    layout_snapshot_json 구조:
-    {
-      "version": 1,
-      "canvas": {...},
-      "editor_layers": [ ... ],
-      "process_map": {...},
-      "process_runtime": {...}
-    }
+    ls = layout_snapshot or {}
 
-    여기서 editor_layers만 뽑아 내부 렌더링 layers로 변환 후 apply_layers_to_image 적용.
-    """
-    editor_layers = (layout_snapshot or {}).get("editor_layers") or []
+    # 1) 구 구조 우선
+    editor_layers = ls.get("editor_layers") or ls.get("layers") or []
+
+    # 2) 신 구조(또는 혼합) 호환: layers_json 지원
+    if (not editor_layers) and ("layers_json" in ls):
+        raw = ls.get("layers_json")
+        if isinstance(raw, dict) and "layers" in raw:
+            editor_layers = raw.get("layers") or []
+        elif isinstance(raw, list):
+            editor_layers = raw
+
     layers = convert_editor_layers_to_render_layers(editor_layers)
+
+    # 🔥 디버깅 로그(필수)
+    try:
+        current_app.logger.debug(
+            "[apply_editor_layout_to_image] keys=%s editor_layers=%d internal_layers=%d",
+            list(ls.keys()),
+            len(editor_layers or []),
+            len(layers or []),
+        )
+    except Exception:
+        pass
+
     return apply_layers_to_image(im, width, height, layers)
+
 
 #-----------------------------------------------------------
 #            QR 생성 
@@ -1005,6 +1076,30 @@ def generate_qr_rgba(text: str, size: int = 100) -> Image.Image:
     d.rectangle([0, 0, size - 1, size - 1], outline=(0, 0, 0, 255), width=3)
     d.text((size // 3, size // 2 - 8), "QR", fill=(0, 0, 0, 255))
     return img
+
+def _safe_photo_abs(photo_filename: str) -> str | None:
+    if not photo_filename:
+        return None
+    base = os.path.basename(photo_filename)
+    if base != photo_filename or any(x in base for x in ("..", "/", "\\")):
+        return None
+    pload_folder = current_app.config.get("SIGN_BASE_DIR")  # ✅ 여기서 전역 설정 읽기
+    p = os.path.join(pload_folder, base)
+    return p if os.path.isfile(p) else None
+
+def _paste_fit(im_bg: Image.Image, im_fg: Image.Image, box: tuple[int, int, int, int]) -> None:
+    # box=(x,y,w,h)
+    x, y, w, h = box
+    if w <= 2 or h <= 2:
+        return
+    fg = im_fg.convert("RGBA")
+    bw, bh = fg.size
+    scale = min(w / bw, h / bh)
+    nw, nh = max(1, int(bw * scale)), max(1, int(bh * scale))
+    fg = fg.resize((nw, nh))
+    px = x + (w - nw) // 2
+    py = y + (h - nh) // 2
+    im_bg.paste(fg, (px, py), fg)
 
 
 # ──────────────────────────────────────────────────────────
@@ -1081,9 +1176,13 @@ def apply_layers_to_image(im, width, height, layers):
 
             border_width = max(1, int(round(2 * smin)))
 
+            # 바깥 박스: ✅ 배경을 흰색(불투명)으로 채워서 아래 레이어가 안 비치게
+            bg_white = parse_color("#ffffff", (255, 255, 255, 255))
+
             # 바깥 박스
             draw.rectangle(
                 [px, py, px + pw, py + ph],
+                fill=bg_white,              # ✅ 핵심
                 outline=border_color,
                 width=border_width,
             )
@@ -1132,7 +1231,6 @@ def apply_layers_to_image(im, width, height, layers):
                 weight_d = 0
                 weight_c = 1
             else:
-                # 위에서 nd+nc==0 처리했으니 올 일 없음
                 continue
 
             total_w = float(weight_d + weight_c) or 1.0
@@ -1169,8 +1267,7 @@ def apply_layers_to_image(im, width, height, layers):
             # 오른쪽: check
             check_geo = side_geometry(px + draft_w, check_w, nc, dept_w_px if check_w > 0 else 0)
 
-
-            # dept 컬럼 배경 그레이 (E-INK에서는 도트처럼 보여도 상관 없음)
+            # dept 컬럼 배경 그레이
             dept_bg = parse_color("#e9ecef", (233, 236, 239, 255))
 
             def draw_side(side_slots, geo, dept_label):
@@ -1191,18 +1288,16 @@ def apply_layers_to_image(im, width, height, layers):
                     width=border_width,
                 )
 
-                # dept 세로 텍스트 (작성부서 / 확인부서)
+                # dept 세로 텍스트
                 chars = list(dept_label)
                 dept_font = auto_font_vertical(
                     dept_label,
                     box_w=dept_w,
                     box_h=ph,
-                    max_px=int(ph * 0.20),      # 0.40 → 0.30 정도로 내려줌
+                    max_px=int(ph * 0.20),
                     min_px=int(9 * smin),
                 )
 
-
-                # 글자별 크기/총 높이 계산
                 total_h = 0
                 char_sizes = []
                 for ch in chars:
@@ -1222,34 +1317,22 @@ def apply_layers_to_image(im, width, height, layers):
                     cw, ch_h = char_sizes[i]
                     tx = dept_x0 + max(0, (dept_w - cw) // 2)
                     ty = cur_y
-
-                    # Bold 효과 적용
                     try:
-                        # draw_bold_text(draw, tx, ty, ch, dept_font, font_color, strength=1)
                         draw.text((tx, ty), ch, fill=font_color, font=dept_font)
                     except Exception:
                         draw.text((tx, ty), ch, fill=font_color, font=dept_font)
-
                     cur_y += ch_h + gap
 
                 # dept 오른쪽 세로 구분선
-                draw.line(
-                    [(dept_x1, py), (dept_x1, py + ph)],
-                    fill=border_color,
-                    width=border_width,
-                )
+                draw.line([(dept_x1, py), (dept_x1, py + ph)], fill=border_color, width=border_width)
 
-                # 컬럼별 세로선 + 내부 텍스트
+                # 컬럼별 세로선 + 내부 텍스트/도장
                 for idx, S in enumerate(side_slots):
                     col_x0 = dept_x1 + idx * col_w
                     col_x1 = col_x0 + col_w
 
                     # 마지막 컬럼 오른쪽 경계
-                    draw.line(
-                        [(col_x1, py), (col_x1, py + ph)],
-                        fill=border_color,
-                        width=border_width,
-                    )
+                    draw.line([(col_x1, py), (col_x1, py + ph)], fill=border_color, width=border_width)
 
                     # Header 텍스트 (role)
                     role_label = (S.get("role") or "").strip()
@@ -1272,28 +1355,131 @@ def apply_layers_to_image(im, width, height, layers):
 
                         tx = col_x0 + max(0, (col_w - tw) // 2)
                         ty = center_top_bias(hdr_y0, hdr_h, th, bias=0.35)
+                        draw.text((tx, ty), role_label, fill=font_color, font=header_font)
 
-                        try:
-                            # draw_bold_text(draw, tx, ty, role_label, header_font, font_color, strength=1)
-                            draw.text((tx, ty), role_label, fill=font_color, font=header_font)
-                        except Exception:
-                            draw.text((tx, ty), role_label, fill=font_color, font=header_font)
-
-                    # Stamp row 영역 (나중에 직인 이미지 위치에 사용 가능)
+                    # Stamp row 영역 (도장 이미지 위치)
                     stamp_row_h = stamp_h
                     stamp_box_size = int(round(min(col_w, stamp_row_h) * stamp_scale))
                     stamp_cx = col_x0 + col_w // 2
                     stamp_cy = stamp_y0 + stamp_row_h // 2
-                    stamp_x0 = stamp_cx - stamp_box_size // 2
-                    stamp_y0_ = stamp_cy - stamp_box_size // 2
-                    stamp_x1 = stamp_x0 + stamp_box_size
-                    stamp_y1_ = stamp_y0_ + stamp_box_size
-                    # 필요하면 아래 주석 해제해서 직인 자리 가이드 표시
-                    # draw.rectangle(
-                    #     [stamp_x0, stamp_y0_, stamp_x1, stamp_y1_],
-                    #     outline=line_color,
-                    #     width=max(1, int(round(1 * smin))),
-                    # )
+
+                    stamp_box_x0 = stamp_cx - stamp_box_size // 2
+                    stamp_box_y0 = stamp_cy - stamp_box_size // 2
+                    stamp_box_x1 = stamp_box_x0 + stamp_box_size
+                    stamp_box_y1 = stamp_box_y0 + stamp_box_size
+
+                    # ✅ [ADD] 작성(role=="작성")이면 user_photo_1을 stamp 영역에 합성, 없으면 "완료"
+                    # ✅ [FIX] col_index + status 기반으로 도장/완료/반려 표시
+                    try:
+                        role = (S.get("role") or "").strip()
+                        col_index = int(S.get("col_index") or 0)
+
+                        # status는 스냅샷이면 None일 수 있음 → 기본값 ''
+                        status = (S.get("status") or "").strip().lower()
+
+                        # 사용자 서명 토큰(있으면 우선)
+                        photo_fn = (S.get("user_photo_1") or "").strip()
+                        photo_path = _safe_photo_abs(photo_fn) if photo_fn else None
+                        exists = bool(photo_path and os.path.isfile(photo_path))
+
+                        current_app.logger.debug(
+                            "[signbox:slot] group=%s col_index=%s role=%r status=%r user_id=%r "
+                            "photo_fn=%r photo_path=%r exists=%s stamp_box=(%d,%d,%d,%d)",
+                            S.get("group"), col_index, role, status, S.get("user_id"),
+                            photo_fn, photo_path, exists,
+                            stamp_box_x0, stamp_box_y0, stamp_box_x1, stamp_box_y1
+                        )
+
+                        pad = max(2, int(stamp_box_size * 0.05))
+                        sign_x = stamp_box_x0 + pad
+                        sign_y = stamp_box_y0 + pad
+                        sign_w = max(1, stamp_box_size - 2 * pad)
+                        sign_h = max(1, stamp_box_size - 2 * pad)
+
+                        # ---------------------------------------------------------
+                        # ✅ 표시 규칙(추천)
+                        #  - status가 done/approved면: 서명(있으면) 또는 "완료"
+                        #  - status가 reject/rejected면: "반려"
+                        #  - status가 없으면(스냅샷) : col_index==1(작성)만 기본 표시(기존과 동일)
+                        # ---------------------------------------------------------
+                        is_done = status in ("done", "approved", "approve", "signed")
+                        is_reject = status in ("reject", "rejected", "deny", "returned")
+
+                        should_draw = False
+                        draw_mode = None  # "sig" | "done" | "reject"
+
+                        if is_reject:
+                            should_draw = True
+                            draw_mode = "reject"
+                        elif is_done:
+                            should_draw = True
+                            draw_mode = "sig" if exists else "done"
+                        else:
+                            # status가 비어있으면(현재 너 로그처럼 None) → 작성칸(col_index=1)만 기본 표시
+                            if col_index == 1:
+                                should_draw = True
+                                draw_mode = "sig" if exists else "done"
+
+                        current_app.logger.debug(
+                            "[signbox:decision] col_index=%s role=%r status=%r should_draw=%s draw_mode=%s",
+                            col_index, role, status, should_draw, draw_mode
+                        )
+
+                        if should_draw:
+                            if draw_mode == "sig":
+                                try:
+                                    with Image.open(photo_path) as sig:
+                                        _paste_fit(base, sig, (sign_x, sign_y, sign_w, sign_h))
+                                    current_app.logger.debug("[signbox:render] pasted signature col_index=%s", col_index)
+                                except Exception:
+                                    current_app.logger.debug(
+                                        "[signbox:render] signature open/paste failed col_index=%s photo_path=%r",
+                                        col_index, photo_path, exc_info=True
+                                    )
+                                    # 실패하면 텍스트로 fallback
+                                    draw_mode = "done"
+
+                            if draw_mode == "done":
+                                done_txt = "완료"
+                                done_font = auto_font(
+                                    done_txt,
+                                    box_w=sign_w,
+                                    box_h=sign_h,
+                                    max_px=int(sign_h * 0.7),
+                                    min_px=int(10 * smin),
+                                    height_ratio=0.6,
+                                    bold=False,
+                                )
+                                bbox = _AUTO_FONT_DRAW.textbbox((0, 0), done_txt, font=done_font)
+                                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                                tx = sign_x + max(0, (sign_w - tw) // 2)
+                                ty = sign_y + max(0, (sign_h - th) // 2)
+                                draw.text((tx, ty), done_txt, fill=font_color, font=done_font)
+                                current_app.logger.debug("[signbox:render] drew DONE text col_index=%s", col_index)
+
+                            if draw_mode == "reject":
+                                rej_txt = "반려"
+                                rej_font = auto_font(
+                                    rej_txt,
+                                    box_w=sign_w,
+                                    box_h=sign_h,
+                                    max_px=int(sign_h * 0.7),
+                                    min_px=int(10 * smin),
+                                    height_ratio=0.6,
+                                    bold=False,
+                                )
+                                bbox = _AUTO_FONT_DRAW.textbbox((0, 0), rej_txt, font=rej_font)
+                                tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+                                tx = sign_x + max(0, (sign_w - tw) // 2)
+                                ty = sign_y + max(0, (sign_h - th) // 2)
+                                draw.text((tx, ty), rej_txt, fill=font_color, font=rej_font)
+                                current_app.logger.debug("[signbox:render] drew REJECT text col_index=%s", col_index)
+
+                    except Exception:
+                        current_app.logger.debug("[signbox] stamp render block failed", exc_info=True)
+
+                    except Exception:
+                        current_app.logger.debug("[signbox] user_photo_1 paste failed", exc_info=True)
 
                     # Name row 텍스트 (user_name)
                     name_label = (S.get("user_name") or "").strip()
@@ -1316,11 +1502,8 @@ def apply_layers_to_image(im, width, height, layers):
 
                         tx = col_x0 + max(0, (col_w - tw) // 2)
                         ty = center_top_bias(name_y0, name_h, th, bias=0.40)
+                        draw.text((tx, ty), name_label, fill=font_color, font=name_font)
 
-                        try:
-                            draw.text((tx, ty), name_label, fill=font_color, font=name_font)
-                        except Exception:
-                            draw.text((tx, ty), name_label, fill=font_color)
 
             # 왼쪽 draft: "작성부서"
             if draft_geo:
@@ -1344,17 +1527,19 @@ def apply_layers_to_image(im, width, height, layers):
             ov = None
             token = L.get("upload_token")
 
-            # 좌표/크기 기본 계산 (BASE 기준)
             bx = float(L.get("x", 0))
             by = float(L.get("y", 0))
             bw_base = float(L.get("w", 0) or 0)
             bh_base = float(L.get("h", 0) or 0)
 
-            # 1) 업로드 이미지 우선
             if token:
                 ov = _overlay_from_store(token)
 
-            # 2) QR 레이어인 경우: 텍스트로 QR 생성
+            if ov is None and ltype in STAMP_TYPES:
+                sid = L.get("stamp_id")
+                if sid:
+                    ov = load_stamp_rgba(int(sid))
+
             if ov is None and ltype in QR_TYPES:
                 text = L.get("text") or ""
                 size_hint = max(
@@ -1365,7 +1550,6 @@ def apply_layers_to_image(im, width, height, layers):
                 )
                 ov = generate_qr_rgba(text, size=size_hint)
 
-            # 3) 서명 레이어인 경우: 사용자 sign 이미지 fallback
             if ov is None and ltype in SIGN_IMG_TYPES and L.get("user_id"):
                 ov = load_user_sign_rgba(L.get("user_id"))
 
@@ -1390,7 +1574,7 @@ def apply_layers_to_image(im, width, height, layers):
             continue
 
         # ─────────────────────
-        # 3) 텍스트 박스 (message/period 포함)
+        # 3) 텍스트 박스
         # ─────────────────────
         if ltype in TEXT_TYPES:
             text = L.get("text") or ""
@@ -1440,9 +1624,9 @@ def apply_layers_to_image(im, width, height, layers):
         # 5) 직사각형 박스
         # ─────────────────────
         if ltype in RECT_TYPES:
-            stroke = parse_color(L.get("stroke", "#000000"))  # 선도 기본 검정
+            stroke = parse_color(L.get("stroke", "#000000"))
             fill = parse_color(
-                L.get("fill", "rgba(13,110,253,0.0)"),  # 기본 투명
+                L.get("fill", "rgba(13,110,253,0.0)"),
                 (0, 0, 0, 0),
             )
             bx = int(round(L.get("x", 0) * sx))
@@ -1453,9 +1637,6 @@ def apply_layers_to_image(im, width, height, layers):
             continue
 
     return base.convert("RGB")
-
-
-
 
 
 def composite_sign_on_slot(im_canvas, width, height, layers, slot_role, sign_img_rgba):
@@ -1995,16 +2176,21 @@ def get_doc_bundle_paths(userid: str, document_info_id: int, bucket: str, source
     source_ext = (source_ext or "").lstrip(".") or "pdf"
 
     return {
-        "doc_dir": doc_dir,
-        "bucket": bucket,
-        "original": os.path.join(doc_dir, f"original.{source_ext}"),
-        "normalized_pdf": os.path.join(doc_dir, "normalized.pdf"),
-        "layout_snapshot_json": os.path.join(doc_dir, "layout_snapshot.json"),
-        "metadata_json": os.path.join(doc_dir, "metadata.json"),
-        "onelayer_bmp": os.path.join(doc_dir, "onelayer.bmp"),
-        "onelayer_bin": os.path.join(doc_dir, "onelayer.bin"),
-        "onelayer_meta_json": os.path.join(doc_dir, "onelayer_meta.json"),
-    }
+            "doc_dir": doc_dir,
+            "bucket": bucket,
+            "original": os.path.join(doc_dir, f"original.{source_ext}"),
+            "normalized_pdf": os.path.join(doc_dir, "normalized.pdf"),
+            "layout_snapshot_json": os.path.join(doc_dir, "layout_snapshot.json"),
+            "metadata_json": os.path.join(doc_dir, "metadata.json"),
+
+            # ✅ 추가
+            "preview_base_png": os.path.join(doc_dir, "preview_base.png"),
+            "preview_merged_png": os.path.join(doc_dir, "preview_merged.png"),
+
+            "onelayer_bmp": os.path.join(doc_dir, "onelayer.bmp"),
+            "onelayer_bin": os.path.join(doc_dir, "onelayer.bin"),
+            "onelayer_meta_json": os.path.join(doc_dir, "onelayer_meta.json"),
+        }
 
 
 def _guess_normalized_pdf_from_upload(upload_path: str) -> str | None:
@@ -2024,26 +2210,25 @@ def _guess_normalized_pdf_from_upload(upload_path: str) -> str | None:
 
 
 def save_doc_master_bundle(
-    *,
     userid: str,
     doc_id: int,
     bucket: str,
-    im,                 # PIL.Image
+    im,
     fmt: str,
     size: tuple[int, int],
-    device_id: str = "",
-    # 원본/정규화 파일 복사용(있으면 copy)
-    upload_temp_path: str | None = None,
-    orig_filename: str | None = None,
-    normalized_pdf_path: str | None = None,
-    # 옵션 스냅샷들
-    layout_snapshot: dict | None = None,
-    metadata: dict | None = None,
-    # meta 확장용
-    need_approval: bool = False,
-    final_approval: bool = False,
+    device_id: str,
+    upload_temp_path: str | None,
+    orig_filename: str,
+    normalized_pdf_path: str | None,
+    layout_snapshot: dict | None,
+    metadata: dict | None,
+    need_approval: bool,
+    final_approval: bool,
     route_id=None,
     assignees=None,
+
+    preview_base_im=None,     # ✅ 추가
+    preview_merged_im=None,   # ✅ 추가 (여기에 merged_rgb가 들어와야 함)
 ):
     """
     {ROOT}/eink_docs/{userid}/{bucket}/{doc_id}/ 아래에:
@@ -2051,6 +2236,7 @@ def save_doc_master_bundle(
       - normalized.pdf (가능하면 copy)
       - layout_snapshot.json (옵션 dump)
       - metadata.json (옵션 dump)
+      - preview_base.png / preview_merged.png
       - onelayer.bmp / onelayer.bin / onelayer_meta.json 저장
 
     반환: (payload_bytes, onelayer_meta_dict, paths_dict)
@@ -2068,6 +2254,17 @@ def save_doc_master_bundle(
         source_ext = "pdf"
 
     paths = get_doc_bundle_paths(userid, doc_id, bucket=bucket, source_ext=source_ext)
+
+    # ✅ preview 저장용: BW('1') / P(BWRY)면 PNG 저장 전에 RGB로 변환
+    def _to_rgb_for_preview(img):
+        if img is None:
+            return None
+        if getattr(img, "mode", None) in ("1", "P"):
+            return img.convert("RGB")
+        # RGBA도 안전하게 RGB로
+        if getattr(img, "mode", None) == "RGBA":
+            return img.convert("RGB")
+        return img
 
     # 2) original.xxx 복사 (있으면)
     try:
@@ -2099,10 +2296,31 @@ def save_doc_master_bundle(
     except Exception:
         current_app.logger.debug("[DocMaster] metadata dump failed", exc_info=True)
 
-    # 5) onelayer.bmp 저장
-    im.save(paths["onelayer_bmp"], format="BMP")
+    # ✅ 4-1) preview_base.png 저장 (레이어 없음: base_canvas)
+    try:
+        if preview_base_im is not None:
+            pb = _to_rgb_for_preview(preview_base_im)
+            if pb is not None:
+                pb.save(paths["preview_base_png"], format="PNG")
+    except Exception:
+        current_app.logger.debug("[DocMaster] preview_base.png save failed", exc_info=True)
 
-    # 6) onelayer.bin 저장
+    # ✅ 4-2) preview_merged.png 저장 (프론트와 동일: merged_rgb)
+    #     - 양자화 금지
+    #     - im(final_im)으로 fallback 금지 (형 요구사항)
+    try:
+        if preview_merged_im is not None:
+            pm = _to_rgb_for_preview(preview_merged_im)  # merged_rgb는 보통 RGB
+            if pm is not None:
+                pm.save(paths["preview_merged_png"], format="PNG")
+    except Exception:
+        current_app.logger.debug("[DocMaster] preview_merged.png save failed", exc_info=True)
+
+    # 5) ✅ onelayer.bmp 저장 (도트 = final_im)
+    if im is not None:
+        im.save(paths["onelayer_bmp"], format="BMP")
+
+    # 6) onelayer.bin 저장 (payload는 도트 기준)
     payload = image_to_payload(im, fmt, size=size)
     with open(paths["onelayer_bin"], "wb") as f:
         f.write(payload)
@@ -2121,6 +2339,11 @@ def save_doc_master_bundle(
             "normalized_pdf": os.path.basename(paths["normalized_pdf"]),
             "layout_snapshot_json": os.path.basename(paths["layout_snapshot_json"]),
             "metadata_json": os.path.basename(paths["metadata_json"]),
+
+            # ✅ preview는 "있을 수도, 없을 수도" 있으니 파일명은 유지
+            "preview_base_png": os.path.basename(paths["preview_base_png"]),
+            "preview_merged_png": os.path.basename(paths["preview_merged_png"]),
+
             "bmp": os.path.basename(paths["onelayer_bmp"]),
             "bin": os.path.basename(paths["onelayer_bin"]),
         },
@@ -2142,6 +2365,7 @@ def save_doc_master_bundle(
         json.dump(onelayer_meta, f, ensure_ascii=False, indent=2)
 
     return payload, onelayer_meta, paths
+
 
 
 def get_device_upload_dir(userid: str | None = None) -> str:
@@ -2177,3 +2401,150 @@ def save_device_upload_bundle(
         json.dump(meta_json, f, ensure_ascii=False, indent=2)
 
     return {"bin": bin_path, "json": json_path}
+
+
+def inject_approval_runtime_into_snapshot(layout_snapshot: dict, runtime_map: dict[int, dict]) -> int:
+    """
+    layout_snapshot 안의 approval_box.columns(여러 위치)에
+    runtime/status를 주입해서 렌더러가 slot.status를 채울 수 있게 만든다.
+    """
+    if not layout_snapshot or not runtime_map:
+        return 0
+
+    def _apply_to_columns(cols: list) -> int:
+        changed = 0
+        if not isinstance(cols, list):
+            return 0
+        for c in cols:
+            if not isinstance(c, dict):
+                continue
+            try:
+                col = int(c.get("col_index") or 0)
+            except Exception:
+                col = 0
+            if col <= 0:
+                continue
+
+            rt = runtime_map.get(col)
+            if not rt:
+                continue
+
+            # ✅ 호환을 위해 runtime + status 둘 다 세팅
+            c["status"] = rt.get("status", c.get("status"))
+            if rt.get("stamp_text") is not None:
+                c["stamp_text"] = rt.get("stamp_text")
+
+            runtime = c.get("runtime") or {}
+            runtime["status"] = rt.get("status")
+            if rt.get("stamp_text") is not None:
+                runtime["stamp_text"] = rt.get("stamp_text")
+            c["runtime"] = runtime
+
+            changed += 1
+        return changed
+
+    changed_total = 0
+
+    # 1) tpl_json.approval_box.columns
+    try:
+        cols = (((layout_snapshot.get("tpl_json") or {}).get("approval_box") or {}).get("columns")) or []
+        changed_total += _apply_to_columns(cols)
+    except Exception:
+        pass
+
+    # 2) slots_json.approval.columns
+    try:
+        cols = (((layout_snapshot.get("slots_json") or {}).get("approval") or {}).get("columns")) or []
+        changed_total += _apply_to_columns(cols)
+    except Exception:
+        pass
+
+    # 3) layers_json 내 approval_box.columns
+    try:
+        layers = layout_snapshot.get("layers_json") or []
+        if isinstance(layers, list):
+            for L in layers:
+                if not isinstance(L, dict):
+                    continue
+                if (L.get("type") or "").lower() != "approval_box":
+                    continue
+                cols = L.get("columns") or []
+                changed_total += _apply_to_columns(cols)
+    except Exception:
+        pass
+
+    try:
+        current_app.logger.debug(
+            "[inject_runtime] changed=%s keys=%s",
+            changed_total, sorted(runtime_map.keys())
+        )
+    except Exception:
+        pass
+
+    return changed_total
+
+
+
+def inject_user_photo1_into_snapshot(layout_snapshot: dict) -> int:
+    if not layout_snapshot:
+        return 0
+
+    try:
+        from pybo.models import User
+    except Exception:
+        return 0
+
+    def _fill(cols: list) -> int:
+        changed = 0
+        if not isinstance(cols, list):
+            return 0
+
+        for c in cols:
+            if not isinstance(c, dict):
+                continue
+
+            uid = c.get("user_id")
+            if not uid:
+                continue
+
+            # 이미 프론트/기존값이 있으면 그대로 두고 싶으면 여기서 skip
+            # if (c.get("user_photo_1") or "").strip():
+            #     continue
+
+            u = None
+            try:
+                if isinstance(uid, int) or (isinstance(uid, str) and uid.isdigit()):
+                    u = User.query.filter(User.id == int(uid)).first()
+                else:
+                    u = User.query.filter(User.userid == str(uid)).first()
+            except Exception:
+                u = None
+
+            new_photo = (getattr(u, "photo_1", "") or "").strip() if u else ""
+            old_photo = (c.get("user_photo_1", "") or "").strip()
+
+            if new_photo != old_photo:
+                c["user_photo_1"] = new_photo
+                changed += 1
+
+        return changed
+
+    changed_total = 0
+
+    # tpl_json.approval_box.columns
+    cols = (((layout_snapshot.get("tpl_json") or {}).get("approval_box") or {}).get("columns")) or []
+    changed_total += _fill(cols)
+
+    # slots_json.approval.columns
+    cols = (((layout_snapshot.get("slots_json") or {}).get("approval") or {}).get("columns")) or []
+    changed_total += _fill(cols)
+
+    # layers_json approval_box.columns
+    layers = layout_snapshot.get("layers_json") or []
+    if isinstance(layers, list):
+        for L in layers:
+            if isinstance(L, dict) and (L.get("type") or "").lower() == "approval_box":
+                changed_total += _fill(L.get("columns") or [])
+
+    return changed_total
+

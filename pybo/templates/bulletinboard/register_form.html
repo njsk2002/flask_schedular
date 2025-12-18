@@ -1,0 +1,123 @@
+{% extends "e_base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="m-0">직인(Stamp) 등록</h4>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <form method="post" action="{{ url_for('bulletin.stamp_register_post') }}" enctype="multipart/form-data" class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label">직인 이름</label>
+          <input name="name" class="form-control" placeholder="예: 관리팀" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">파일 (PNG 권장 / 투명배경)</label>
+          <input name="stamp_file" type="file" class="form-control" accept=".png,.jpg,.jpeg,.webp" required>
+        </div>
+        <div class="col-md-2 d-grid">
+          <label class="form-label">&nbsp;</label>
+          <button class="btn btn-primary">등록</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+      <div class="fw-bold">등록된 직인</div>
+      <div class="small text-muted">클릭하면 선택 표시만 됨 (draft 화면에서도 동일 UI로 재사용 가능)</div>
+    </div>
+
+    <div class="card-body">
+      <div id="stampStrip" class="stamp-strip">
+        {% for s in stamps %}
+          <button type="button" class="stamp-item" data-stamp-id="{{ s.id }}">
+            <img src="{{ url_for('bulletin.stamp_image', stamp_id=s.id) }}" alt="{{ s.name }}">
+            <div class="stamp-name">{{ s.name }}</div>
+          </button>
+        {% endfor %}
+      </div>
+
+      <input type="hidden" id="selected_stamp_id" value="">
+      <div class="mt-3">
+        <div class="fw-semibold">선택된 직인</div>
+        <div id="selectedStampPreview" class="selected-preview text-muted">없음</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .stamp-strip{
+    display:flex;
+    gap:12px;
+    overflow-x:auto;
+    padding:8px 6px;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+  }
+  .stamp-item{
+    flex:0 0 auto;
+    width:140px;
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    background:#fff;
+    padding:10px;
+    text-align:center;
+    scroll-snap-align:start;
+    cursor:pointer;
+  }
+  .stamp-item img{
+    width:100%;
+    height:90px;
+    object-fit:contain;
+    display:block;
+  }
+  .stamp-name{
+    margin-top:8px;
+    font-size:.85rem;
+    color:#374151;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .stamp-item.selected{
+    outline:3px solid rgba(13,110,253,.25);
+    border-color:#86b7fe;
+  }
+  .selected-preview img{
+    height:60px;
+    width:auto;
+    object-fit:contain;
+    vertical-align:middle;
+    margin-right:10px;
+  }
+</style>
+
+<script>
+  (function(){
+    const strip = document.getElementById("stampStrip");
+    const hidden = document.getElementById("selected_stamp_id");
+    const preview = document.getElementById("selectedStampPreview");
+
+    if(!strip) return;
+
+    strip.addEventListener("click", (e) => {
+      const btn = e.target.closest(".stamp-item");
+      if(!btn) return;
+
+      strip.querySelectorAll(".stamp-item").forEach(x => x.classList.remove("selected"));
+      btn.classList.add("selected");
+
+      const id = btn.dataset.stampId;
+      hidden.value = id;
+
+      const img = btn.querySelector("img");
+      const name = btn.querySelector(".stamp-name")?.textContent || "";
+      preview.innerHTML = `<img src="${img.src}"><span>${name} (id=${id})</span>`;
+    });
+  })();
+</script>
+{% endblock %}
