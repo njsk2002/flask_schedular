@@ -1,0 +1,73 @@
+{% extends 'e_base.html' %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h3 class="mb-0">E-Ink Presentation (3×2)</h3>
+    <div class="d-flex gap-2">
+      <a class="btn btn-outline-secondary" href="/dashboard/device/{{ devices[0].device_id if devices else 'E01' }}">관리 페이지</a>
+      <button id="btnRefresh" class="btn btn-outline-dark">새로고침</button>
+    </div>
+  </div>
+
+  <style>
+    .tile{border:1px solid #e9ecef; border-radius:14px; box-shadow:0 2px 8px rgba(0,0,0,.04); overflow:hidden;}
+    .tile-hd{padding:10px 12px; background:#fff; border-bottom:1px solid #e9ecef; display:flex; justify-content:space-between; align-items:center;}
+    .tile-bd{background:#f8f9fa; height: clamp(260px, 36vh, 520px); display:flex; align-items:center; justify-content:center;}
+    .tile img{width:100%; height:100%; object-fit:contain;}
+    .mini{font-size:.85rem; color:#6c757d;}
+  </style>
+
+  <div class="row row-cols-1 row-cols-md-3 g-3" id="grid">
+    {% for d in devices %}
+    <div class="col" data-device-id="{{ d.device_id }}">
+      <div class="tile">
+        <div class="tile-hd">
+          <div class="fw-semibold">{{ d.device_id }}</div>
+          <a class="btn btn-sm btn-outline-secondary" href="/dashboard/device/{{ d.device_id }}">관리</a>
+        </div>
+        <div class="tile-bd">
+          <img class="img" src="" alt="preview">
+        </div>
+        <div class="p-2 mini">
+          <div>Current: <span class="cur">-</span></div>
+          <div>CRC: <span class="crc">-</span></div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+(() => {
+  const DBG = true;
+  const devices = Array.from(document.querySelectorAll("#grid [data-device-id]")).map(el => el.dataset.deviceId);
+  function dbg(...a){ if(DBG) console.debug("[presentation]", ...a); }
+  function setImg(img, url){
+    img.src = url ? (url + (url.includes('?')?'&':'?') + 't=' + Date.now()) : '';
+  }
+  async function api(url){
+    const r = await fetch(url);
+    if(!r.ok) throw new Error(url + " -> " + r.status);
+    return r.json();
+  }
+  async function refresh(){
+    // GET /dashboard/presentation_board -> { devices: {E01:{current:{...}}, ...}}
+    const data = await api("/dashboard/presentation_board");
+    dbg("data:", data);
+
+    document.querySelectorAll("#grid [data-device-id]").forEach(col => {
+      const did = col.dataset.deviceId;
+      const cur = data.devices?.[did]?.current || null;
+      col.querySelector(".cur").textContent = cur?.title || "-";
+      col.querySelector(".crc").textContent = cur?.crc32 || "-";
+      setImg(col.querySelector(".img"), cur?.preview_url);
+    });
+  }
+  document.getElementById("btnRefresh").onclick = refresh;
+  refresh();
+})();
+</script>
+{% endblock %}

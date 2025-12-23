@@ -13,7 +13,7 @@ from flask_login import LoginManager   # 🔹 추가
 import config
 
 # 외부 스케줄러 초기화 함수
-from .schedular import init_scheduler
+from .scheduler import init_scheduler
 
 # ─────────────────────────────────────────────────────────────
 # DB 메타데이터 네이밍 컨벤션
@@ -74,7 +74,7 @@ def create_app():
 
     app.config['UPLOAD_FILE_FOLDER'] = upload_file_folder
     app.config['UPLOAD_BMP_FOLDER'] = upload_bmp_folder
-    app.config["SIGN_BASE_DIR"] = r"C:/DavidProject/flask_project/flask_schedular/uploads"
+    app.config["SIGN_BASE_DIR"] = r"C:/DavidProject/flask_project/flask_scheduler/uploads"
 
     os.makedirs(upload_file_folder, exist_ok=True)
     os.makedirs(upload_bmp_folder, exist_ok=True)
@@ -145,7 +145,7 @@ def create_app():
         comment_views, vote_views, co2_controller, cal_schedular_controller,
         openai_controller, ytube_voice_controller, naver_api_controller,
         e_namecard_controller, e_device_controller, e_bulletin_controller,
-        esp32_controller, e_worksheet_controller
+        esp32_controller, e_worksheet_controller, e_dashboard_controller,assign_controller
     )
 
     app.register_blueprint(main_views.bp)
@@ -165,6 +165,9 @@ def create_app():
     app.register_blueprint(e_bulletin_controller.bp)
     app.register_blueprint(esp32_controller.bp)
     app.register_blueprint(e_worksheet_controller.bp)
+    app.register_blueprint(e_dashboard_controller.bp)
+    app.register_blueprint(assign_controller.bp)
+
 
     # ─────────────────────────────────────────────────────────
     # Jinja2 필터 등록
@@ -177,7 +180,6 @@ def create_app():
     #  - 마이그레이션/CLI/리로더 자식/환경변수 상황에서는 실행하지 않음
     # ─────────────────────────────────────────────────────────
     if not _should_skip_schedulers():
-        # 청소 스레드 시작: app_context 필요 시 인자 전달
         from .views.e_namecard_controller import cleanup_expired_qr_codes
 
         cleanup_thread = threading.Thread(
@@ -187,9 +189,9 @@ def create_app():
         )
         cleanup_thread.start()
 
-        # APScheduler 초기화
-        init_scheduler()
-        app.logger.info("[SCHEDULER] Cleanup job initialized")
+        # ✅ APScheduler 초기화 (app_context 필요해서 app 전달)
+        init_scheduler(app)
+        app.logger.info("[SCHEDULER] Scheduler initialized")
     else:
         app.logger.info("[SCHEDULER] Skipped (migration/CLI/reloader/env)")
 

@@ -1,48 +1,49 @@
 # controllers/device_controller.py
 # ─────────────────────────────────────────────────────────────────────────────
-# 목적
-#  - ESP32 등 디바이스가 /device/info, /device/bmp 를 호출할 때
-#  - "로그인 세션이 없더라도" 안전하게 userid를 식별하여
-#    D:/bmp_files/{userid}/uploads 에서 자산(meta/bin/bmp)을 제공.
+# 목적 (수정 후)
+#  - ESP32 디바이스가 /device/info, /device/bmp 를 호출할 때
+#  - "uploads 폴더 스캔"이 아니라,
+#    DB의 현재 Posting(active/scheduled) -> Asset 기준으로 meta/bin을 제공한다.
 #
-# 보안/정책 (권장 우선순위)
+# 보안/정책(유지)
 #  1) device_id → DB(eink_device) 매핑으로 소유자 userid를 조회  ← ★1순위(장치에는 쿠키가 없음)
 #  2) 세션에 userid가 있다면, ①의 사용자와 동일해야 함 (다르면 403)
 #  3) 쿼리(userid, ts, sig)가 있고 sig(HMAC)가 유효하면 최후 수단으로 허용
-#     - 운영환경에서는 반드시 sig 검증 사용할 것. (sig 없으면 무시)
 #
-# 로깅
-#  - 어떤 경로로 userid가 결정되었는지 모두 DEBUG 로그로 남김
+# NOTE
+#  - 이 파일은 이제 uploads 디렉터리(glob) 기반 _pick_meta 를 쓰지 않는다.
+#  - meta는 EInkAsset.meta_relpath(또는 meta_json)를 사용한다.
 # ─────────────────────────────────────────────────────────────────────────────
 
-import os, glob, json, time, threading, hmac, hashlib
+import os, json, time, threading, hmac, hashlib, struct
 from datetime import datetime
-from flask import Blueprint, request, jsonify, Response, url_for, current_app
+from flask import Blueprint, request, jsonify, Response, url_for, current_app, send_file
 
-from ..service.image_to_bytes import ImageToBytes  # 가변 해상도/모드 지원 버전
+# (폴백 변환이 필요할 때만 사용)
+from ..service.image_to_bytes import ImageToBytes
 from ..service.file_management import current_userid_str
-try:
-    from ..service.file_management import get_global_asset_root  # 예: D:/bmp_files
-except Exception:
-    get_global_asset_root = None
 
-# ★ DB 모델 import (프로젝트 경로에 맞게 조정)
+# ★ DB 모델
 from ..models import db, EInkDevice, User
+
+# ★ DB Posting/Asset 기반 선택 로직
+from ..repository.repository_edevice import RepositoryEDevice as R
 
 bp = Blueprint('device', __name__, url_prefix='/device')
 
 # ─────────────────────────────────────────────────────────────
 # 설정/상수
 # ─────────────────────────────────────────────────────────────
-# 공유 비밀키(운영에서는 환경변수로 주입)
 DEVICE_LINK_SECRET = os.environ.get("DEVICE_LINK_SECRET", "change-me")
+
 
 # ─────────────────────────────────────────────────────────────
 # 유틸
 # ─────────────────────────────────────────────────────────────
 def _safe_userid(v: str) -> str:
-    """userid를 파일 경로용으로 안전하게 정규화"""
+    """userid를 안전하게 정규화"""
     return "".join(ch for ch in str(v or "") if ch.isalnum() or ch in "._-")[:64] or "guest"
+
 
 def _safe_device_id(raw: str) -> str:
     """device_id도 파일명/패턴용으로 정규화"""
@@ -50,26 +51,9 @@ def _safe_device_id(raw: str) -> str:
         return ""
     return "".join(ch for ch in raw if ch.isalnum() or ch in "._-")[:64]
 
-def _global_asset_root() -> str:
-    """글로벌 루트 (설정값 우선, 없으면 D:/bmp_files)"""
-    base = None
-    if callable(get_global_asset_root):
-        try:
-            base = get_global_asset_root()
-        except Exception:
-            base = None
-    if not base:
-        base = os.path.join("D:/", "bmp_files")
-    return base
-
-def _asset_root_uploads_for(userid: str) -> str:
-    """해당 userid의 업로드 루트: <글로벌루트>/<userid>/uploads"""
-    root = os.path.join(_global_asset_root(), _safe_userid(userid), "uploads")
-    os.makedirs(root, exist_ok=True)
-    return root
 
 def _session_userid() -> str | None:
-    """세션에 userid가 있으면 안전 문자열로 반환, 없으면 None"""
+    """세션에 userid가 있으면 반환, 없으면 None"""
     try:
         uid = (current_userid_str() or "").strip()
         if uid and uid.lower() != "guest":
@@ -78,9 +62,10 @@ def _session_userid() -> str | None:
         pass
     return None
 
+
 def _query_userid_with_hmac() -> str | None:
     """
-    쿼리에서 userid, ts, sig를 받아 HMAC 검증 후 유효하면 userid 반환.
+    쿼리(userid, ts, sig) HMAC 검증 후 유효하면 userid 반환.
     - 운영 보안: sig가 없으면 무조건 None (허용하지 않음).
     """
     uid = (request.args.get("userid", "") or "").strip()
@@ -88,19 +73,20 @@ def _query_userid_with_hmac() -> str | None:
     sig = (request.args.get("sig", "") or "").strip()
     if not (uid and ts and sig):
         return None
+
     msg = f"{uid}|{ts}".encode("utf-8")
     good = hmac.new(DEVICE_LINK_SECRET.encode("utf-8"), msg, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(good, sig):
         current_app.logger.debug(f"[device] QUERY userid HMAC invalid: uid={uid}")
         return None
+
     current_app.logger.debug(f"[device] QUERY userid accepted via HMAC: uid={uid}, ts={ts}")
     return _safe_userid(uid)
 
+
 def _device_owner_userid(device_id: str) -> str | None:
     """
-    DB에서 device_id의 소유자 userid를 조회.
-    - EInkDevice.user_no → User.no 조인하여 User.userid를 얻음.
-    - 충돌/중복은 가장 최신(updated_at) 1건 채택.
+    DB에서 device_id 소유자 userid 조회 (EInkDevice.user_no -> User.no -> User.userid)
     """
     if not device_id:
         return None
@@ -120,102 +106,108 @@ def _device_owner_userid(device_id: str) -> str | None:
         current_app.logger.error(f"[device] DB lookup failed for dev={device_id}: {e}")
     return None
 
+
 def _resolve_userid(device_id: str) -> tuple[str | None, str]:
     """
-    ★ 권장 정책에 따른 userid 결정 로직
-    반환: (userid or None, how)
+    userid 결정: (userid, how)
       - how: 'db', 'session', 'query+hmac', 'mismatch', 'missing'
-    우선순위:
-      1) DB 매핑(device_id → userid)
-         - 세션 userid가 들어왔다면 동일해야 함. 다르면 ('mismatch')
-      2) DB가 없고, 쿼리(userid, ts, sig)가 유효하면 채택('query+hmac')
-      3) 그래도 없으면, 세션 userid가 있으면 사용('session')  ← 장치 요청에는 거의 없음
-      4) 실패('missing')
     """
-    # 1) DB 매핑
     uid_db = _device_owner_userid(device_id)
     uid_sess = _session_userid()
+
     if uid_db:
         if uid_sess and uid_sess != uid_db:
             current_app.logger.debug(f"[device] userid mismatch: session={uid_sess}, db={uid_db} (dev={device_id})")
             return None, "mismatch"
         return uid_db, "db"
 
-    # 2) 쿼리(userid+HMAC)
     uid_q = _query_userid_with_hmac()
     if uid_q:
         return uid_q, "query+hmac"
 
-    # 3) 세션 (보조)
     if uid_sess:
         current_app.logger.debug(f"[device] userid via SESSION (no db mapping): uid={uid_sess}, dev={device_id}")
         return uid_sess, "session"
 
-    # 4) 실패
     return None, "missing"
 
-def _pick_meta(device_id: str, res: str | None, mode: str | None, userid: str | None):
-    """
-    device_id, (옵션)res='1600x1200', (옵션)mode='BW'|'BWRY'
-    → 해당 userid의 uploads 디렉터리에서 가장 적합한 meta.json 경로와 dict 반환
-    파일명 패턴: <device>_<WxH>_<MODE>.meta.json
-    """
+
+def _get_user_by_userid(userid: str) -> User | None:
     if not userid:
-        return None, None
-    asset_root = _asset_root_uploads_for(userid)
-    pattern = f"{_safe_device_id(device_id)}_*_*.meta.json"
-    current_app.logger.debug(f"[device] pick_meta uid={userid}, root={asset_root}, pattern={pattern}")
+        return None
+    return User.query.filter(User.userid == userid).first()
 
-    cand = glob.glob(os.path.join(asset_root, pattern))
-    metas = []
-    for p in cand:
+
+def _load_meta_for_asset(user: User, asset) -> dict:
+    """
+    meta 우선순위:
+      1) asset.meta_relpath 파일이 있으면 그걸 읽는다.
+      2) 없으면 asset.meta_json을 사용한다.
+    """
+    meta = {}
+    meta_abs = None
+
+    try:
+        if getattr(asset, "meta_relpath", None):
+            meta_abs = R.abs_path_from_rel(user, asset.meta_relpath)
+            if meta_abs and os.path.isfile(meta_abs):
+                with open(meta_abs, "r", encoding="utf-8") as f:
+                    meta = json.load(f) or {}
+    except Exception as e:
+        current_app.logger.debug(f"[device] meta_relpath read fail: {e}")
+
+    if not meta:
         try:
-            with open(p, "r", encoding="utf-8") as f:
-                m = json.load(f)
-            metas.append((p, m))
+            meta = getattr(asset, "meta_json", None) or {}
         except Exception:
-            continue
-    if not metas:
-        return None, None
+            meta = {}
 
-    def score(item):
-        _p, m = item
-        sc = 0
-        if res:
-            if f"{m.get('width','')}x{m.get('height','')}" == res:
-                sc += 10
-        if mode:
-            if m.get("mode", "").upper() == (mode or "").upper():
-                sc += 5
-        # 최신 우선 (보통 ver=mtime 기반)
-        try:
-            sc += int(m.get("ver", 0)) // 1000
-        except Exception:
-            pass
-        return sc
+    # 보정값들(필드가 없을 때 asset 기반)
+    meta.setdefault("width", getattr(asset, "width", 0) or 0)
+    meta.setdefault("height", getattr(asset, "height", 0) or 0)
+    meta.setdefault("mode", getattr(asset, "mode", None) or "BWRYBG")
+    meta.setdefault("total_len", int(getattr(asset, "total_len", 0) or 0))
+    meta.setdefault("raw_len", int(getattr(asset, "raw_len", 0) or 0))
+    meta.setdefault("crc32", (getattr(asset, "crc32_le", "") or "").lower())
+    meta.setdefault("ver", int(getattr(asset, "ver", int(time.time())) or int(time.time())))
 
-    metas.sort(key=score, reverse=True)
-    return metas[0]  # (meta_path, meta_dict)
+    # 디버깅용 파일명들(있으면)
+    if "file" not in meta:
+        files = meta.get("files") if isinstance(meta.get("files"), dict) else {}
+        meta["file"] = files.get("bmp") or meta.get("bmp") or "onelayer.bmp"
+    if "bin" not in meta:
+        files = meta.get("files") if isinstance(meta.get("files"), dict) else {}
+        meta["bin"] = files.get("bin") or meta.get("bin") or "onelayer.bin"
 
-# ─────────────────────────────────────────────────────────────
-# 간단 바이너리 캐시 (파일 경로/mtime 기준)
-#   ※ 이제 .bin을 우선 사용하므로 캐시 키도 bin_path 기준으로 바꿈
-# ─────────────────────────────────────────────────────────────
-_bin_cache = {}  # key: (path, mtime_int) -> {"payload":bytes, "len":int, "crc32":str}
+    return meta
+
+
+def _no_cache_headers(resp):
+    resp.headers["Cache-Control"] = "no-store, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+# (선택) BMP->payload 폴백 캐시 (거의 안 탐)
+_payload_cache = {}
 _cache_lock = threading.Lock()
 
+
 # ─────────────────────────────────────────────────────────────
-# 라우트
+# 라우트: /device/info
 # ─────────────────────────────────────────────────────────────
 @bp.route("/info", methods=["GET"])
 def device_info():
     """
     ESP32가 상태 확인 및 다운로드 정보 요청:
-    GET /device/info?device_id=E01&cap=BWR&fw=1.0.0[&res=1600x1200][&userid=...&ts=...&sig=...]
+      GET /device/info?device_id=E01&cap=BWR&fw=1.0.0[&res=1200x1600][&userid=...&ts=...&sig=...]
     - userid는 기본적으로 DB 매핑(device_id)으로 결정
-    - 세션이 들어오면 DB 매핑과 불일치 시 403
+    - 세션 userid가 들어오면 DB 매핑과 불일치 시 403
     - 쿼리(userid)는 HMAC(sig) 유효 시에만 최후 수단으로 허용
+    - 자산 선택은 uploads 스캔이 아니라 "DB posting -> asset" 기반
     """
+    t0 = time.perf_counter()
+
     device_id = request.args.get("device_id", "").strip()
     cap       = request.args.get("cap", "").strip()
     fw        = request.args.get("fw", "").strip()
@@ -223,155 +215,206 @@ def device_info():
 
     if not device_id or not cap or not fw:
         current_app.logger.debug(f"[device/info] 400 missing params dev={device_id}, cap={cap}, fw={fw}")
-        return jsonify({"status": "error", "reason": "missing params"}), 400
+        return _no_cache_headers(jsonify({"status": "error", "reason": "missing params"})), 400
 
     userid, how = _resolve_userid(device_id)
     if how == "mismatch":
-        # 세션 사용자와 장치 소유자가 다름 → 보안 차단
-        return jsonify({"status": "error", "reason": "forbidden (session vs device owner mismatch)"}), 403
+        return _no_cache_headers(jsonify({"status": "error", "reason": "forbidden (session vs device owner mismatch)"})), 403
     if not userid:
         current_app.logger.debug(f"[device/info] 401 userid missing (how={how}, dev={device_id})")
-        return jsonify({"status": "error", "reason": "no userid"}), 401
+        return _no_cache_headers(jsonify({"status": "error", "reason": "no userid"})), 401
 
-    # cap 힌트로 모드 유추 (BWR* → BWRY, 아니면 BW)
-    mode_hint = "BWRY" if cap.upper().startswith("BWR") else "BW"
+    user = _get_user_by_userid(userid)
+    if not user:
+        return _no_cache_headers(jsonify({"status": "error", "reason": "user_not_found"})), 404
 
-    meta_path, meta = _pick_meta(device_id, res or None, mode_hint, userid)
-    if not meta:
-        root = _asset_root_uploads_for(userid)
-        current_app.logger.debug(f"[device/info] 404 no asset uid={userid}, root={root}, dev={device_id}, res={res}, mode={mode_hint}")
-        return jsonify({"status": "error", "reason": "no prepared asset"}), 404
+    now = R.kst_now_naive()
 
-    # 세션이 없을 수 있으므로 /bmp에도 userid를 전달 (단, 보안상 HMAC 사용 권장)
+    # ✅ DB에서 현재 posting/asset 결정
+    cur, nxt = R.pick_current_and_next_posting(user.no, _safe_device_id(device_id), now)
+    if not cur or not getattr(cur, "asset", None):
+        elapsed = int((time.perf_counter() - t0) * 1000)
+        current_app.logger.debug(f"[device/info] 200 no_posting uid={userid} dev={device_id} elapsed_ms={elapsed}")
+        return _no_cache_headers(jsonify({
+            "status": "ok",
+            "allow_update": False,
+            "reason": "no_posting",
+            "server_time": datetime.now().isoformat(timespec="seconds"),
+            "echo": {"device_id": device_id, "cap": cap, "fw": fw, "res": res, "userid": userid, "resolved_via": how},
+        })), 200
+
+    asset = cur.asset
+    meta = _load_meta_for_asset(user, asset)
+
+    # /device/bmp URL (userid를 쿼리에 싣지 않음: device_id→DB 매핑으로만 접근)
     bmp_url = url_for(
         "device.send_bmp",
         device_id=_safe_device_id(device_id),
-        res=f"{meta['width']}x{meta['height']}",
-        mode=meta["mode"],
         cap=cap,
-        v=meta["ver"],
-        userid=userid,  # 동일 사용자 폴더 접근 보장 (HMAC 붙이는 것을 권장)
+        v=str(meta.get("ver") or getattr(asset, "ver", "")),
         _external=True,
     )
 
-    current_app.logger.debug(f"[device/info] 200 ok uid={userid} (via {how}) meta_ver={meta['ver']}")
+    elapsed = int((time.perf_counter() - t0) * 1000)
+    current_app.logger.debug(
+        f"[device/info] 200 ok uid={userid} (via {how}) "
+        f"dev={_safe_device_id(device_id)} asset_id={getattr(asset,'id',None)} ver={meta.get('ver')} elapsed_ms={elapsed}"
+    )
 
-    return jsonify({
+    resp = jsonify({
         "status": "ok",
         "server_time": datetime.now().isoformat(timespec="seconds"),
-        "echo": {"device_id": device_id, "cap": cap, "fw": fw, "userid": userid, "resolved_via": how},
+        "echo": {"device_id": device_id, "cap": cap, "fw": fw, "res": res, "userid": userid, "resolved_via": how},
         "bmp": {
             "url": bmp_url,
-            "len": meta["total_len"],       # CRC 포함 길이
-            "crc32": meta["crc32"],         # 8-hex string (소문자)
-            "ver": meta["ver"],             # 보통 mtime(int)
-            "mode": meta["mode"],           # 'BW' | 'BWRY' | 'BWRYBG'
-            "size": f"{meta['width']}x{meta['height']}",
-            "file": meta["file"],           # 디버깅 BMP 파일명
+            "len": int(meta.get("total_len") or 0),     # CRC 포함 길이
+            "crc32": (meta.get("crc32") or "").lower(), # 8-hex string
+            "ver": int(meta.get("ver") or 0),
+            "mode": str(meta.get("mode") or "BWRYBG"),
+            "size": f"{int(meta.get('width') or 0)}x{int(meta.get('height') or 0)}",
+            "file": meta.get("file") or "onelayer.bmp", # 디버깅 표시용
         },
-    }), 200
+    })
 
+    return _no_cache_headers(resp), 200
+
+
+# ─────────────────────────────────────────────────────────────
+# 라우트: /device/bmp
+# ─────────────────────────────────────────────────────────────
 @bp.route("/bmp", methods=["GET"])
 def send_bmp():
     """
     ESP32가 실제 바이너리 다운로드:
-    GET /device/bmp?device_id=E01&res=1600x1200&mode=BWRY&v=1755842843[&userid=...&ts=...&sig=...]
-    - 자산은 해당 userid의 uploads에서 조회
-    - .bin(EJOB payload, CRC 포함)을 우선적으로 스트리밍, 없으면 BMP→payload 폴백
+      GET /device/bmp?device_id=E01&cap=BWR&v=...
+    - uploads 스캔이 아니라 DB posting->asset의 bin_relpath를 전송
+    - bin 없으면 (선택) bmp->payload 폴백 가능
     """
+    t0 = time.perf_counter()
+
     device_id = request.args.get("device_id", "").strip()
-    res       = request.args.get("res", "").strip()
-    mode_q    = request.args.get("mode", "").strip()
     _cap_q    = request.args.get("cap", "BWR").strip()
-    _         = request.args.get("v", "").strip()
+    _         = request.args.get("v", "").strip()  # 버전 힌트(선택)
 
     if not device_id:
         current_app.logger.debug("[device/bmp] 400 missing device_id")
-        return jsonify({"status": "error", "reason": "missing device_id"}), 400
+        return _no_cache_headers(jsonify({"status": "error", "reason": "missing device_id"})), 400
 
     userid, how = _resolve_userid(device_id)
     if how == "mismatch":
-        return jsonify({"status": "error", "reason": "forbidden (session vs device owner mismatch)"}), 403
+        return _no_cache_headers(jsonify({"status": "error", "reason": "forbidden (session vs device owner mismatch)"})), 403
     if not userid:
         current_app.logger.debug(f"[device/bmp] 401 userid missing (how={how}, dev={device_id})")
-        return jsonify({"status": "error", "reason": "no userid"}), 401
+        return _no_cache_headers(jsonify({"status": "error", "reason": "no userid"})), 401
 
-    meta_path, meta = _pick_meta(device_id, res or None, mode_q or None, userid)
-    if not (meta and meta_path):
-        root = _asset_root_uploads_for(userid)
-        current_app.logger.debug(f"[device/bmp] 404 no asset uid={userid}, root={root}, dev={device_id}, res={res}, mode={mode_q}")
-        return jsonify({"status": "error", "reason": "no asset"}), 404
+    user = _get_user_by_userid(userid)
+    if not user:
+        return _no_cache_headers(jsonify({"status": "error", "reason": "user_not_found"})), 404
 
-    asset_root = os.path.dirname(meta_path)  # 해당 userid/uploads
-    bin_name = meta.get("bin")
-    bin_path = os.path.join(asset_root, bin_name) if bin_name else None
-    bmp_path = os.path.join(asset_root, meta["file"])
-    use_bin = bin_path and os.path.exists(bin_path)
+    now = R.kst_now_naive()
 
-    current_app.logger.debug(
-        f"[device/bmp] 200 prepare uid={userid} (via {how}), root={asset_root}, "
-        f"dev={_safe_device_id(device_id)}, use_bin={bool(use_bin)}, bin={bin_name}, bmp={meta.get('file')}"
-    )
+    cur, _nxt = R.pick_current_and_next_posting(user.no, _safe_device_id(device_id), now)
+    if not cur or not getattr(cur, "asset", None):
+        elapsed = int((time.perf_counter() - t0) * 1000)
+        current_app.logger.debug(f"[device/bmp] 404 no_posting uid={userid} dev={device_id} elapsed_ms={elapsed}")
+        return _no_cache_headers(jsonify({"status": "error", "reason": "no_posting"})), 404
 
-    # mtime/경로 기준 캐시 키
-    path_for_cache = bin_path if use_bin else bmp_path
-    if not os.path.exists(path_for_cache):
-        return jsonify({"status": "error", "reason": "file missing"}), 404
+    asset = cur.asset
+    meta = _load_meta_for_asset(user, asset)
 
-    mtime = int(os.path.getmtime(path_for_cache))
-    cache_key = (path_for_cache, mtime)
-    with _cache_lock:
-        cached = _bin_cache.get(cache_key)
+    # 1) 표준: bin_relpath 전송
+    bin_path = None
+    if getattr(asset, "bin_relpath", None):
+        try:
+            bin_path = R.abs_path_from_rel(user, asset.bin_relpath)
+        except Exception as e:
+            current_app.logger.debug(f"[device/bmp] abs_path_from_rel fail: {e}")
+            bin_path = None
 
-    if cached:
-        payload   = cached["payload"]
-        crc_hex   = cached["crc32"]
-        total_len = cached["len"]
-    else:
-        if use_bin:
-            # 표준: .bin 그대로 스트리밍
-            try:
-                with open(bin_path, "rb") as f:
-                    payload = f.read()
-            except Exception as e:
-                current_app.logger.error(f"[BIN] read fail: {e}")
-                return jsonify({"status": "error", "reason": "bin read fail"}), 500
-            total_len = len(payload)
-            try:
-                import struct
-                crc_le = struct.unpack("<I", payload[-4:])[0]
-                crc_hex = f"{crc_le:08x}"
-            except Exception:
-                crc_hex = meta.get("crc32", "00000000")
-        else:
-            # 폴백: BMP → payload
-            payload = ImageToBytes.image_file_to_payload(bmp_path, meta["mode"])
-            total_len = len(payload)
-            try:
-                import struct
-                crc_le = struct.unpack("<I", payload[-4:])[0]
-                crc_hex = f"{crc_le:08x}"
-            except Exception:
-                crc_hex = meta.get("crc32", "00000000")
+    if bin_path and os.path.isfile(bin_path):
+        st = os.stat(bin_path)
+        total_len = int(st.st_size)
 
-        # 캐시 저장
-        with _cache_lock:
-            _bin_cache[cache_key] = {"payload": payload, "crc32": crc_hex, "len": total_len}
+        # total_len 검증(있으면)
+        if getattr(asset, "total_len", None) and int(asset.total_len) != total_len:
+            msg = f"size_mismatch {total_len}!={int(asset.total_len)}"
+            current_app.logger.error(f"[device/bmp] 500 {msg} dev={device_id} uid={userid}")
+            return _no_cache_headers(jsonify({"status": "error", "reason": msg})), 500
 
-    # 응답 헤더/바디
-    resp = Response(payload, mimetype="application/octet-stream")
-    resp.headers["Content-Length"] = str(total_len)
-    resp.headers["X-CRC32"] = crc_hex
-    resp.headers["X-Payload-Version"] = str(meta["ver"])
-    resp.headers["X-Colors"] = "BWR-2bit" if meta["mode"].upper() == "BWRY" else "BW-1bit"
-    resp.headers["ETag"] = f'W/"{meta["ver"]}-{crc_hex}-{total_len}"'
-    resp.headers["Last-Modified"] = datetime.utcfromtimestamp(mtime).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    resp.headers["Cache-Control"] = "no-store, max-age=0"
-    resp.headers["Content-Disposition"] = f'attachment; filename="{_safe_device_id(device_id) or "image"}.bin"'
+        # crc32: 파일 끝 4바이트(LE)
+        crc_hex = (meta.get("crc32") or "").lower() or "00000000"
+        try:
+            with open(bin_path, "rb") as f:
+                f.seek(-4, os.SEEK_END)
+                crc_le = struct.unpack("<I", f.read(4))[0]
+            crc_hex = f"{crc_le:08x}"
+        except Exception:
+            pass
 
-    src_tag = "BIN" if use_bin else "BMP→PAYLOAD"
-    current_app.logger.info(
-        f"[BMP] send ({src_tag}) dev={_safe_device_id(device_id)} uid={userid} "
-        f"(len={total_len}, crc=0x{crc_hex}, ver={meta['ver']}) → {request.remote_addr}"
-    )
-    return resp
+        ver = int(meta.get("ver") or getattr(asset, "ver", int(time.time())) or int(time.time()))
+        mtime = int(os.path.getmtime(bin_path))
+
+        elapsed = int((time.perf_counter() - t0) * 1000)
+        current_app.logger.info(
+            f"[BMP] send (BIN) dev={_safe_device_id(device_id)} uid={userid} "
+            f"(len={total_len}, crc=0x{crc_hex}, ver={ver}) elapsed_ms={elapsed} → {request.remote_addr}"
+        )
+
+        resp = send_file(
+            bin_path,
+            mimetype="application/octet-stream",
+            as_attachment=False,
+            conditional=True,
+            max_age=0,
+        )
+        resp.headers["Content-Length"] = str(total_len)
+        resp.headers["X-CRC32"] = crc_hex
+        resp.headers["X-Payload-Version"] = str(ver)
+        resp.headers["ETag"] = f'W/"{ver}-{crc_hex}-{total_len}"'
+        resp.headers["Last-Modified"] = datetime.utcfromtimestamp(mtime).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        resp.headers["Content-Disposition"] = f'attachment; filename="{_safe_device_id(device_id) or "image"}.bin"'
+        return _no_cache_headers(resp)
+
+    # 2) 폴백(선택): bmp->payload
+    #    bin이 없거나 경로가 깨졌을 때 최소한 화면을 보내고 싶다면 사용.
+    bmp_rel = None
+    try:
+        bmp_rel = getattr(asset, "preview_relpath", None)
+    except Exception:
+        bmp_rel = None
+
+    if bmp_rel:
+        bmp_path = R.abs_path_from_rel(user, bmp_rel)
+        if os.path.isfile(bmp_path):
+            cache_key = (bmp_path, int(os.path.getmtime(bmp_path)), str(meta.get("mode") or "BWRYBG"))
+            with _cache_lock:
+                cached = _payload_cache.get(cache_key)
+
+            if cached:
+                payload = cached["payload"]
+                crc_hex = cached["crc32"]
+                total_len = cached["len"]
+            else:
+                payload = ImageToBytes.image_file_to_payload(bmp_path, str(meta.get("mode") or "BWRYBG"))
+                total_len = len(payload)
+                try:
+                    crc_le = struct.unpack("<I", payload[-4:])[0]
+                    crc_hex = f"{crc_le:08x}"
+                except Exception:
+                    crc_hex = "00000000"
+                with _cache_lock:
+                    _payload_cache[cache_key] = {"payload": payload, "crc32": crc_hex, "len": total_len}
+
+            ver = int(meta.get("ver") or getattr(asset, "ver", int(time.time())) or int(time.time()))
+            mtime = int(os.path.getmtime(bmp_path))
+
+            resp = Response(payload, mimetype="application/octet-stream")
+            resp.headers["Content-Length"] = str(total_len)
+            resp.headers["X-CRC32"] = crc_hex
+            resp.headers["X-Payload-Version"] = str(ver)
+            resp.headers["ETag"] = f'W/"{ver}-{crc_hex}-{total_len}"'
+            resp.headers["Last-Modified"] = datetime.utcfromtimestamp(mtime).strftime("%a, %d %b %Y %H:%M:%S GMT")
+            resp.headers["Content-Disposition"] = f'attachment; filename="{_safe_device_id(device_id) or "image"}.bin"'
+            return _no_cache_headers(resp)
+
+    return _no_cache_headers(jsonify({"status": "error", "reason": "payload_missing"})), 404

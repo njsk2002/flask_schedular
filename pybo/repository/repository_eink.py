@@ -1561,7 +1561,10 @@ class RepositoryEINK:
         q = (
             DocumentInfoModel.query
             .options(joinedload(DocumentInfoModel.approval_steps))
-            .filter(DocumentInfoModel.user_id == user_id)
+            .filter(
+                DocumentInfoModel.user_id == user_id,
+                DocumentInfoModel.need_approval == 1,     # ✅ 결재라인과 Bulletin 구분
+                )
         )
         q = RepositoryEINK._apply_common_filters(q, search, status, date_from, date_to)
 
@@ -1573,40 +1576,41 @@ class RepositoryEINK:
     # Tab 2: 결재대기 (내가 검토/승인 등 해야 할 문서)
     #  - SignSlot.target_user_id == me AND filled == False 기준
     # ─────────────────────────────
+
+
     @staticmethod
     def list_my_pending_documents(
         user_id: int,
+        user_userid: str,  # ✅ current_user.userid 같은 로그인 아이디(문자열)
         search: Optional[str] = None,
         status: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         limit: int = 200,
-    ) -> List[Tuple[DocumentInfoModel, SignSlotModel]]:
-        """
-        반환: [(DocumentInfoModel, SignSlotModel), ...]
-          - SignSlotModel.label 로 '내 역할' 표시 가능
-        """
+    ) -> List[DocumentInfoModel]:
+
         q = (
-            db.session.query(DocumentInfoModel, SignSlotModel)
-            .join(SignSlotModel, SignSlotModel.document_info_id == DocumentInfoModel.id)
+            DocumentInfoModel.query
+            .join(
+                DocumentApprovalStepModel,
+                DocumentApprovalStepModel.document_info_id == DocumentInfoModel.id,
+            )
             .options(joinedload(DocumentInfoModel.approval_steps))
             .filter(
-                SignSlotModel.target_user_id == user_id,
-                SignSlotModel.filled == False,  # 아직 체크/서명 안된 슬롯
-                DocumentInfoModel.status.in_(["in_review", "checked"]),
+                DocumentInfoModel.need_approval == 1,
+                DocumentApprovalStepModel.status == "pending",
+                or_(
+                    DocumentApprovalStepModel.userid_snapshot == user_userid,   # ✅ 문자열 userid 매칭
+                    DocumentApprovalStepModel.userid_snapshot == user_id,      # ✅ (있다면) 숫자 id 매칭
+                ),
             )
         )
 
-        # DocumentInfoModel 기준 공통 필터 적용
-        q = RepositoryEINK._apply_common_filters(
-            q,
-            search=search,
-            status=status,
-            date_from=date_from,
-            date_to=date_to,
-        )
+        q = RepositoryEINK._apply_common_filters(q, search=search, status=status, date_from=date_from, date_to=date_to)
+        q = q.order_by(DocumentInfoModel.id.desc()).distinct(DocumentInfoModel.id)
 
         return q.limit(limit).all()
+
 
 
     # ─────────────────────────────
@@ -1630,6 +1634,7 @@ class RepositoryEINK:
             )
             .options(joinedload(DocumentInfoModel.approval_steps))
             .filter(
+                DocumentInfoModel.need_approval == 1, 
                 or_(
                     DocumentInfoModel.user_id == user_id,                 # 내가 작성한 문서
                     DocumentApprovalStepModel.signed_by_user_id == user_id,  # 내가 결재한 문서
@@ -1652,10 +1657,6 @@ class RepositoryEINK:
     # Tab 4: 결재완료
     #  - status=='approved' AND (내가 작성 OR 내가 결재 참여)
     # ─────────────────────────────
-    # ─────────────────────────────
-    # Tab 4: 결재완료
-    #  - status=='approved' AND (내가 작성 OR 내가 결재 참여)
-    # ─────────────────────────────
     @staticmethod
     def list_my_completed_documents(
         user_id: int,
@@ -1673,6 +1674,7 @@ class RepositoryEINK:
             )
             .options(joinedload(DocumentInfoModel.approval_steps))
             .filter(
+                DocumentInfoModel.need_approval == 1,
                 DocumentInfoModel.status == "approved",
                 or_(
                     DocumentInfoModel.user_id == user_id,
@@ -1688,6 +1690,74 @@ class RepositoryEINK:
         q = q.distinct(DocumentInfoModel.id)
 
         return q.limit(limit).all()
+
+    # ─────────────────────────────
+    # Tab 5: 반려함
+    #  - status=='approved' AND (내가 작성 OR 내가 결재 참여)
+    # ─────────────────────────────    
+    @staticmethod
+    def list_my_rejected_documents(
+        user_id: int,
+        user_userid: str | None = None,
+        search: Optional[str] = None,
+        status: Optional[str] = None,   # 무시 가능(반려 고정)
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[DocumentInfoModel]:
+
+        q = (
+            DocumentInfoModel.query
+            .outerjoin(
+                DocumentApprovalStepModel,
+                DocumentApprovalStepModel.document_info_id == DocumentInfoModel.id,
+            )
+            .options(joinedload(DocumentInfoModel.approval_steps))
+            .filter(
+                DocumentInfoModel.need_approval == 1,
+                DocumentInfoModel.status == "rejected",
+                or_(
+                    DocumentInfoModel.user_id == user_id,                    # ✅ 내가 작성자
+                    DocumentApprovalStepModel.signed_by_user_id == user_id,  # ✅ 내가 결재 참여자(서명 이력)
+                    # (선택) snapshot 기반 참여까지 포함하고 싶으면:
+                    # DocumentApprovalStepModel.userid_snapshot == user_userid,
+                )
+            )
+        )
+
+        # status는 rejected로 고정이니 공통필터에 넘길 때는 status=None로 두는게 안전
+        q = RepositoryEINK._apply_common_filters(
+            q, search=search, status=None, date_from=date_from, date_to=date_to
+        )
+        q = q.distinct(DocumentInfoModel.id).order_by(DocumentInfoModel.id.desc())
+
+        return q.limit(limit).all()
+
+    # ─────────────────────────────
+    # Tab 5: Bulletin_Files
+    #  - need_approval=0 AND status='bulletin_files'
+    #  - 결재라인 없는 문서만 "완전 분리"
+    # ─────────────────────────────
+    @staticmethod
+    def list_bulletin_files_documents(
+        search: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        limit: int = 200,
+    ) -> List[DocumentInfoModel]:
+        q = (
+            DocumentInfoModel.query
+            .filter(
+                DocumentInfoModel.need_approval == 0,
+                DocumentInfoModel.status == "bulletin_files",
+            )
+        )
+
+        # bulletin_files는 status가 고정이니까 공통필터에서 status는 빼는게 안전
+        q = RepositoryEINK._apply_common_filters(q, search=search, status=None, date_from=date_from, date_to=date_to)
+
+        return q.limit(limit).all()
+
 
 #######################################################
 ################  STAMP    ############################
@@ -2049,17 +2119,12 @@ class RepositoryEINK:
         return 예:
           {2: {"status":"done","stamp_text":"완료","step_id":210}, ...}
         """
-        try:
-            # 프로젝트 모델명에 맞게 import만 맞춰줘
-            from pybo.models import DocumentApprovalStep  # or DocumentApprovalStepModel
-        except Exception:
-            from pybo.models import DocumentApprovalStepModel as DocumentApprovalStep
 
         try:
             rows = (
-                DocumentApprovalStep.query
-                .filter(DocumentApprovalStep.document_info_id == int(doc_id))
-                .order_by(DocumentApprovalStep.col_index.asc())
+                DocumentApprovalStepModel.query
+                .filter(DocumentApprovalStepModel.document_info_id == int(doc_id))
+                .order_by(DocumentApprovalStepModel.col_index.asc())
                 .all()
             )
 
@@ -2090,4 +2155,6 @@ class RepositoryEINK:
         except Exception:
             current_app.logger.debug("[approval_runtime_map] failed doc_id=%s", doc_id, exc_info=True)
             return {}
+
+
 
