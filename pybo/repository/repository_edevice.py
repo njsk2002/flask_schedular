@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from flask import request, current_app
 from sqlalchemy import case, or_
+from sqlalchemy.exc import SQLAlchemyError
 from pybo import db
 from ..models import (
     User,
@@ -149,20 +150,20 @@ class RepositoryEDevice:
                      EInkPosting.id.asc(),
                  ))
 
-        try:
-            RepositoryEDevice._dbg("pick:sql_cur", sql=str(q_cur.statement))
-            RepositoryEDevice._dbg("pick:sql_nxt", sql=str(q_nxt.statement))
-        except Exception:
-            pass
+        # try:
+        #     RepositoryEDevice._dbg("pick:sql_cur", sql=str(q_cur.statement))
+        #     RepositoryEDevice._dbg("pick:sql_nxt", sql=str(q_nxt.statement))
+        # except Exception:
+        #     pass
 
         try:
             cur = q_cur.first()
             nxt = q_nxt.first()
-            RepositoryEDevice._dbg("pick:done",
-                                   cur_id=(cur.id if cur else None),
-                                   nxt_id=(nxt.id if nxt else None),
-                                   cur_asset_id=(cur.asset_id if cur else None),
-                                   nxt_asset_id=(nxt.asset_id if nxt else None))
+            # RepositoryEDevice._dbg("pick:done",
+            #                        cur_id=(cur.id if cur else None),
+            #                        nxt_id=(nxt.id if nxt else None),
+            #                        cur_asset_id=(cur.asset_id if cur else None),
+            #                        nxt_asset_id=(nxt.asset_id if nxt else None))
             return cur, nxt
         except Exception as e:
             RepositoryEDevice._dbg_exc("pick:failed", e, user_id=user_id, device_id=device_id, now=now.isoformat())
@@ -670,6 +671,8 @@ class RepositoryEDevice:
                 "expect_post_time": RepositoryEDevice._fmt_dt(start),
                 "posting_period_time": int(period_sec),
                 "expire_time": RepositoryEDevice._fmt_dt(end),
+                # ✅ 추가: next preview fallback 용
+                "preview_url": f"/dashboard/preview/asset/{int(a.id)}",
             })
 
         return {
@@ -930,3 +933,44 @@ class RepositoryEDevice:
         return p
 
  
+    @staticmethod
+    def schedule_set_expired(*, user_id: int, device_id: str, asset_ids: List[int], now: Optional[datetime] = None) -> Dict[str, Any]:
+        if now is None:
+            now = datetime.now()
+
+        if not asset_ids:
+            return {"ok": True, "changed": 0}
+
+        try:
+            q = (
+                EInkPosting.query
+                .filter_by(user_id=user_id, device_id=device_id)
+                .filter(EInkPosting.asset_id.in_(asset_ids))
+                .filter(EInkPosting.status.in_(["wait", "active"]))
+            )
+
+            changed = 0
+            for p in q.all():
+                p.status = "expired"
+                # active였다면, “즉시” 만료되도록 end_time도 now로 고정(원치 않으면 제거)
+                if getattr(p, "status", "") == "active":
+                    p.end_time = now
+                changed += 1
+
+            db.session.commit()
+            return {"ok": True, "changed": changed}
+
+        except SQLAlchemyError:
+            db.session.rollback()
+            return {"ok": False, "changed": 0}
+
+    @staticmethod
+    def _asset_preview_png_url(asset: Optional[EInkAsset]) -> str:
+        """
+        프로젝트에 이미 preview 라우트가 있으면 그걸로 교체.
+        아래는 예시:
+          /dashboard/asset/<asset_id>/preview.png
+        """
+        if not asset:
+            return ""
+        return f"/dashboard/asset/{int(asset.id)}/preview.png"

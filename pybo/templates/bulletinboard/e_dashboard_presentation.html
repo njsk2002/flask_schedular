@@ -7,270 +7,498 @@
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <style>
-    :root{
-      /* ✅ 사용자 제어: 배경색 */
-      --bg: #ffffff;
+<style>
+  :root{
+    /* ✅ 사용자 제어: 배경색 */
+    --bg: #ffffff;
 
-      /* ✅ 자동 대비(배경색 기준으로 JS가 조정) */
-      --fg: #111418;
-      --muted: #6c757d;
+    /* ✅ 자동 대비(배경색 기준으로 JS가 조정) */
+    --fg: #111418;
+    --muted: #0e1012;
 
-      /* 액자 느낌 */
-      --frame: #f1f3f5;
-      --mat: #ffffff;
+    /* 액자 느낌 */
+    --frame: #f1f3f5;
+    --mat: #ffffff;
 
-      --border: #e9ecef;
-      --shadow: 0 10px 28px rgba(0,0,0,.06);
+    --border: #e9ecef;
+    --shadow: 0 10px 28px rgba(0,0,0,.06);
 
-      /* 라벨(설명) */
-      --label-bg: rgba(255,255,255,.92);
-      --label-border: rgba(0,0,0,.10);
+    /* 라벨(설명) */
+    --label-bg: rgba(255,255,255,.92);
+    --label-border: rgba(0,0,0,.10);
 
-      /* 버튼 */
-      --btn-bg: rgba(255,255,255,.72);
-      --btn-border: rgba(0,0,0,.10);
+    /* 버튼 */
+    --btn-bg: rgba(255,255,255,.72);
+    --btn-border: rgba(0,0,0,.10);
 
-      /* 1200×1600 = 3:4 */
-      --aspect: 0.75; /* width/height */
+    /* 1200×1600 = 3:4 */
+    --aspect: 0.75; /* width/height */
 
-      /* JS가 채우는 값 (최대화) */
-      --tile-w: 320px;
-      --tile-h: 426px;
+    /* JS가 채우는 값 (최대화) */
+    --tile-w: 320px;
+    --tile-h: 426px;
 
-      --gap: 12px;
-      --pad: 12px;
-      --frame-pad: 10px; /* ‘액자 여백’ 두께 */
+    --gap: 12px;
+    --pad: 12px;
+    --frame-pad: 10px; /* ‘액자 여백’ 두께 */
 
-      /* 라벨 높이(세로 스택 모드에서 겹침 방지용) */
-      --label-h: 66px;
+    /* 라벨 높이(세로 스택 모드에서 겹침 방지용) */
+    --label-h: 66px;
+
+    /* ✅ 아래 패널 */
+    --panel-bg: rgba(255,255,255,.66);
+    --panel-border: rgba(0,0,0,.08);
+
+    /* ✅ 다음포스트(헤더+스트립) 컨트롤 */
+    --strip-bottom: 16px;       /* 바닥 여백(크면 패널이 위로 올라감) */
+    --strip-gap: 6px;           /* ✅ "다음포스트" 뱃지 ↔ 카드 간격(여기만 조절) */
+
+    /* ✅ 중앙 60% 유지 */
+    --strip-width-vw: 100vw;     /* 60% 느낌 */
+    --strip-max-w: 1700px;      /* 너무 커지지 않게 */
+    --strip-min-w: 1100px;      /* 너무 작아지지 않게(큰 화면 기준) */
+
+    /* ✅ 위(프리뷰)와 더 붙이기: 이 값이 클수록 위가 더 비워짐 */
+    --strip-reserve: 150px;     /* 140~170 사이에서 조절 추천 */
+  }
+
+  html, body { height: 100%; }
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--fg);
+    overflow: hidden; /* 기본: 전시 모드 */
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
+  }
+
+  /* 상단 바 */
+  .topbar{
+    height: 56px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  .title{ display:flex; align-items:baseline; gap:.55rem; white-space: nowrap; }
+  .title h1{ font-size: 1.00rem; font-weight: 800; margin: 0; letter-spacing: .15px; }
+  .title .sub{ font-size: .80rem; color: var(--muted); }
+
+  .top-actions{ display:flex; align-items:center; gap:8px; }
+
+  .btn-mini{
+    padding: .24rem .52rem;
+    font-size: .74rem;
+    border-radius: 999px;
+    background: var(--btn-bg);
+    border: 1px solid var(--btn-border);
+    color: var(--fg);
+    backdrop-filter: blur(8px);
+    line-height: 1.1;
+    box-shadow: 0 6px 18px rgba(0,0,0,.06);
+  }
+  .btn-mini:hover{ filter: brightness(1.03); }
+
+  /* ✅ 배경색 컨트롤 */
+  .bg-ctrl{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--btn-bg);
+    border: 1px solid var(--btn-border);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 6px 18px rgba(0,0,0,.06);
+  }
+  .bg-ctrl .lbl{
+    font-size: .74rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .bg-ctrl input[type="color"]{
+    width: 28px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  /* Wall */
+  .wall{
+    height: calc(100vh - 56px);
+    padding: var(--pad);
+    display:flex;
+    gap: var(--gap);
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+  }
+
+  /* ✅ 반응형: 1개씩 크게 + 라벨 겹침 방지 */
+  .wall.is-single{
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scroll-padding-top: 18px;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(var(--pad) * 2);
+    gap: calc(var(--label-h) + 22px);
+  }
+
+  /* 타일 */
+  .tile{
+    width: var(--tile-w);
+    height: var(--tile-h);
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    position: relative;
+  }
+
+  /* 액자 */
+  .frame{
+    width: 100%;
+    height: 100%;
+    padding: var(--frame-pad);
+    background: var(--frame);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mat{
+    width: 100%;
+    height: 100%;
+    background: var(--mat);
+    border-radius: 14px;
+    overflow: hidden;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border: 1px solid rgba(0,0,0,.04);
+  }
+  .mat img{
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display:block;
+  }
+
+  /* 라벨 */
+  .meta{
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translate(-50%, -100%);
+    width: calc(100% - 38px);
+    max-width: calc(100% - 38px);
+    height: var(--label-h);
+
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 12px;
+
+    padding: 8px 10px;
+    border-radius: 16px;
+    background: var(--label-bg);
+    border: 1px solid var(--label-border);
+    box-shadow: 0 10px 26px rgba(0,0,0,.10);
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+
+  .meta .left{ min-width: 0; display:flex; align-items:center; gap:10px; }
+
+  .badge-id{
+    width: 52px;
+    height: 52px;
+    flex: 0 0 52px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight: 900;
+    font-size: 1.12rem;
+    letter-spacing: .45px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,.02);
+    color: var(--fg);
+  }
+
+  .meta .text{ min-width:0; display:flex; flex-direction:column; line-height: 1.05; }
+  .meta .text .cur{
+    font-size: .98rem;
+    font-weight: 900;
+    white-space: nowrap;
+    overflow:hidden;
+    text-overflow: ellipsis;
+    max-width: 44ch;
+  }
+  .meta .text .crc{
+    font-size: .82rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .pill{
+    font-size: .82rem;
+    padding: .42rem .70rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: rgba(0,0,0,.02);
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  /* 로딩 표시 */
+  .state{
+    position:absolute;
+    top: calc(var(--frame-pad) + 8px);
+    left: calc(var(--frame-pad) + 8px);
+    padding: .22rem .46rem;
+    border-radius: 10px;
+    font-size: .74rem;
+    border: 1px solid var(--border);
+    background: var(--btn-bg);
+    color: var(--muted);
+    backdrop-filter: blur(8px);
+    display:none;
+    z-index: 3;
+  }
+  .tile.is-loading .state{ display:block; }
+
+  /* ────────────────────────────────────────────────────────────
+     ✅ 다음포스트: "wrap" 한 덩어리 (중앙 60% + 간격 제어)
+     ──────────────────────────────────────────────────────────── */
+  .nextpost-wrap{
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: var(--strip-bottom);
+
+    /* 중앙 60% 느낌 + 상한/하한 */
+    width: clamp(var(--strip-min-w), var(--strip-width-vw), var(--strip-max-w));
+
+    display: flex;
+    flex-direction: column;
+    gap: var(--strip-gap);
+
+    pointer-events: none; /* 전시 모드 */
+  }
+
+  /* "다음포스트" 헤더 */
+  .strip-head{
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel-bg);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 12px 34px rgba(0,0,0,.10);
+
+    display:flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .strip-head-title{
+    display:flex;
+    align-items:center;
+    gap: 10px;
+    font-weight: 900;
+    letter-spacing: .2px;
+    font-size: .98rem;
+    color: var(--fg);
+    white-space: nowrap;
+  }
+
+  .strip-head-title .dot{
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(13,110,253,.92);
+    box-shadow: 0 0 0 6px rgba(13,110,253,.12);
+    flex: 0 0 auto;
+  }
+
+  .strip-head-sub{
+    font-size: .78rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* 하단 스케줄 패널 */
+  .schedule-strip{
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 18px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel-bg);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 14px 42px rgba(0,0,0,.10);
+
+    display:flex;
+    gap: 10px;
+    align-items: stretch;
+    justify-content: space-between;
+  }
+
+  .s-card{
+    flex: 1 1 0;
+    min-width: 0;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,.06);
+    background: rgba(255,255,255,.55);
+    padding: 10px 10px;
+    display:flex;
+    gap: 10px;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .s-left{
+    min-width: 0;
+    flex: 1 1 auto;
+    display:flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .s-title{
+    display:flex;
+    align-items:center;
+    gap: 8px;
+    min-width:0;
+  }
+  .s-badge{
+    width: 34px; height: 34px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight: 900;
+    font-size: .86rem;
+    background: rgba(0,0,0,.02);
+    color: var(--fg);
+    flex: 0 0 auto;
+  }
+  .s-name{
+    min-width:0;
+    font-weight: 900;
+    font-size: .86rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+    /* ✅ 라벨 칸을 확 줄이고, 값 칸을 최대로 */
+    .s-grid{
+      display: grid;
+      grid-template-columns: 44px 1fr; /* 92px → 44px */
+      gap: 4px 8px;
+      font-size: .78rem;
+      line-height: 1.15;
     }
 
-    html, body { height: 100%; }
-    body{
-      margin:0;
-      background: var(--bg);
+    /* 라벨(k): 최대한 짧고 작고 연하게 */
+    .s-grid .k{
+      font-size: .72rem;
+      font-weight: 700;
+      gap: 4px 8px;
       color: var(--fg);
-      overflow: hidden; /* 기본: 전시 모드 */
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
-    }
-
-    /* 상단 바 */
-    .topbar{
-      height: 56px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-    }
-
-    .title{ display:flex; align-items:baseline; gap:.55rem; white-space: nowrap; }
-    .title h1{ font-size: 1.00rem; font-weight: 800; margin: 0; letter-spacing: .15px; }
-    .title .sub{ font-size: .80rem; color: var(--muted); }
-
-    .top-actions{ display:flex; align-items:center; gap:8px; }
-
-    .btn-mini{
-      padding: .24rem .52rem;
-      font-size: .74rem;
-      border-radius: 999px;
-      background: var(--btn-bg);
-      border: 1px solid var(--btn-border);
-      color: var(--fg);
-      backdrop-filter: blur(8px);
-      line-height: 1.1;
-      box-shadow: 0 6px 18px rgba(0,0,0,.06);
-    }
-    .btn-mini:hover{ filter: brightness(1.03); }
-
-    /* ✅ 배경색 컨트롤 */
-    .bg-ctrl{
-      display:flex;
-      align-items:center;
-      gap: 8px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: var(--btn-bg);
-      border: 1px solid var(--btn-border);
-      backdrop-filter: blur(8px);
-      box-shadow: 0 6px 18px rgba(0,0,0,.06);
-    }
-    .bg-ctrl .lbl{
-      font-size: .74rem;
-      color: var(--muted);
+      opacity: .85;
       white-space: nowrap;
     }
-    .bg-ctrl input[type="color"]{
-      width: 28px;
-      height: 22px;
-      padding: 0;
-      border: none;
-      background: transparent;
-      cursor: pointer;
+
+    /* 값(v): 날짜가 최대한 보이도록 */
+    .s-grid .v{
+      min-width: 0;
+      gap: 4px 8px;
+      color: var(--fg);
+      font-weight: 800;
+
+      /* ✅ 날짜 표현 최대 확보 */
+      white-space: nowrap;     /* 한 줄 유지 */
+      overflow: visible;       /* 가능하면 잘리지 않게 */
+      text-overflow: clip;
+      font-variant-numeric: tabular-nums; /* 숫자 가독성 */
     }
 
-    /* Wall: 기본은 1줄(5개) / 반응형은 1개씩 세로로 */
-    .wall{
-      height: calc(100vh - 56px);
-      padding: var(--pad);
-      display:flex;
-      gap: var(--gap);
-      align-items:center;
-      justify-content:center;
-      flex-wrap: nowrap;
+
+
+  .s-preview{
+    width: 84px;
+    height: 112px;
+    border-radius: 12px;
+    border: 1px solid rgba(0,0,0,.08);
+    overflow:hidden;
+    background: rgba(0,0,0,.03);
+    flex: 0 0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .s-preview img{
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display:block;
+  }
+  .s-preview .ph{
+    font-size: .72rem;
+    color: var(--muted);
+    padding: 6px;
+    text-align:center;
+  }
+
+  /* ✅ 위(프리뷰) ↔ 아래(다음포스트) 더 붙이기 */
+  body.has-strip .wall{
+    height: calc(100vh - 56px - var(--strip-reserve));
+    padding-bottom: calc(var(--pad) + var(--strip-reserve));
+    align-items: flex-end; /* 타일을 아래로 붙여서 공백 감소 */
+  }
+
+  /* ────────────────────────────────────────────────────────────
+     ✅ 반응형: 1700px 이하에서는 아래로 내려서 스크롤 UI
+     ──────────────────────────────────────────────────────────── */
+  @media (max-width: 1700px){
+    body{ overflow: auto; }
+    .wall{ justify-content: flex-start; }
+
+    .nextpost-wrap{
+      position: static;
+      transform: none;
+      width: calc(100% - 24px);
+      margin: 0 12px 12px 12px;
+      pointer-events: auto;
     }
 
-    /* ✅ 반응형: 1개씩 크게 + 라벨 겹침 방지 */
-    .wall.is-single{
-      flex-direction: column;
+    body.has-strip .wall{
+      height: auto;
+      padding-bottom: var(--pad);
       align-items: center;
-      justify-content: flex-start;
-      overflow-y: auto;
-      scroll-snap-type: y mandatory;
-      scroll-padding-top: 18px;
-      -webkit-overflow-scrolling: touch;
-      padding-bottom: calc(var(--pad) * 2);
-      gap: calc(var(--label-h) + 22px);
     }
 
-    /* 타일은 1200×1600 비율 고정 + JS로 최대화 */
-    .tile{
-      width: var(--tile-w);
-      height: var(--tile-h);
-      flex: 0 0 auto;
-      scroll-snap-align: start;
-      position: relative;
-    }
+    .s-grid .v{ font-size: .74rem; }
+  }
+</style>
 
-    /* ✅ 액자(외곽) */
-    .frame{
-      width: 100%;
-      height: 100%;
-      padding: var(--frame-pad);
-      background: var(--frame);
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      box-shadow: var(--shadow);
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* 실제 1200×1600 콘텐츠가 들어가는 매트 */
-    .mat{
-      width: 100%;
-      height: 100%;
-      background: var(--mat);
-      border-radius: 14px;
-      overflow: hidden;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      border: 1px solid rgba(0,0,0,.04);
-    }
-
-    .mat img{
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display:block;
-    }
-
-    /* ✅ 라벨: 액자 밖(위쪽), 액자보다 조금 작게 */
-    .meta{
-      position: absolute;
-      top: -20px;
-      left: 50%;
-      transform: translate(-50%, -100%);
-
-      width: calc(100% - 38px);
-      max-width: calc(100% - 38px);
-      height: var(--label-h);
-
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap: 12px;
-
-      padding: 8px 10px;
-      border-radius: 16px;
-      background: var(--label-bg);
-      border: 1px solid var(--label-border);
-      box-shadow: 0 10px 26px rgba(0,0,0,.10);
-      backdrop-filter: blur(10px);
-      z-index: 10;
-    }
-
-    .meta .left{ min-width: 0; display:flex; align-items:center; gap:10px; }
-
-    .badge-id{
-      width: 52px;
-      height: 52px;
-      flex: 0 0 52px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      font-weight: 900;
-      font-size: 1.12rem;
-      letter-spacing: .45px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: rgba(0,0,0,.02);
-      color: var(--fg);
-    }
-
-    .meta .text{ min-width:0; display:flex; flex-direction:column; line-height: 1.05; }
-    .meta .text .cur{
-      font-size: .98rem;
-      font-weight: 900;
-      white-space: nowrap;
-      overflow:hidden;
-      text-overflow: ellipsis;
-      max-width: 44ch;
-    }
-    .meta .text .crc{
-      font-size: .82rem;
-      color: var(--muted);
-      white-space: nowrap;
-    }
-
-    .pill{
-      font-size: .82rem;
-      padding: .42rem .70rem;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      color: var(--muted);
-      background: rgba(0,0,0,.02);
-      white-space: nowrap;
-      flex: 0 0 auto;
-    }
-
-    /* 로딩 표시 */
-    .state{
-      position:absolute;
-      top: calc(var(--frame-pad) + 8px);
-      left: calc(var(--frame-pad) + 8px);
-      padding: .22rem .46rem;
-      border-radius: 10px;
-      font-size: .74rem;
-      border: 1px solid var(--border);
-      background: var(--btn-bg);
-      color: var(--muted);
-      backdrop-filter: blur(8px);
-      display:none;
-      z-index: 3;
-    }
-    .tile.is-loading .state{ display:block; }
-
-    @media (max-width: 1700px){
-      body{ overflow: auto; }
-      .wall{ justify-content: flex-start; }
-    }
-  </style>
 </head>
 
-<body>
+<body class="has-strip">
   <div class="topbar">
     <div class="title">
       <h1>E-Ink Wall</h1>
@@ -293,6 +521,7 @@
   </div>
 
   <div class="wall" id="grid">
+    <!-- tiles (동일) -->
     <div class="tile" data-device-id="E01">
       <div class="meta">
         <div class="left">
@@ -379,6 +608,108 @@
     </div>
   </div>
 
+  <!-- ✅ 하단 패널 헤더 -->
+  <div class="nextpost-wrap" id="nextpostWrap">
+    <div class="strip-head" id="stripHead">
+    <div class="strip-head-title"><span class="dot"></span>다음포스트</div>
+    <div class="strip-head-sub">포스트일자 · 잔량시간 · 다음게시일자 · 다음게시물 미리보기</div>
+  </div>
+
+  <!-- ✅ 하단: 포스트일자/잔량/다음게시/다음미리보기 -->
+  <div class="schedule-strip" id="scheduleStrip" aria-label="device schedule strip">
+    <!-- 카드 5개 (JS로 채움) -->
+    <div class="s-card" data-device-id="E01">
+      <div class="s-left">
+        <div class="s-title">
+          <div class="s-badge">E01</div>
+          <div class="s-name">-</div>
+        </div>
+        <div class="s-grid">
+          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+          <div class="k">잔량시간</div><div class="v v-remain">-</div>
+          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        </div>
+      </div>
+      <div class="s-preview">
+        <img class="img-next" src="" alt="next preview">
+        <div class="ph" style="display:none;">다음 없음</div>
+      </div>
+    </div>
+
+    <div class="s-card" data-device-id="E02">
+      <div class="s-left">
+        <div class="s-title">
+          <div class="s-badge">E02</div>
+          <div class="s-name">-</div>
+        </div>
+        <div class="s-grid">
+          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+          <div class="k">잔량시간</div><div class="v v-remain">-</div>
+          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        </div>
+      </div>
+      <div class="s-preview">
+        <img class="img-next" src="" alt="next preview">
+        <div class="ph" style="display:none;">다음 없음</div>
+      </div>
+    </div>
+
+    <div class="s-card" data-device-id="E03">
+      <div class="s-left">
+        <div class="s-title">
+          <div class="s-badge">E03</div>
+          <div class="s-name">-</div>
+        </div>
+        <div class="s-grid">
+          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+          <div class="k">잔량시간</div><div class="v v-remain">-</div>
+          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        </div>
+      </div>
+      <div class="s-preview">
+        <img class="img-next" src="" alt="next preview">
+        <div class="ph" style="display:none;">다음 없음</div>
+      </div>
+    </div>
+
+    <div class="s-card" data-device-id="E04">
+      <div class="s-left">
+        <div class="s-title">
+          <div class="s-badge">E04</div>
+          <div class="s-name">-</div>
+        </div>
+        <div class="s-grid">
+          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+          <div class="k">잔량시간</div><div class="v v-remain">-</div>
+          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        </div>
+      </div>
+      <div class="s-preview">
+        <img class="img-next" src="" alt="next preview">
+        <div class="ph" style="display:none;">다음 없음</div>
+      </div>
+    </div>
+
+    <div class="s-card" data-device-id="E05">
+      <div class="s-left">
+        <div class="s-title">
+          <div class="s-badge">E05</div>
+          <div class="s-name">-</div>
+        </div>
+        <div class="s-grid">
+          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+          <div class="k">잔량시간</div><div class="v v-remain">-</div>
+          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        </div>
+      </div>
+      <div class="s-preview">
+        <img class="img-next" src="" alt="next preview">
+        <div class="ph" style="display:none;">다음 없음</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
   <script>
   (() => {
     const grid = document.getElementById("grid");
@@ -390,12 +721,17 @@
     const btnBgBlack = document.getElementById("btnBgBlack");
     const btnBgReset = document.getElementById("btnBgReset");
 
+    const strip = document.getElementById("scheduleStrip");
+
     const ASPECT = 0.75; // width/height (1200/1600)
     const GAP = 12;
     const PAD = 12;
 
     const BG_KEY = "eink_wall_bg";
     const BG_DEFAULT = "#ffffff";
+
+    // ✅ 하단 잔량 갱신용 캐시
+    const remainCache = {}; // {E01:{expireMs:number|null}}
 
     function hexToRgb(hex){
       const h = (hex || "").replace("#","").trim();
@@ -440,6 +776,8 @@
         document.documentElement.style.setProperty("--label-border", "rgba(255,255,255,.16)");
         document.documentElement.style.setProperty("--frame", "#0f1620");
         document.documentElement.style.setProperty("--mat", "#0b0f14");
+        document.documentElement.style.setProperty("--panel-bg", "rgba(15,22,32,.62)");
+        document.documentElement.style.setProperty("--panel-border", "rgba(255,255,255,.14)");
       }else{
         document.documentElement.style.setProperty("--fg", "#111418");
         document.documentElement.style.setProperty("--muted", "#6c757d");
@@ -451,6 +789,8 @@
         document.documentElement.style.setProperty("--label-border", "rgba(0,0,0,.10)");
         document.documentElement.style.setProperty("--frame", "#f1f3f5");
         document.documentElement.style.setProperty("--mat", "#ffffff");
+        document.documentElement.style.setProperty("--panel-bg", "rgba(255,255,255,.66)");
+        document.documentElement.style.setProperty("--panel-border", "rgba(0,0,0,.08)");
       }
     }
 
@@ -471,18 +811,127 @@
       }
     }
 
+    function parseTimeMs(ts){
+      if(!ts) return null;
+      try{
+        if(typeof ts === "number"){
+          return (ts < 1e12) ? ts * 1000 : ts;
+        }
+        const d = new Date(ts);
+        const ms = d.getTime();
+        return isNaN(ms) ? null : ms;
+      }catch(e){
+        return null;
+      }
+    }
+
+    function fmtRemain(msLeft){
+      if(msLeft == null) return "-";
+      const s = Math.max(0, Math.floor(msLeft / 1000));
+      const hh = Math.floor(s / 3600);
+      const mm = Math.floor((s % 3600) / 60);
+      const ss = s % 60;
+      if(hh > 0) return `${hh}h ${String(mm).padStart(2,'0')}m`;
+      return `${mm}m ${String(ss).padStart(2,'0')}s`;
+    }
+
     async function api(url){
       const r = await fetch(url, { cache: "no-store" });
       if(!r.ok) throw new Error(url + " -> " + r.status);
       return r.json();
     }
 
+    // ✅ next 정보는 (1) /dashboard/board?device_id=.. 우선, (2) 없으면 /dashboard/schedule/list?device_id=.. 에서 첫 wait
+    async function loadNextInfo(deviceId){
+      let curStart = null, curExpire = null, nextStart = null, nextPreview = "";
+      let curTitle = "-";
+
+      // 1) board (current/next)
+      try{
+        const b = await api(`/dashboard/board?device_id=${encodeURIComponent(deviceId)}`);
+        const cur = b?.current || null;
+        const nxt = b?.next || null;
+
+        curTitle = cur?.title || cur?.orig_filename || cur?.filename || "-";
+
+        curStart = cur?.start_time || cur?.expect_post_time || cur?.posted_at || null;
+        curExpire = cur?.end_time || cur?.expire_time || cur?.expire_at || null;
+
+        nextStart = nxt?.start_time || nxt?.expect_post_time || null;
+        nextPreview = nxt?.preview_url || "";
+      }catch(e){
+        // ignore
+      }
+
+      // 2) schedule list fallback
+      if(!nextPreview || !nextStart){
+        try{
+          const s = await api(`/dashboard/schedule/list?device_id=${encodeURIComponent(deviceId)}`);
+          const items = s?.items || [];
+          const firstWait = items.find(x => (String(x.status||"").toLowerCase() === "wait")) || null;
+          if(firstWait){
+            if(!nextStart) nextStart = firstWait.expect_post_time || null;
+            if(!nextPreview) nextPreview = firstWait.preview_png_url || firstWait.preview_url || "";
+          }
+        }catch(e){
+          // ignore
+        }
+      }
+
+      return { curTitle, curStart, curExpire, nextStart, nextPreview };
+    }
+
+    function renderStripCard(deviceId, info){
+      const card = strip.querySelector(`.s-card[data-device-id="${deviceId}"]`);
+      if(!card) return;
+
+      card.querySelector(".s-name").textContent = info.curTitle || "-";
+      card.querySelector(".v-cur-start").textContent = fmtTime(info.curStart);
+
+      const expireMs = parseTimeMs(info.curExpire);
+      remainCache[deviceId] = remainCache[deviceId] || {};
+      remainCache[deviceId].expireMs = expireMs;
+
+      card.querySelector(".v-next-start").textContent = fmtTime(info.nextStart);
+
+      const img = card.querySelector(".img-next");
+      const ph = card.querySelector(".ph");
+
+      if(info.nextPreview){
+        setImg(img, info.nextPreview);
+        img.style.display = "";
+        ph.style.display = "none";
+      }else{
+        img.src = "";
+        img.style.display = "none";
+        ph.style.display = "";
+      }
+    }
+
+    function tickRemain(){
+      const now = Date.now();
+      const cards = strip.querySelectorAll(".s-card[data-device-id]");
+      cards.forEach(card => {
+        const did = card.dataset.deviceId;
+        const exp = remainCache[did]?.expireMs ?? null;
+        const v = card.querySelector(".v-remain");
+        if(!v) return;
+        if(exp == null){
+          v.textContent = "-";
+        }else{
+          v.textContent = fmtRemain(exp - now);
+        }
+      });
+    }
+
     async function refresh(){
       const tiles = Array.from(grid.querySelectorAll(".tile[data-device-id]"));
       tiles.forEach(t => t.classList.add("is-loading"));
 
+      // 기존: 현재 표시(preview) 유지
       const data = await api("/dashboard/presentation_board");
 
+      // 타일 current render
       tiles.forEach(tile => {
         const did = tile.dataset.deviceId;
         const cur = data.devices?.[did]?.current || null;
@@ -494,10 +943,23 @@
         setImg(tile.querySelector(".img"), cur?.preview_url);
         tile.classList.remove("is-loading");
       });
+
+      // ✅ 하단 스트립: next 정보 병렬 조회
+      const deviceIds = tiles.map(t => t.dataset.deviceId);
+      const infos = await Promise.all(deviceIds.map(did => loadNextInfo(did).catch(()=>({
+        curTitle:"-", curStart:null, curExpire:null, nextStart:null, nextPreview:""
+      }))));
+
+      deviceIds.forEach((did, idx) => renderStripCard(did, infos[idx]));
+
+      // 잔량 즉시 갱신
+      tickRemain();
     }
 
     function layoutTiles(){
       const topH = document.querySelector('.topbar')?.getBoundingClientRect().height || 56;
+      const stripH0 = document.getElementById('scheduleStrip')?.getBoundingClientRect().height || 0;
+      const stripH = Math.max(0, stripH0 - 30); // ✅ 30px 정도 덜 빼기(겹치지 않으면서 간격 감소)
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
@@ -505,7 +967,7 @@
       grid.classList.toggle('is-single', cols === 1);
 
       const usableW = Math.max(320, vw - PAD*2);
-      const usableH = Math.max(320, vh - topH - PAD*2);
+      const usableH = Math.max(320, vh - topH - PAD*2 - (vw >= 1700 ? stripH : 0));
 
       const widthPerTile = (usableW - GAP * (cols - 1)) / cols;
       const maxHByW = widthPerTile / ASPECT;
@@ -533,9 +995,16 @@
 
     btnRefresh.addEventListener("click", refresh);
 
-    window.addEventListener('resize', layoutTiles);
+    window.addEventListener('resize', () => {
+      layoutTiles();
+      tickRemain();
+    });
+
     layoutTiles();
     refresh();
+
+    // ✅ 잔량 1초 단위 갱신
+    setInterval(tickRemain, 1000);
 
     /* ✅ 30초마다 자동 리로드(페이지 전체 새로고침) */
     setInterval(() => {

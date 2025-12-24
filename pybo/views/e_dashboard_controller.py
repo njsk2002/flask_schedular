@@ -242,7 +242,7 @@ def _pick_current_and_next_posting_mysql(
     # next: now 이후 scheduled 중 가장 빠른 것
     nxt_q = (
         EInkPosting.query
-        .filter_by(user_id=user_id, device_id=device_id, status="scheduled")
+        .filter_by(user_id=user_id, device_id=device_id, status="wait")
         .filter(EInkPosting.start_time.isnot(None))
         .filter(EInkPosting.start_time > now)
     )
@@ -959,6 +959,55 @@ def api_schedule_reorder():
     except Exception:
         pass
 
+    return jsonify(out)
+
+
+@bp.route("/schedule/status", methods=["POST"])
+@login_required
+def schedule_status_patch():
+    """
+    (요구사항 2)
+    wait/active 상태의 posting을 expired로 변경(배치 지원)
+
+    요청:
+    {
+      "device_id": "DEV001",
+      "items": [
+        {"asset_id": 123, "status": "expired"},
+        {"asset_id": 124, "status": "expired"}
+      ]
+    }
+    """
+    body = request.get_json(silent=True) or {}
+    device_id = (body.get("device_id") or "").strip()
+    items = body.get("items") or []
+    if not device_id:
+        return jsonify({"ok": False, "reason": "device_id required"}), 400
+
+    # status는 현재는 expired만 허용(요구사항)
+    changes = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        asset_id = it.get("asset_id")
+        stt = (it.get("status") or "").strip().lower()
+        if not asset_id:
+            continue
+        if stt != "expired":
+            continue
+        changes.append(int(asset_id))
+
+    if not changes:
+        return jsonify({"ok": True, "changed": 0})
+
+ 
+    # current_app.logger.debug(f"user_id ={current_user.no}, device_id= { device_id}, asset_ids= {changes}")
+    out = R.schedule_set_expired(
+        user_id=current_user.no,
+        device_id=device_id,
+        asset_ids=changes,
+        now=_kst_now_naive()
+    )
     return jsonify(out)
 
 @bp.post("/device/log")

@@ -36,6 +36,10 @@
     .tbl-fixed td, .tbl-fixed th{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
     .row-click{cursor:pointer;}
     .row-click:hover{background:var(--soft);}
+
+    .row-selected{background: #eef5ff !important;}
+    .row-selected:hover{background: #e6f0ff !important;}
+
     .preview-surface{background:var(--soft); border-radius:var(--radius); overflow:hidden; border:1px solid var(--card-bd);}
     .preview-surface.big{height: clamp(380px, 58vh, 820px);}
     .preview-surface.mid{height: clamp(320px, 46vh, 620px);}
@@ -93,6 +97,22 @@
 
     .muted{color:var(--muted);}
     .tiny{font-size:.82rem;}
+
+    .edit-pill{
+      display:inline-flex; align-items:center; gap:.35rem;
+      padding:.15rem .55rem;
+      border-radius:999px;
+      border:1px solid #dee2e6;
+      background:#fff;
+      font-size:.82rem;
+      color:#111;
+      user-select:none;
+    }
+    .edit-pill.on{
+      border-color:#111;
+      background:#111;
+      color:#fff;
+    }
   </style>
 
   <!-- TOP NAV: board + devices -->
@@ -127,24 +147,10 @@
           </div>
         </div>
 
-        <!-- RIGHT: devices strip -->
-        <!-- <div class="dev-wrap flex-grow-1" id="devStrip">
-          {% for d in devices %}
-            <a class="dev-item {% if d.device_id == device_id %}active{% endif %}"
-               href="/dashboard/device/{{ d.device_id }}">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="fw-semibold">{{ d.device_id }}</div>
-                <small class="muted">{{ d.panel_res }}</small>
-              </div>
-              <small class="muted">{{ d.device_name or "" }}</small>
-            </a>
-          {% endfor %}
-        </div> -->
-
         <!-- RIGHT: devices strip (board에 따라 동적 변경) -->
-      <div class="dev-wrap flex-grow-1" id="devStrip">
-        <div class="small text-muted py-2">디바이스 목록을 불러오는 중입니다…</div>
-      </div>
+        <div class="dev-wrap flex-grow-1" id="devStrip">
+          <div class="small text-muted py-2">디바이스 목록을 불러오는 중입니다…</div>
+        </div>
 
       </div>
     </div>
@@ -371,15 +377,19 @@
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
           <div class="fw-semibold">디바이스 게시 스케줄(확정)</div>
-          <div class="d-flex gap-2">
-            <button id="btnRecalc" class="btn btn-sm btn-outline-secondary mini-btn">재계산</button>
+
+          <div class="d-flex gap-2 align-items-center">
+            <!-- ✅ (2) 재계산 -> 수정(편집 모드 토글 + 만료처리 가능) -->
+            <button id="btnEdit" class="btn btn-sm btn-outline-secondary mini-btn">수정</button>
             <button id="btnApplyReorder" class="btn btn-sm btn-dark mini-btn" disabled>변경 적용</button>
+            <span class="edit-pill" id="pillEdit">편집 OFF</span>
           </div>
         </div>
 
-        <div class="small text-muted mb-2">
+        <div class="small text-muted mb-2" id="scheduleRuleHint">
           ※ 기본 제외: expire_time &lt; 현재 시각 또는 status=expired<br>
-          ※ active는 이동 불가 / wait만 순서 변경 가능(이동 시 expire_time 기준으로 연쇄 재계산)
+          ※ active는 이동 불가 / wait만 순서 변경 가능(이동 시 expire_time 기준으로 연쇄 재계산)<br>
+          ※ <span class="fw-semibold">편집 ON</span>에서 wait/active 항목을 <span class="fw-semibold">expired</span>로 “만료 처리” 가능
         </div>
 
         <div class="table-responsive" style="max-height: 28vh;">
@@ -387,12 +397,12 @@
             <thead class="table-light">
               <tr>
                 <th style="width:40px;"></th>
-                <th style="width:64px;">ID</th>
-                <th>파일명</th>
-                <th style="width:84px;">상태</th>
-                <th style="width:160px;">expect_post</th>
-                <th style="width:120px;">period</th>
-                <th style="width:160px;">expire</th>
+                <th style="width:50px;">ID</th>
+                <th style="width:140px;">파일명</th>
+                <th style="width:100px;">상태</th>
+                <th style="width:160px;">게시(예정)시간</th>
+                <th style="width:120px;">게시기간</th>
+                <th style="width:160px;">게시완료시간</th>
               </tr>
             </thead>
             <tbody id="tbodySchedule">
@@ -427,8 +437,15 @@
     <div class="card card-soft">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <div class="fw-semibold">다음 표시 프리뷰</div>
-          <div class="small text-muted">next</div>
+          <!-- ✅ (4) 클릭 시 “다음 표시 프리뷰” -> “미리보기”로 변경 -->
+          <div>
+            <div class="fw-semibold" id="nextTitle">다음 표시 프리뷰</div>
+            <div class="small text-muted" id="nextInfo">-</div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <button id="btnPreviewReset" class="btn btn-sm btn-outline-secondary mini-btn" style="display:none;">다음 표시로</button>
+            <div class="small text-muted">next</div>
+          </div>
         </div>
 
         <div class="preview-surface big">
@@ -436,7 +453,7 @@
         </div>
 
         <div class="small text-muted mt-2" id="nextHint">
-          스케줄이 존재할 경우 다음 표시가 이 영역에 표시됩니다.
+          스케줄이 존재할 경우 다음 표시(첫 wait)가 이 영역에 표시됩니다. (PNG)
         </div>
       </div>
     </div>
@@ -449,10 +466,9 @@
 {% block script %}
 <script>
 (() => {
-  const DBG = false; // 운영에서는 false 권장
+  const DBG = false;
   function dbg(...a){ if(DBG) console.debug("[e_file_upload]", ...a); }
 
-  // ✅ 405 방지: 서버에 POST 라우트가 없으면 false로 유지
   const ENABLE_DEVICE_LOG = false;
 
   const DEVICE_ID = "{{ device_id }}";
@@ -472,12 +488,25 @@
 
     schedule_items: [],
     schedule_dirty: false,
+
+    // ✅ 변경 종류 분리
+    schedule_dirty_reorder: false,
+    schedule_dirty_status: false,
+
+    // ✅ 편집 모드
+    schedule_edit_mode: false,
+
+    // ✅ (4) 스케줄 테이블 클릭 미리보기(override)
+    preview_override: null,
+    preview_selected_idx: -1,
+
+    // ✅ (1) “그 다음 스케줄(첫 wait)” 캐시
+    next_from_schedule: null,
+
     docs_has_next: false,
   };
 
   let _devReqSeq = 0;
-  let _devLoading = false;
-
   let _scheduleMinStart = null;
   let _scheduleBaseMaxExpire = null;
 
@@ -507,10 +536,6 @@
     const qs = new URLSearchParams({ building_id: String(st.building_id), floor_no: String(st.floor_no) });
     return api(`/dashboard/boards?` + qs.toString());
   }
-  async function loadBoardDevices(){
-    const qs = new URLSearchParams({ building_id: String(st.building_id), floor_no: String(st.floor_no), board_no: String(st.board_no) });
-    return api(`/dashboard/board_devices?` + qs.toString());
-  }
   async function loadDocs(){
     return api(`/dashboard/docs?` + new URLSearchParams({
       device_id: DEVICE_ID,
@@ -539,6 +564,15 @@
       method: "POST",
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify({ device_id: DEVICE_ID, items })
+    });
+  }
+
+  // ✅ (2) wait/active -> expired 상태 변경 API (batch)
+  async function applyScheduleExpire(changes){
+    return api(`/dashboard/schedule/status`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ device_id: DEVICE_ID, items: changes })
     });
   }
 
@@ -601,84 +635,71 @@
     const t = secToDDHHMM(sec);
     return `${pad2(t.d)}:${pad2(t.h)}:${pad2(t.m)}`;
   }
+  function toast(msg){ alert(msg); }
 
-  function toast(msg){
-    alert(msg); // 간단 유지(문구만 격식화)
+  // ---------- Device strip (원본 유지) ----------
+  function renderDeviceStrip(devices, opt = {}) {
+    const wrap = $("devStrip");
+    if (!wrap) return;
+
+    const state = opt.state || "ready";
+    if (state === "loading") {
+      wrap.innerHTML = `<div class="small text-muted py-2">디바이스 목록을 불러오는 중입니다…</div>`;
+      return;
+    }
+    if (state === "switching") {
+      const msg = opt.msg || "선택한 게시판의 디바이스로 전환 중입니다…";
+      wrap.innerHTML = `<div class="small text-muted py-2">${msg}</div>`;
+      return;
+    }
+
+    if (!Array.isArray(devices) || devices.length === 0) {
+      wrap.innerHTML = `<div class="small text-muted py-2">선택한 게시판에 등록된 디바이스가 없습니다.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = devices.map(d => {
+      const did = String(d.device_id || "");
+      const isActive = (did === String(DEVICE_ID));
+      return `
+        <a class="dev-item ${isActive ? "active" : ""}" href="/dashboard/device/${encodeURIComponent(did)}">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">${did}</div>
+          </div>
+        </a>
+      `;
+    }).join("");
   }
 
+  async function refreshDevicesByBoard() {
+    const seq = ++_devReqSeq;
+    renderDeviceStrip(null, { state: "loading" });
 
+    const url =
+      `/dashboard/board_devices?building_id=${encodeURIComponent(st.building_id)}&floor_no=${encodeURIComponent(st.floor_no)}&board_no=${encodeURIComponent(st.board_no)}`;
 
-function renderDeviceStrip(devices, opt = {}) {
-  const wrap = $("devStrip");
-  if (!wrap) return;
-
-  const state = opt.state || "ready";
-  if (state === "loading") {
-    wrap.innerHTML = `<div class="small text-muted py-2">디바이스 목록을 불러오는 중입니다…</div>`;
-    return;
-  }
-  if (state === "switching") {
-    const msg = opt.msg || "선택한 게시판의 디바이스로 전환 중입니다…";
-    wrap.innerHTML = `<div class="small text-muted py-2">${msg}</div>`;
-    return;
-  }
-
-  if (!Array.isArray(devices) || devices.length === 0) {
-    wrap.innerHTML = `<div class="small text-muted py-2">선택한 게시판에 등록된 디바이스가 없습니다.</div>`;
-    return;
-  }
-
-  wrap.innerHTML = devices.map(d => {
-    const did = String(d.device_id || "");
-    const isActive = (did === String(DEVICE_ID));
-    return `
-      <a class="dev-item ${isActive ? "active" : ""}" href="/dashboard/device/${encodeURIComponent(did)}">
-        <div class="d-flex justify-content-between align-items-center">
-          <div class="fw-semibold">${did}</div>
-        </div>
-      </a>
-    `;
-  }).join("");
-}
-
-async function refreshDevicesByBoard() {
-  const seq = ++_devReqSeq;
-  renderDeviceStrip(null, { state: "loading" });
-
-  const url =
-    `/dashboard/board_devices?building_id=${encodeURIComponent(st.building_id)}&floor_no=${encodeURIComponent(st.floor_no)}&board_no=${encodeURIComponent(st.board_no)}`;
-
-  let data;
-  try {
-    data = await api(url);
-  } catch (e) {
+    let data;
+    try { data = await api(url); }
+    catch (e) {
+      if (seq !== _devReqSeq) return;
+      renderDeviceStrip([], { state: "ready" });
+      return;
+    }
     if (seq !== _devReqSeq) return;
-    renderDeviceStrip([], { state: "ready" });
-    return;
+
+    const devices = Array.isArray(data?.items) ? data.items : [];
+    const hasCurrent = devices.some(x => String(x.device_id) === String(DEVICE_ID));
+
+    if (devices.length > 0 && !hasCurrent) {
+      renderDeviceStrip(null, {
+        state: "switching",
+        msg: `선택한 게시판의 첫 디바이스(${devices[0].device_id})로 이동합니다…`
+      });
+      location.href = `/dashboard/device/${encodeURIComponent(devices[0].device_id)}`;
+      return;
+    }
+    renderDeviceStrip(devices);
   }
-
-  if (seq !== _devReqSeq) return;
-
-  const devices = Array.isArray(data?.items) ? data.items : [];
-
-  // 현재 페이지(device_id)가 선택한 board에 없으면 이동이 필요할 수 있음
-  const hasCurrent = devices.some(x => String(x.device_id) === String(DEVICE_ID));
-
-  // ✅ “잠깐 전체 보였다가 사라짐”을 더 줄이려면, 이동이 필요할 때는 리스트 렌더 전에 바로 전환 UI를 보여주고 이동
-  if (devices.length > 0 && !hasCurrent) {
-    renderDeviceStrip(null, {
-      state: "switching",
-      msg: `선택한 게시판의 첫 디바이스(${devices[0].device_id})로 이동합니다…`
-    });
-
-    // 기존 로직 유지(페이지 구조가 device_id에 강하게 묶여 있을 때)
-    location.href = `/dashboard/device/${encodeURIComponent(devices[0].device_id)}`;
-    return;
-  }
-
-  renderDeviceStrip(devices);
-}
-
 
   async function renderBoards(){
     const data = await loadBoards();
@@ -720,6 +741,7 @@ async function refreshDevicesByBoard() {
     };
   }
 
+  // ---------- Selected ----------
   function setScheduleInputsDisabled(disabled){
     const ids = ["startModeNow","startModeAt","dtStart","dtEnd","durD","durH","durM"];
     ids.forEach(id => {
@@ -739,7 +761,6 @@ async function refreshDevicesByBoard() {
     setImg($("imgSelected"), s?.preview_url);
     $("selPreviewHint").textContent = s ? "미리보기를 확인하신 후 확정할 수 있습니다." : "좌측 목록에서 문서를 선택하면 미리보기가 표시됩니다.";
 
-    // ✅ 스케줄은 항상 사용(숨김 + true 고정)
     $("chkScheduleUse").checked = true;
 
     if(!s){
@@ -759,7 +780,6 @@ async function refreshDevicesByBoard() {
   async function renderDocs(){
     $("tbodyDocs").innerHTML = `<tr><td colspan="5" class="text-muted small py-3">로딩 중...</td></tr>`;
     const data = await loadDocs();
-    dbg("docs:", data);
 
     $("pageNo").textContent = String(st.page);
 
@@ -798,6 +818,19 @@ async function refreshDevicesByBoard() {
         tr.classList.add("table-active");
         st.selected = picked;
         renderSelected();
+        // ✅ docs row-click 시, next preview를 "미리보기"로 전환해서 선택한 문서 프리뷰 표시
+        st.preview_selected_idx = -1;           // schedule table 선택 흔적 제거
+        st.preview_override = {
+          id: picked.id,
+          orig_filename: picked.orig_filename || "-",
+          preview_png_url: picked.preview_url || ""   // doc preview_url 그대로 사용
+        };
+        // schedule table 하이라이트 제거
+        $("tbodySchedule")?.querySelectorAll("tr")?.forEach(x => x.classList.remove("row-selected"));
+
+        applyNextPreview();
+
+
         logAccess("doc_select", { doc_id: id, channel: st.channel, filename: picked.orig_filename });
       });
     });
@@ -807,9 +840,9 @@ async function refreshDevicesByBoard() {
     $("btnNext").disabled = !st.docs_has_next;
   }
 
+  // ---------- Board current/next ----------
   async function renderBoard(){
     const b = await loadBoard();
-    dbg("board:", b);
 
     const cur = b.current || null;
     const nxt = b.next || null;
@@ -817,9 +850,64 @@ async function refreshDevicesByBoard() {
     $("curInfo").textContent = cur ? (cur.title || `doc#${cur.doc_id || cur.asset_id}`) : "-";
     $("curCrc").textContent  = cur ? (cur.crc32 || "-") : "-";
     setImg($("imgCurrent"), cur?.preview_url);
-    setImg($("imgNext"),    nxt?.preview_url);
+
+    // “다음”은 스케줄 기반 PNG가 우선 (요구사항 1)
+    // fallback: /dashboard/board next
+    if(!st.preview_override){
+      if(st.next_from_schedule && st.next_from_schedule.preview_png_url){
+        setImg($("imgNext"), st.next_from_schedule.preview_png_url);
+        $("nextInfo").textContent = `next(wait): #${st.next_from_schedule.id} / ${st.next_from_schedule.orig_filename || "-"}`;
+      } else {
+        setImg($("imgNext"), nxt?.preview_url);
+        $("nextInfo").textContent = nxt ? `next(board): ${nxt.title || ("#"+(nxt.asset_id||nxt.doc_id||"-"))}` : "-";
+      }
+    }
   }
 
+  // ---------- Next preview (override 포함) ----------
+  function setNextHeader(mode){
+    // mode: "next" | "preview"
+    if(mode === "preview"){
+      $("nextTitle").textContent = "미리보기";
+      $("btnPreviewReset").style.display = "";
+    } else {
+      $("nextTitle").textContent = "다음 표시 프리뷰";
+      $("btnPreviewReset").style.display = "none";
+    }
+  }
+
+  function applyNextPreview(){
+    if(st.preview_override){
+      const it = st.preview_override;
+      setNextHeader("preview");
+      const url = it.preview_png_url || it.preview_url || "";
+      setImg($("imgNext"), url);
+      $("nextInfo").textContent = `preview: #${it.id} / ${it.orig_filename || "-"}`;
+      $("nextHint").textContent = "스케줄 테이블에서 선택된 항목의 PNG 미리보기입니다.";
+      return;
+    }
+
+    setNextHeader("next");
+    $("nextHint").textContent = "스케줄이 존재할 경우 다음 표시(첫 wait)가 이 영역에 표시됩니다. (PNG)";
+
+    if(st.next_from_schedule && st.next_from_schedule.preview_png_url){
+      setImg($("imgNext"), st.next_from_schedule.preview_png_url);
+      $("nextInfo").textContent = `next(wait): #${st.next_from_schedule.id} / ${st.next_from_schedule.orig_filename || "-"}`;
+      return;
+    }
+
+    // fallback: renderBoard에서 /dashboard/board next로 채우므로 여기서는 info만
+    $("nextInfo").textContent = $("nextInfo").textContent || "-";
+  }
+
+  $("btnPreviewReset").addEventListener("click", ()=>{
+    st.preview_override = null;
+    st.preview_selected_idx = -1;
+    $("tbodySchedule")?.querySelectorAll("tr")?.forEach(x=>x.classList.remove("row-selected"));
+    applyNextPreview();
+  });
+
+  // ---------- Schedule panel (원본 유지) ----------
   function getStartMode(){
     const rNow = $("startModeNow");
     if(rNow && rNow.checked) return "now";
@@ -970,8 +1058,19 @@ async function refreshDevicesByBoard() {
   $("startModeNow").addEventListener("change", applyStartModeUI);
   $("startModeAt").addEventListener("change", applyStartModeUI);
 
-  function markDirty(on){
-    st.schedule_dirty = !!on;
+  // ---------- Schedule edit / dirty ----------
+  function setEditPill(on){
+    const pill = $("pillEdit");
+    pill.classList.toggle("on", !!on);
+    pill.textContent = on ? "편집 ON" : "편집 OFF";
+  }
+
+  function markDirty(reason){
+    // reason: "reorder" | "status" | undefined
+    if(reason === "reorder") st.schedule_dirty_reorder = true;
+    if(reason === "status") st.schedule_dirty_status = true;
+
+    st.schedule_dirty = !!(st.schedule_dirty_reorder || st.schedule_dirty_status);
     $("btnApplyReorder").disabled = !st.schedule_dirty;
   }
 
@@ -982,19 +1081,20 @@ async function refreshDevicesByBoard() {
 
     let anchor = null;
     if(active && active.expire_time){
-      anchor = new Date(String(active.expire_time).replace(" ", "T"));
+      anchor = parseServerDT(active.expire_time);
     }
-    if(!anchor || isNaN(anchor.getTime())) anchor = now;
+    if(!anchor) anchor = now;
 
     let prevExpire = anchor;
 
     for(const it of items){
       if(it.status === "active"){
-        const e = it.expire_time ? new Date(String(it.expire_time).replace(" ", "T")) : null;
-        if(e && !isNaN(e.getTime())) prevExpire = e;
+        const e = parseServerDT(it.expire_time);
+        if(e) prevExpire = e;
         continue;
       }
       if(it.status !== "wait") continue;
+      if(it._pending_status === "expired") continue; // ✅ 만료 예약은 계산 제외
 
       const periodSec = Number(it.posting_period_time || 0);
       const minSec = Math.max(60, periodSec);
@@ -1005,6 +1105,31 @@ async function refreshDevicesByBoard() {
       it.expire_time      = toLocalInputValue(newEnd).replace("T"," ") + ":00";
       prevExpire = newEnd;
     }
+  }
+
+  // ✅ (3) apply 전에 “stale schedule” 감지: expect_post < now 인 wait가 있으면 reload 후 중단
+  function detectStaleSchedule(){
+    const now = new Date();
+    for(const it of (st.schedule_items||[])){
+      if(String(it.status||"") !== "wait") continue;
+      if(it._pending_status === "expired") continue;
+      const d = parseServerDT(it.expect_post_time);
+      if(d && d.getTime() + 2000 < now.getTime()){ // 2초 여유
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ✅ (1) 다음 표시(next) 후보를 “첫 wait”로 잡기
+  function refreshNextFromSchedule(){
+    const items = st.schedule_items || [];
+    const firstWait = items.find(x => String(x.status||"") === "wait" && x._pending_status !== "expired") || null;
+    st.next_from_schedule = firstWait ? {
+      id: firstWait.id ?? firstWait.asset_id ?? "-",
+      orig_filename: firstWait.orig_filename || "-",
+      preview_png_url: firstWait.preview_png_url || firstWait.preview_url || ""
+    } : null;
   }
 
   function renderScheduleTable(){
@@ -1023,11 +1148,24 @@ async function refreshDevicesByBoard() {
       const canUp = !isActive && it.status === "wait" && idx > 0 && items[idx-1].status !== "active";
       const canDn = !isActive && it.status === "wait" && idx < items.length-1;
 
-      const badgeClass = (it.status==="active") ? "text-bg-success" : "text-bg-secondary";
+      const pendingExpired = (it._pending_status === "expired");
+      const showStatus = pendingExpired ? "expired*" : (it.status||"-");
+
+      const badgeClass = pendingExpired
+        ? "text-bg-warning"
+        : ((it.status==="active") ? "text-bg-success" : "text-bg-secondary");
+
       const periodTxt = fmtPeriod(Number(it.posting_period_time||0));
 
+      const canExpire = st.schedule_edit_mode && (it.status==="wait" || it.status==="active");
+
+      // ✅ 편집 ON 일 때만 “만료” 버튼 노출
+      const expireBtn = canExpire
+        ? `<button class="btn btn-sm btn-outline-danger mini-btn btn-expire" ${pendingExpired ? "disabled" : ""} title="expired로 변경">만료</button>`
+        : ``;
+
       return `
-        <tr data-idx="${esc(String(idx))}">
+        <tr data-idx="${esc(String(idx))}" class="${(idx===st.preview_selected_idx) ? "row-selected" : ""}">
           <td class="text-muted">
             <div class="d-flex gap-1">
               <button class="btn btn-outline-secondary btn-sm btn-icon btn-up" ${canUp ? "" : "disabled"} title="위로 이동">▲</button>
@@ -1036,7 +1174,12 @@ async function refreshDevicesByBoard() {
           </td>
           <td class="text-muted">${esc(String(it.id ?? it.asset_id ?? "-"))}</td>
           <td title="${esc(it.orig_filename||"")}">${esc(it.orig_filename||"-")}</td>
-          <td><span class="badge ${badgeClass}">${esc(it.status||"-")}</span></td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge ${badgeClass}">${esc(showStatus)}</span>
+              ${expireBtn}
+            </div>
+          </td>
           <td class="text-muted mono">${esc(fmtDT(it.expect_post_time))}</td>
           <td class="text-muted mono">${esc(periodTxt)}</td>
           <td class="text-muted mono">${esc(fmtDT(it.expire_time))}</td>
@@ -1048,8 +1191,42 @@ async function refreshDevicesByBoard() {
       const idx = Number(tr.dataset.idx);
       const btnUp = tr.querySelector(".btn-up");
       const btnDn = tr.querySelector(".btn-dn");
-      if(btnUp) btnUp.addEventListener("click", ()=> moveSchedule(idx, -1));
-      if(btnDn) btnDn.addEventListener("click", ()=> moveSchedule(idx, +1));
+      const btnExpire = tr.querySelector(".btn-expire");
+
+      if(btnUp) btnUp.addEventListener("click", (e)=>{ e.stopPropagation(); moveSchedule(idx, -1); });
+      if(btnDn) btnDn.addEventListener("click", (e)=>{ e.stopPropagation(); moveSchedule(idx, +1); });
+
+      // ✅ (2) 만료 처리(편집 ON에서만)
+      if(btnExpire) btnExpire.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        setPendingExpire(idx);
+      });
+
+      // ✅ (4) 테이블 클릭 -> “다음 표시 프리뷰”를 “미리보기”로 전환 + PNG 표시
+      tr.addEventListener("click", ()=>{
+        const it = st.schedule_items[idx];
+        if(!it) return;
+
+        // 같은 항목 다시 누르면 토글 해제
+        if(st.preview_selected_idx === idx){
+          st.preview_override = null;
+          st.preview_selected_idx = -1;
+          $("tbodySchedule").querySelectorAll("tr").forEach(x=>x.classList.remove("row-selected"));
+          applyNextPreview();
+          return;
+        }
+
+        st.preview_selected_idx = idx;
+        $("tbodySchedule").querySelectorAll("tr").forEach(x=>x.classList.remove("row-selected"));
+        tr.classList.add("row-selected");
+
+        st.preview_override = {
+          id: it.id ?? it.asset_id ?? "-",
+          orig_filename: it.orig_filename || "-",
+          preview_png_url: it.preview_png_url || it.preview_url || ""
+        };
+        applyNextPreview();
+      });
     });
   }
 
@@ -1057,52 +1234,103 @@ async function refreshDevicesByBoard() {
     const items = st.schedule_items || [];
     const cur = items[idx];
     if(!cur || cur.status !== "wait") return;
+    if(cur._pending_status === "expired") return; // 만료 예약된 항목은 이동 의미 없음
 
     const j = idx + dir;
     if(j < 0 || j >= items.length) return;
     if(items[j] && items[j].status === "active" && dir < 0) return;
+    if(items[j] && items[j]._pending_status === "expired") return;
 
     items[idx] = items[j];
     items[j] = cur;
 
     recomputeScheduleTimes();
     renderScheduleTable();
-    markDirty(true);
+    markDirty("reorder");
 
     logAccess("schedule_move", { from: idx, to: j, asset_id: cur.asset_id ?? cur.id });
+  }
+
+  function setPendingExpire(idx){
+    const it = st.schedule_items[idx];
+    if(!it) return;
+    if(!(it.status === "wait" || it.status === "active")) return;
+    if(it._pending_status === "expired") return;
+
+    const ok = confirm(
+      `해당 항목을 expired로 변경하시겠습니까?\n\n` +
+      `- ID: ${it.id ?? it.asset_id ?? "-"}\n` +
+      `- 파일: ${it.orig_filename || "-"}\n` +
+      `- 현재상태: ${it.status}\n\n` +
+      `※ “변경 적용”을 눌러야 DB에 반영됩니다.`
+    );
+    if(!ok) return;
+
+    it._pending_status = "expired";
+    markDirty("status");
+    recomputeScheduleTimes();
+    renderScheduleTable();
+
+    // next 후보 재계산 + 프리뷰 반영
+    refreshNextFromSchedule();
+    if(!st.preview_override) applyNextPreview();
   }
 
   async function renderSchedule(){
     $("tbodySchedule").innerHTML = `<tr><td colspan="7" class="text-muted small py-3">로딩 중...</td></tr>`;
     const data = await loadSchedule();
-    dbg("schedule:", data);
 
-    st.schedule_items = (data.items || []).map(x => ({...x}));
+    st.schedule_items = (data.items || []).map(x => ({...x, _pending_status: null}));
 
+    // 기본 필터 유지
     const now = new Date();
     st.schedule_items = st.schedule_items.filter(it => {
       const stt = String(it.status||"");
       if(stt === "expired") return false;
-      const exp = it.expire_time ? new Date(String(it.expire_time).replace(" ", "T")) : null;
-      if(exp && !isNaN(exp.getTime()) && exp.getTime() < now.getTime()) return false;
+      const exp = parseServerDT(it.expire_time);
+      if(exp && exp.getTime() < now.getTime()) return false;
       return true;
     });
 
+    // ✅ 다음 표시 후보 업데이트 (요구사항 1)
+    refreshNextFromSchedule();
+
+    // ✅ 프리뷰 오버라이드 상태면, 스케줄 reload 후에도 유지 가능한지 체크
+    if(st.preview_selected_idx >= 0){
+      if(st.preview_selected_idx >= st.schedule_items.length){
+        st.preview_selected_idx = -1;
+        st.preview_override = null;
+      }
+    }
+
     renderScheduleTable();
-    markDirty(false);
+
+    // dirty reset
+    st.schedule_dirty = false;
+    st.schedule_dirty_reorder = false;
+    st.schedule_dirty_status = false;
+    $("btnApplyReorder").disabled = true;
+
+    // next preview 재적용
+    applyNextPreview();
   }
 
+  // ---------- Refresh all ----------
   async function refreshAll(){
     try{
       await renderBoards();
       await refreshDevicesByBoard();
-      await Promise.all([ renderDocs(), renderBoard(), renderSchedule() ]);
+      await Promise.all([ renderDocs(), renderSchedule() ]);
+      // renderBoard는 schedule 기반 next를 우선하므로 schedule 후 호출
+      await renderBoard();
+      applyNextPreview();
     }catch(e){
       console.debug("[e_file_upload] refreshAll error", e);
       alert("대시보드 데이터를 불러오지 못했습니다.\n브라우저 콘솔 로그를 확인해 주십시오.");
     }
   }
 
+  // ---------- Channel / Search ----------
   document.querySelectorAll("#tabChannel .nav-link").forEach(btn=>{
     btn.addEventListener("click", async ()=>{
       document.querySelectorAll("#tabChannel .nav-link").forEach(x=>x.classList.remove("active"));
@@ -1150,13 +1378,12 @@ async function refreshDevicesByBoard() {
     renderSelected();
   });
 
-  // ✅ 업로드 확정: 스케줄은 항상 enabled=true로 전송
+  // ---------- Upload apply ----------
   $("btnApplyUpload").addEventListener("click", async ()=>{
     if(!st.selected) return;
 
     $("chkScheduleUse").checked = true;
 
-    // 기간(sec)
     const dd = parseInt($("durD").value || "0", 10);
     const hh = parseInt($("durH").value || "0", 10);
     const mm = parseInt($("durM").value || "0", 10);
@@ -1210,19 +1437,40 @@ async function refreshDevicesByBoard() {
     };
 
     await applyUploadSelected(payload);
-    await Promise.all([renderBoard(), renderSchedule()]);
+    await Promise.all([renderSchedule(), renderBoard()]);
     alert("적용이 완료되었습니다.");
     logAccess("upload_select_apply", payload);
   });
 
-  $("btnRecalc").addEventListener("click", ()=>{
-    recomputeScheduleTimes();
+  // ---------- (2) 수정 버튼: 편집 모드 토글 ----------
+  $("btnEdit").addEventListener("click", ()=>{
+    st.schedule_edit_mode = !st.schedule_edit_mode;
+    setEditPill(st.schedule_edit_mode);
+
+    // 편집 OFF로 끌 때 변경사항이 남아있으면 경고
+    if(!st.schedule_edit_mode && st.schedule_dirty){
+      const ok = confirm("편집을 종료합니다.\n변경사항이 아직 적용되지 않았습니다.\n그대로 종료하시겠습니까?");
+      if(!ok){
+        st.schedule_edit_mode = true;
+        setEditPill(true);
+        return;
+      }
+    }
+
     renderScheduleTable();
-    markDirty(true);
   });
 
+  // ---------- (3) + (2) 변경 적용 버튼 ----------
   $("btnApplyReorder").addEventListener("click", async ()=>{
     if(!st.schedule_dirty) return;
+
+    // ✅ (3) stale 감지: expect_post_time이 이미 과거면, 서버에서 최신 상태를 다시 받아온 뒤 적용 유도
+    if(detectStaleSchedule()){
+      toast("현재 화면의 스케줄 정보가 최신이 아닙니다.\nDB에서 최신 스케줄을 다시 불러온 뒤 적용해 주세요.");
+      await renderSchedule();
+      await renderBoard();
+      return;
+    }
 
     const warn = confirm(
       "게시 스케줄(DB)을 변경합니다.\n" +
@@ -1231,16 +1479,41 @@ async function refreshDevicesByBoard() {
     );
     if(!warn) return;
 
-    const items = (st.schedule_items || []).map(it => ({
-      asset_id: it.asset_id ?? it.id,
-      expect_post_time: it.expect_post_time,
-      posting_period_time: Number(it.posting_period_time||0),
-    }));
+    // 1) status 변경(만료 처리) 먼저
+    if(st.schedule_dirty_status){
+      const changes = (st.schedule_items||[])
+        .filter(it => it._pending_status === "expired" && (it.status==="wait" || it.status==="active"))
+        .map(it => ({ asset_id: it.asset_id ?? it.id, status: "expired" }));
 
-    await applyScheduleReorder(items);
+      if(changes.length > 0){
+        await applyScheduleExpire(changes);
+      }
+    }
+
+    // 2) reorder 적용 (만료 예약된 항목 제외)
+    if(st.schedule_dirty_reorder){
+      const items = (st.schedule_items || [])
+        .filter(it => it._pending_status !== "expired")
+        .map(it => ({
+          asset_id: it.asset_id ?? it.id,
+          expect_post_time: it.expect_post_time,
+          posting_period_time: Number(it.posting_period_time||0),
+        }));
+
+      await applyScheduleReorder(items);
+    }
+
+    // reload
+    st.preview_override = null;
+    st.preview_selected_idx = -1;
     await renderSchedule();
+    await renderBoard();
+
     alert("스케줄 변경이 반영되었습니다.");
-    logAccess("schedule_apply", { count: items.length });
+    logAccess("schedule_apply", {
+      reorder: st.schedule_dirty_reorder,
+      status: st.schedule_dirty_status
+    });
   });
 
   $("btnRefresh").addEventListener("click", refreshAll);
@@ -1261,10 +1534,14 @@ async function refreshDevicesByBoard() {
   $("chkFinderDocs").checked = false;
   $("docFinderArea").style.display = "none";
 
-  $("chkScheduleUse").checked = true; // ✅ 항상 ON 고정
+  $("chkScheduleUse").checked = true;
   setScheduleInputsDisabled(true);
   applyStartModeUI();
   renderSelected();
+
+  // edit pill init
+  setEditPill(false);
+
   refreshAll();
 })();
 </script>
