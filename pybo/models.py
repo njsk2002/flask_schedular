@@ -1,7 +1,7 @@
 # models.py
 from pybo import db
-from sqlalchemy import PrimaryKeyConstraint, UniqueConstraint
-from sqlalchemy.sql import func
+from sqlalchemy import PrimaryKeyConstraint, UniqueConstraint, Computed
+from sqlalchemy.sql import func, expression
 from sqlalchemy.dialects.mysql import DATETIME as MySQLDateTime
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import event
@@ -956,7 +956,7 @@ class DocumentApprovalStep(db.Model):
 
     # 진행 상태 (A안)
     status = db.Column(
-        db.Enum('wait', 'pending', 'done', 'checked', 'reviewed', 'approved', name='approval_sign_status'),
+        db.Enum('wait', 'pending', 'done', 'checked', 'reviewed', 'approved', 'rejected', name='approval_sign_status'),
         nullable=False,
         default='wait'
     )
@@ -1031,45 +1031,161 @@ class SignSlot(db.Model):
 
 
 
-# ─────────────────────────────────────────────────────────────
-# E-INK: 디바이스 / 자산 / 게시(스케줄)
-#   - DocumentInfo 단계에서 확정된 장치용 산출물(.bin/.meta) 이력 관리
-# ─────────────────────────────────────────────────────────────
 
-class EInkDevice(db.Model):
-    __tablename__ = 'eink_device'
+class EInkAsset(db.Model):
+    __tablename__ = 'eink_asset'
     __table_args__ = (
-        UniqueConstraint('user_no', 'device_id', name='uq_eink_device_user_device'),
+        db.Index('idx_easset_user_dev_ver', 'user_id', 'device_id', 'ver'),
+        db.Index('idx_easset_sched', 'user_id', 'device_id', 'expect_post_time', 'expire_time'),
+        db.Index('idx_easset_doc', 'document_info_id'),
+        UniqueConstraint('user_id', 'device_id', 'ver', name='uq_easset_user_dev_ver'),
+        CheckConstraint('width  > 0',   name='ck_easset_width_pos'),
+        CheckConstraint('height > 0',   name='ck_easset_height_pos'),
+        CheckConstraint('raw_len   > 0', name='ck_easset_rawlen_pos'),
+        CheckConstraint('total_len > 0', name='ck_easset_totallen_pos'),
         TABLE_ARGS,
     )
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
 
-    user_no = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'),
-                        nullable=False, index=True)
+    user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
+    device_id = db.Column(db.String(64), nullable=False, index=True)
 
-    user_userid = db.Column(db.String(64), nullable=True, index=True)
+    document_info_id = db.Column(db.BigInteger, db.ForeignKey('document_infos.id', ondelete='SET NULL'))
 
-    device_id   = db.Column(db.String(64), nullable=False)
-    device_name = db.Column(db.String(128))
+    # ✅ 채널(approved/bulletin 선택 필터용)  ← 형 요구사항 핵심
+    channel = db.Column(
+        db.Enum('approved','bulletin', name='eink_channel'),
+        nullable=False, default='approved', index=True
+    )
 
-    panel_res = db.Column(db.String(16), nullable=False)
-    bpp       = db.Column(db.Integer, nullable=False, default=4)
-    cap       = db.Column(db.String(16), nullable=False, default='BWR')
+    # ✅ 운영/표시용 라벨 + 프리뷰(변환 없음: onelayer.bmp)
+    title          = db.Column(db.String(200))
+    preview_relpath = db.Column(db.String(512))
 
-    supports_partial = db.Column(db.Boolean, nullable=False, default=True)
-    supports_rle     = db.Column(db.Boolean, nullable=False, default=True)
-    supports_zlib    = db.Column(db.Boolean, nullable=False, default=True)
+    # (선택) 원본 분기 추적(경로 정책에 도움)
+    source_kind = db.Column(
+        db.Enum('approval_process','bulletin_files', name='eink_asset_source_kind'),
+        nullable=True
+    )
 
-    current_ver = db.Column(db.BigInteger, nullable=False, default=0)
-    last_seen   = db.Column(MySQLDateTime(fsp=0))
+    width  = db.Column(db.Integer, nullable=False)
+    height = db.Column(db.Integer, nullable=False)
+    mode   = db.Column(db.String(16), nullable=False)
+    bpp    = db.Column(db.Integer, nullable=False, default=4)
+    ver    = db.Column(db.BigInteger, nullable=False)
+    uuid   = db.Column(db.String(36), nullable=False)
+
+    bin_relpath  = db.Column(db.String(512), nullable=False)
+    meta_relpath = db.Column(db.String(512), nullable=False)
+
+    raw_len   = db.Column(db.Integer, nullable=False)
+    total_len = db.Column(db.Integer, nullable=False)
+    crc32_le  = db.Column(db.String(8), nullable=False)
+
+    # (선택) 강한 무결성(나중 보안 단계)
+    sha256 = db.Column(db.String(64))
+    is_encrypted = db.Column(db.Boolean, nullable=False, default=False)
+
+    asset_partial_ready = db.Column(db.Boolean, nullable=False, default=False)
+    meta_json = db.Column(db.JSON)
+
+    expect_post_time   = db.Column(MySQLDateTime(fsp=0))
+    posting_period_sec = db.Column(db.Integer)
+    expire_time        = db.Column(MySQLDateTime(fsp=0))
+
+    need_approval          = db.Column(db.Boolean, nullable=False, default=False)
+    final_approval         = db.Column(db.Boolean, nullable=False, default=True)
+    approval_snapshot_json = db.Column(db.JSON)
 
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
-    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False,
-                           default=kst_now_naive, onupdate=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
 
-    user = db.relationship('User', foreign_keys=[user_no],
-                           backref=db.backref('eink_devices', lazy=True, passive_deletes=True))
+    user    = db.relationship('User',         backref=db.backref('eink_assets',    lazy=True, passive_deletes=True))
+    docinfo = db.relationship('DocumentInfo', backref=db.backref('derived_assets', lazy=True, passive_deletes=True))
+
+
+class EInkPosting(db.Model):
+    __tablename__ = 'eink_posting'
+    __table_args__ = (
+        db.Index('idx_eposting_window', 'user_id', 'device_id', 'start_time', 'end_time'),
+        db.Index('idx_eposting_lookup', 'user_id', 'device_id', 'status', 'start_time', 'end_time'),
+        CheckConstraint(
+            '(end_time IS NULL) OR (start_time IS NULL) OR (start_time < end_time)',
+            name='ck_eposting_time_range'
+        ),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
+    device_id = db.Column(db.String(64), nullable=False, index=True)
+    asset_id  = db.Column(db.BigInteger, db.ForeignKey('eink_asset.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # ✅ 큐 상태: wait/active/expired (+ cancel/fail)
+    status = db.Column(
+        db.Enum('wait','active','expired','canceled','failed', name='eink_posting_status'),
+        nullable=False, default='wait'
+    )
+
+    start_time = db.Column(MySQLDateTime(fsp=0))
+    end_time   = db.Column(MySQLDateTime(fsp=0))
+    reason     = db.Column(db.String(255))
+    priority   = db.Column(db.Integer, nullable=False, default=10)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+    user  = db.relationship('User',      backref=db.backref('eink_postings', lazy=True, passive_deletes=True))
+    asset = db.relationship('EInkAsset', backref=db.backref('postings',      lazy=True, passive_deletes=True))
+
+
+
+class DeviceAccessLog(db.Model):
+    __tablename__ = 'device_access_logs'
+    __table_args__ = (
+        db.Index('idx_dalog_user_dev_time', 'user_id', 'device_id', 'created_at'),
+        db.Index('idx_dalog_dev_api_time', 'device_id', 'api', 'created_at'),
+        db.Index('idx_dalog_dev_ok_time', 'device_id', 'ok', 'created_at'),
+        # ✅ 최근접속/장애탐지용
+        db.Index('idx_dalog_dev_time', 'device_id', 'created_at'),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
+    device_id = db.Column(db.String(64), nullable=False, index=True)
+
+    api = db.Column(db.String(32), nullable=False)  # info/bmp/board 등
+
+    # ✅ 요청 정보
+    method = db.Column(db.String(8))         # GET/POST
+    path   = db.Column(db.String(128))       # /edevice/info 등
+
+    # ✅ 인증 결과(나중 보안 적용 시 필수로 쓰임)
+    auth_ok   = db.Column(db.Boolean, nullable=False, default=True)
+    auth_mode = db.Column(db.String(16))     # none/hmac/mtls
+    device_fp = db.Column(db.String(64))     # cert fp 또는 key id
+
+    ok          = db.Column(db.Boolean, nullable=False, default=True)
+    http_status = db.Column(db.Integer)
+    error_msg   = db.Column(db.String(255))
+
+    posting_id = db.Column(db.BigInteger)
+    asset_id   = db.Column(db.BigInteger)
+    ver        = db.Column(db.BigInteger)
+    crc32      = db.Column(db.String(8))
+    bytes_sent = db.Column(db.Integer)
+
+    ip         = db.Column(db.String(64))
+    user_agent = db.Column(db.String(255))
+    elapsed_ms = db.Column(db.Integer)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+
+
+######################################################################################
+# 일단 devicejob은 사용 안함.
 
 
 class DeviceJob(db.Model):
@@ -1117,108 +1233,7 @@ class DeviceJob(db.Model):
     docinfo  = db.relationship('DocumentInfo', backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
     asset    = db.relationship('EInkAsset',   backref=db.backref('device_jobs', lazy=True, passive_deletes=True))
 
-
-
-class EInkAsset(db.Model):
-    """
-    DocumentInfo 단계에서 확정된 장치용 산출물(.bin/.meta)을 이력으로 저장
-    - bin_relpath / meta_relpath 는 userid 기준 상대경로:
-      예: f"{userid}/device/{device_id}/renders/{uuid}.bin"
-    """
-    __tablename__ = 'eink_asset'
-    __table_args__ = (
-        db.Index('idx_easset_user_dev_ver', 'user_id', 'device_id', 'ver'),
-        db.Index('idx_easset_sched', 'user_id', 'device_id', 'expect_post_time', 'expire_time'),
-        UniqueConstraint('user_id', 'device_id', 'ver', name='uq_easset_user_dev_ver'),
-        CheckConstraint('width  > 0',   name='ck_easset_width_pos'),
-        CheckConstraint('height > 0',   name='ck_easset_height_pos'),
-        CheckConstraint('raw_len   > 0', name='ck_easset_rawlen_pos'),
-        CheckConstraint('total_len > 0', name='ck_easset_totallen_pos'),
-        TABLE_ARGS,
-    )
-
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-
-    user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
-    device_id = db.Column(db.String(64), nullable=False, index=True)  # 예: "E03"
-
-    # (옵션) 어느 DocumentInfo에서 파생되었는지
-    document_info_id = db.Column(db.BigInteger, db.ForeignKey('document_infos.id', ondelete='SET NULL'))
-
-    # 렌더 결과 스펙
-    width  = db.Column(db.Integer, nullable=False)
-    height = db.Column(db.Integer, nullable=False)
-    mode   = db.Column(db.String(16), nullable=False)
-    bpp    = db.Column(db.Integer, nullable=False, default=4)
-    ver    = db.Column(db.BigInteger, nullable=False)
-    uuid   = db.Column(db.String(36), nullable=False)
-
-    # 파일 경로 (userid 루트 기준 상대경로)
-    bin_relpath  = db.Column(db.String(512), nullable=False)
-    meta_relpath = db.Column(db.String(512), nullable=False)
-
-    # 무결성/용량
-    raw_len   = db.Column(db.Integer, nullable=False)
-    total_len = db.Column(db.Integer, nullable=False)
-    crc32_le  = db.Column(db.String(8), nullable=False)  # 소문자 8-hex
-
-    asset_partial_ready = db.Column(db.Boolean, nullable=False, default=False)
-
-    meta_json = db.Column(db.JSON)
-
-    # 스케줄
-    expect_post_time   = db.Column(MySQLDateTime(fsp=0))
-    posting_period_sec = db.Column(db.Integer)
-    expire_time        = db.Column(MySQLDateTime(fsp=0))
-
-    # 승인/결재 결과 스냅샷(최종본 기준)
-    # 🔸 ApprovalRoute FK 제거 – 실제 사용된 결재선/결재 결과를 JSON으로만 보관
-    need_approval            = db.Column(db.Boolean, nullable=False, default=False)
-    final_approval           = db.Column(db.Boolean, nullable=False, default=True)
-    approval_snapshot_json   = db.Column(db.JSON)  # 예: route_snapshot_json + 승인 정보 병합본
-
-    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
-    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
-
-    user    = db.relationship('User',         backref=db.backref('eink_assets',    lazy=True, passive_deletes=True))
-    docinfo = db.relationship('DocumentInfo', backref=db.backref('derived_assets', lazy=True, passive_deletes=True))
-
-
-
-
-class EInkPosting(db.Model):
-    """
-    디바이스에 어떤 자산(EInkAsset)을 언제 보여줄지(현재/미래) 상태 관리
-    """
-    __tablename__ = 'eink_posting'
-    __table_args__ = (
-        db.Index('idx_eposting_window', 'user_id', 'device_id', 'start_time', 'end_time'),
-        CheckConstraint(
-            '(end_time IS NULL) OR (start_time IS NULL) OR (start_time < end_time)',
-            name='ck_eposting_time_range'
-        ),
-        TABLE_ARGS,
-    )
-
-    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-
-    user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
-    device_id = db.Column(db.String(64), nullable=False, index=True)
-    asset_id  = db.Column(db.BigInteger, db.ForeignKey('eink_asset.id', ondelete='CASCADE'), nullable=False, index=True)
-
-    status = db.Column(
-        db.Enum('scheduled','active','expired','canceled','failed', name='eink_posting_status'),
-        nullable=False, default='scheduled'
-    )
-    start_time = db.Column(MySQLDateTime(fsp=0))
-    end_time   = db.Column(MySQLDateTime(fsp=0))
-    reason     = db.Column(db.String(255))
-
-    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
-    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
-
-    user  = db.relationship('User',     backref=db.backref('eink_postings', lazy=True, passive_deletes=True))
-    asset = db.relationship('EInkAsset',backref=db.backref('postings',      lazy=True, passive_deletes=True))
+######################################################################################
 
 
 
@@ -1466,3 +1481,267 @@ class StampAsset(db.Model):
 
     created_by = db.Column(db.BigInteger, nullable=True)      # user_id (FK까지는 선택)
     created_at = db.Column(db.DateTime, nullable=False, default=kst_now_naive)
+
+
+# ─────────────────────────────────────────────────────────────
+# E-INK: 디바이스 / 자산 / 게시(스케줄)
+#   - DocumentInfo 단계에서 확정된 장치용 산출물(.bin/.meta) 이력 관리
+# ─────────────────────────────────────────────────────────────
+
+# ------------------------------------------------------------
+# 1) Company (테넌트)
+# ------------------------------------------------------------
+class EInkCompany(db.Model):
+    __tablename__ = "eink_company"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_eink_company_name"),
+        UniqueConstraint("code", name="uq_eink_company_code"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(128), nullable=False)
+    code = db.Column(db.String(32), nullable=True)  # 없으면 NULL 가능
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False,
+                           default=kst_now_naive, onupdate=kst_now_naive)
+
+    buildings = db.relationship(
+        "EInkBuilding",
+        backref=db.backref("company", lazy=True),
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+# ------------------------------------------------------------
+# 2) Building (회사 소속 건물/사업장)
+# ------------------------------------------------------------
+class EInkBuilding(db.Model):
+    __tablename__ = "eink_building"
+    __table_args__ = (
+        UniqueConstraint("company_id", "name", name="uq_eink_building_company_name"),
+        db.Index("idx_eink_building_company", "company_id"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    company_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eink_company.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    name = db.Column(db.String(128), nullable=False)   # 예: "본관", "공장동", "HQ"
+    code = db.Column(db.String(32), nullable=True)     # 예: "B01"
+    address = db.Column(db.String(255), nullable=True) # 선택
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False,
+                           default=kst_now_naive, onupdate=kst_now_naive)
+
+    boards = db.relationship(
+        "EInkBoard",
+        backref=db.backref("building", lazy=True),
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+# ------------------------------------------------------------
+# 3) Board (논리 게시판 = 설치 위치/운영 단위)
+# ------------------------------------------------------------
+class EInkBoard(db.Model):
+    __tablename__ = "eink_board"
+    __table_args__ = (
+        # 같은 건물, 같은 층에서 board_no 중복 금지
+        UniqueConstraint("building_id", "floor_no", "board_no", name="uq_eink_board_bld_floor_no"),
+        # 사람이 보는 코드(라벨/QR용) 전역 중복 금지
+        UniqueConstraint("board_code", name="uq_eink_board_code"),
+        db.Index("idx_eink_board_building_floor", "building_id", "floor_no"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    building_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eink_building.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # NULL 금지: 미정/옥외는 정책값으로 통일 (예: 9999)
+    floor_no = db.Column(db.Integer, nullable=False, default=9999)
+
+    # 건물+층 단위로 1..N
+    board_no = db.Column(db.Integer, nullable=False)
+
+    # 예: "ICE-HQ-B01-F03-012" 같은 라벨 코드
+    board_code = db.Column(db.String(64), nullable=False)
+
+    # 예: "3층 엘리베이터 앞"
+    name = db.Column(db.String(128), nullable=False)
+
+    # 예: "우측 벽면 / 출입구에서 5m"
+    location_desc = db.Column(db.String(255), nullable=True)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False,
+                           default=kst_now_naive, onupdate=kst_now_naive)
+
+    bindings = db.relationship(
+        "EInkBoardBinding",
+        backref=db.backref("board", lazy=True),
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+# ------------------------------------------------------------
+# 4) Device (물리 장비)
+#    - 회사 소유 모델로 가려면 company_id를 메인으로
+#    - user_no는 "등록자/관리자(선택)" 정도로 두는게 보통 편함
+# ------------------------------------------------------------
+class EInkDevice(db.Model):
+    __tablename__ = "eink_device"
+    __table_args__ = (
+        UniqueConstraint("device_id", name="uq_eink_device_device_id"),
+        db.Index("idx_eink_device_company_lastseen", "company_id", "last_seen"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    # 회사(테넌트) 소유
+    company_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eink_company.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # 선택: 등록자/담당자(ACL 따로 둘 거면 nullable로 권장)
+    user_no = db.Column(
+        db.Integer,
+        db.ForeignKey("user.no", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
+    user_userid = db.Column(db.String(64), nullable=True, index=True)
+
+    device_id   = db.Column(db.String(64), nullable=False)
+    device_name = db.Column(db.String(128))
+
+    panel_res = db.Column(db.String(16), nullable=False)
+    bpp       = db.Column(db.Integer, nullable=False, default=4)
+    cap       = db.Column(db.String(16), nullable=False, default="BWR")
+
+    supports_partial = db.Column(db.Boolean, nullable=False, default=True)
+    supports_rle     = db.Column(db.Boolean, nullable=False, default=True)
+    supports_zlib    = db.Column(db.Boolean, nullable=False, default=True)
+
+    current_ver = db.Column(db.BigInteger, nullable=False, default=0)
+    last_seen   = db.Column(MySQLDateTime(fsp=0))
+
+    # 운영용 요약 상태
+    last_ip          = db.Column(db.String(64))
+    last_user_agent  = db.Column(db.String(255))
+    last_api         = db.Column(db.String(32))
+    last_http_status = db.Column(db.Integer)
+    last_error_msg   = db.Column(db.String(255))
+
+    # 수면 주기 추적
+    expected_wakeup_sec = db.Column(db.Integer)
+    wakeup_jitter_sec   = db.Column(db.Integer)
+
+    # 보안 확장
+    auth_mode = db.Column(
+        db.Enum("none", "hmac", "mtls", name="eink_device_auth_mode"),
+        nullable=False,
+        default="none",
+    )
+    psk_hash       = db.Column(db.String(128))
+    client_cert_fp = db.Column(db.String(64))
+    revoked_at     = db.Column(MySQLDateTime(fsp=0))
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False,
+                           default=kst_now_naive, onupdate=kst_now_naive)
+
+    company = db.relationship("EInkCompany", foreign_keys=[company_id], lazy=True)
+    user = db.relationship("User", foreign_keys=[user_no], lazy=True)
+
+    bindings = db.relationship(
+        "EInkBoardBinding",
+        backref=db.backref("device", lazy=True),
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+# ------------------------------------------------------------
+# 5) BoardBinding (게시판 ↔ 디바이스 연결/교체 이력)
+#    - "현재 연결 1개" 강제: active(생성컬럼) + UNIQUE(board_id, active)
+#    - 디바이스도 동시에 한 곳에만 연결되게: UNIQUE(device_id, active)
+# ------------------------------------------------------------
+class EInkBoardBinding(db.Model):
+    __tablename__ = "eink_board_binding"
+    __table_args__ = (
+        db.Index("idx_eink_binding_board_time", "board_id", "bound_at", "unbound_at"),
+        db.Index("idx_eink_binding_device_time", "device_id", "bound_at", "unbound_at"),
+
+        # active=1 (현재 연결)인 row가 board_id 당 1개만 존재하도록 강제
+        # UniqueConstraint("board_id", "active", name="uq_eink_binding_board_active"),
+        # device도 active=1이 1개만 존재하도록 강제 (한 디바이스는 한 게시판에만)
+        UniqueConstraint("device_id", "active", name="uq_eink_binding_device_active"),
+
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+
+    board_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eink_board.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    device_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("eink_device.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    bound_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    unbound_at = db.Column(MySQLDateTime(fsp=0), nullable=True)
+
+    reason = db.Column(db.String(128), nullable=True)
+
+    bound_by_user_no = db.Column(
+        db.Integer,
+        db.ForeignKey("user.no", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    # MySQL: partial unique index가 없어서 generated column로 active 플래그 강제
+    # unbound_at IS NULL 이면 active=1 (현재 연결), 아니면 0
+    active = db.Column(
+        db.Integer,
+        Computed("IF(unbound_at IS NULL, 1, 0)", persisted=True),
+        nullable=False,
+    )
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+
+    bound_by_user = db.relationship("User", foreign_keys=[bound_by_user_no], lazy=True)

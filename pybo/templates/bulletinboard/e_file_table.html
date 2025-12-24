@@ -1,99 +1,235 @@
-{# templates/e_file_table.html #}
+{# templates/bulletinboard/e_file_table.html #}
 {% extends "e_base.html" %}
 
 {% block content %}
 <div class="container-fluid py-3">
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
     <h4 class="mb-0">전자결재 문서함</h4>
-    <a href="{{ url_for('bulletin.file_view') }}" class="btn btn-sm btn-primary">
-      파일 작성
-    </a>
   </div>
 
-  <!-- 검색/필터 영역 -->
-  <form class="row g-2 mb-3" method="get" action="{{ url_for('bulletin.file_table') }}">
+  <style>
+    /* ─────────────────────────────────────────
+       "살짝만" 정리: 책갈피 탭 + 버튼/입력 톤업
+       - 반려함 탭만 은은한 레드 포인트
+       ───────────────────────────────────────── */
 
+    :root{
+      --bb-accent: #0d6efd;
+      --bb-danger: #c24141; /* ✅ 너무 쨍하지 않은 레드 */
+      --bb-ink: #111827;
+      --bb-muted: #6b7280;
+      --bb-line: rgba(0,0,0,.10);
+      --bb-surface: #ffffff;
+    }
+
+    /* 검색줄(위) */
+    .bb-filter .form-control,
+    .bb-filter .form-select{
+      border-color: var(--bb-line);
+      border-radius: 10px;
+    }
+    .bb-filter .form-control:focus,
+    .bb-filter .form-select:focus{
+      border-color: rgba(13,110,253,.45);
+      box-shadow: 0 0 0 .20rem rgba(13,110,253,.12);
+    }
+    .bb-filter .btn{
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    /* 탭 + 우측 버튼(같은 줄) */
+    .bb-tabs-row{
+      display:flex;
+      align-items:flex-end;
+      justify-content:space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: .75rem;
+    }
+
+    /* "책갈피" 느낌 nav-tabs */
+    .bb-tabs{
+      border-bottom: 1px solid var(--bb-line);
+      margin-bottom: 0 !important;
+    }
+    .bb-tabs .nav-link{
+      border: 1px solid transparent;
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+      padding: .45rem .85rem;
+      font-weight: 800;
+      font-size: .92rem;
+      color: rgba(17,24,39,.78);
+      background: transparent;
+      transition: background-color .12s ease, transform .10s ease, color .12s ease;
+      margin-right: 6px;
+    }
+    .bb-tabs .nav-link:hover{
+      background: rgba(13,110,253,.06);
+      transform: translateY(-1px);
+    }
+    .bb-tabs .nav-link.active{
+      background: var(--bb-surface);
+      color: var(--bb-accent);
+      border-color: var(--bb-line) var(--bb-line) var(--bb-surface);
+      box-shadow: 0 -6px 14px rgba(17,24,39,.06);
+      position: relative;
+    }
+    .bb-tabs .nav-link.active::before{
+      content:"";
+      position:absolute;
+      left: 10px;
+      right: 10px;
+      top: -1px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--bb-accent);
+    }
+
+    /* ✅ 반려함 탭만 레드 포인트 */
+    .bb-tabs .nav-link.bb-tab-rejected:hover{
+      background: rgba(194,65,65,.10);
+    }
+    .bb-tabs .nav-link.bb-tab-rejected.active{
+      color: var(--bb-danger);
+    }
+    .bb-tabs .nav-link.bb-tab-rejected.active::before{
+      background: var(--bb-danger);
+    }
+
+    /* 우측 "파일 작성" 버튼 */
+    .bb-compose{
+      height: 36px;
+      border-radius: 10px;
+      font-weight: 800;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 18px rgba(13,110,253,.10);
+      white-space: nowrap;
+    }
+
+    /* 테이블 카드 톤 */
+    .bb-card{
+      border-radius: 14px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 10px 22px rgba(17,24,39,.05);
+      overflow: hidden;
+    }
+
+    /* 결재선 칩 */
+    .approval-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: .72rem;
+      font-weight: 800;
+      margin-right: 4px;
+      margin-bottom: 4px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .approval-chip-done { background-color: rgba(13,110,253,.12); color: #0d6efd; border-color: rgba(13,110,253,.18); }
+    .approval-chip-pending { background-color: rgba(25,135,84,.12); color: #198754; border-color: rgba(25,135,84,.18); }
+    .approval-chip-wait { background-color: rgba(108,117,125,.12); color: #6c757d; border-color: rgba(108,117,125,.18); }
+
+    .status-badge{ font-size: .72rem; font-weight: 900; letter-spacing: .2px; }
+  </style>
+
+  <!-- 검색/필터 영역 (✅ 4+3+3+2 = 12 → md 이상 줄바꿈 없음) -->
+  <form class="row g-2 mb-2 bb-filter" method="get" action="{{ url_for('bulletin.file_table') }}">
     <input type="hidden" name="page" value="1">
-
     <input type="hidden" name="tab" value="{{ tab }}">
+
     <div class="col-md-4">
       <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm"
              placeholder="문서명 / 원본파일명 검색">
     </div>
+
     <div class="col-md-3">
-      <select name="status" class="form-select form-select-sm">
-        <option value="all" {% if status=='all' %}selected{% endif %}>전체 상태</option>
-        <option value="draft" {% if status=='draft' %}selected{% endif %}>작성중</option>
-        <option value="in_review" {% if status=='in_review' %}selected{% endif %}>결재진행</option>
-        <option value="checked" {% if status=='checked' %}selected{% endif %}>검토완료</option>
-        <option value="approved" {% if status=='approved' %}selected{% endif %}>결재완료</option>
-        <option value="rejected" {% if status=='rejected' %}selected{% endif %}>반려</option>
-      </select>
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm">
     </div>
-    <div class="col-md-2">
-      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm"
-             placeholder="작성일 시작">
+
+    <div class="col-md-3">
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm">
     </div>
-    <div class="col-md-2">
-      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm"
-             placeholder="작성일 끝">
-    </div>
-    <div class="col-md-1 d-grid">
+
+    <div class="col-md-2 d-grid">
       <button type="submit" class="btn btn-sm btn-outline-secondary">검색</button>
     </div>
   </form>
 
-  <!-- 탭 -->
-  <ul class="nav nav-tabs mb-3">
-    <li class="nav-item">
-    <a class="nav-link {% if tab == 'author' %}active{% endif %}"
-      href="{{ url_for('bulletin.file_table', tab='author', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">결재작성문서</a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link {% if tab == 'pending' %}active{% endif %}"
-         href="{{ url_for('bulletin.file_table', tab='pending') }}">결재대기</a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link {% if tab == 'progress' %}active{% endif %}"
-         href="{{ url_for('bulletin.file_table', tab='progress') }}">결재진행사항</a>
-    </li>
-    <li class="nav-item">
-      <a class="nav-link {% if tab == 'completed' %}active{% endif %}"
-         href="{{ url_for('bulletin.file_table', tab='completed') }}">결재완료</a>
-    </li>
-  </ul>
+  <!-- 탭 + 파일작성 버튼 (✅ 같은 행 / ✅ 오른쪽 끝) -->
+  <div class="bb-tabs-row">
+    <ul class="nav nav-tabs bb-tabs">
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'author' %}active{% endif %}"
+           href="{{ url_for('bulletin.file_table', tab='author', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">
+          결재작성문서
+        </a>
+      </li>
 
-  <style>
-    .approval-chip {
-      display: inline-flex;
-      align-items: center;
-      padding: 2px 6px;
-      border-radius: 999px;
-      font-size: .7rem;
-      margin-right: 2px;
-      margin-bottom: 2px;
-      border: 1px solid transparent;
-      white-space: nowrap;
-    }
-    .approval-chip-done { background-color: #0d6efd; color: #fff; }    /* 파랑 */
-    .approval-chip-pending { background-color: #198754; color: #fff; } /* 초록 */
-    .approval-chip-wait { background-color: #6c757d; color: #fff; }    /* 회색 */
-    .status-badge { font-size: .7rem; }
-  </style>
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'pending' %}active{% endif %}"
+           href="{{ url_for('bulletin.file_table', tab='pending', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">
+          결재대기
+        </a>
+      </li>
 
-  <!-- Tab 1: 결재작성문서 -->
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'progress' %}active{% endif %}"
+           href="{{ url_for('bulletin.file_table', tab='progress', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">
+          결재진행사항
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'completed' %}active{% endif %}"
+           href="{{ url_for('bulletin.file_table', tab='completed', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">
+          결재완료
+        </a>
+      </li>
+
+      <!-- ✅ Bulletin_Files (결재라인 없는 게시 파일) -->
+      <li class="nav-item">
+        <a class="nav-link {% if tab == 'bulletin_files' %}active{% endif %}"
+           href="{{ url_for('bulletin.file_table', tab='bulletin_files', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">
+          Bulletin_Files
+        </a>
+      </li>
+
+      <!-- ✅ 반려함(레드 포인트) -->
+      <li class="nav-item">
+        <a class="nav-link bb-tab-rejected {% if tab == 'rejected' %}active{% endif %}"
+           href="{{ url_for('bulletin.file_table', tab='rejected', q=search, status=status, date_from=date_from, date_to=date_to, page=1) }}">
+          반려함
+        </a>
+      </li>
+    </ul>
+
+    <a href="{{ url_for('bulletin.file_view') }}" class="btn btn-sm btn-primary bb-compose">
+      파일 작성
+    </a>
+  </div>
+
+  {# ─────────────────────────────────────────
+     Tab 1: 결재작성문서 (docs_author)
+     ───────────────────────────────────────── #}
   {% if tab == 'author' %}
-  <div class="card">
+  <div class="card bb-card">
     <div class="card-body p-2">
       <table class="table table-sm table-hover align-middle mb-0">
-        <thead>
+        <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
-            <th>문서명</th>
-            <th style="width: 100px;">상태</th>
-            <th style="width: 260px;">결재선</th>
-            <th style="width: 160px;">작성일</th>
+            <th style="width: 400px;">문서명</th>
+            <th style="width: 100px;">종류</th>
+            <th style="width: 350px;">결재선</th>
+            <th style="width: 140px;">작성일</th>
           </tr>
         </thead>
         <tbody>
@@ -101,7 +237,7 @@
           <tr>
             <td>{{ doc.id }}</td>
             <td>
-              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+              <a class="text-decoration-none" href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
                 {{ doc.doc_name or doc.orig_filename }}
               </a>
             </td>
@@ -147,64 +283,158 @@
         </tbody>
       </table>
 
-      {% if pager.pages > 1 %}
-        <nav class="mt-2">
-          <ul class="pagination pagination-sm mb-0">
-            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
-            </li>
-
-            {# 간단형: 1..pages #}
-            {% for p in range(1, pager.pages + 1) %}
-              <li class="page-item {% if p == pager.page %}active{% endif %}">
-                <a class="page-link"
-                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
-              </li>
-            {% endfor %}
-
-            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
-            </li>
-          </ul>
-        </nav>
-        {% endif %}
-
+      {% if pager and pager.pages > 1 %}
+      <nav class="mt-2">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+          </li>
+          {% for p in range(1, pager.pages + 1) %}
+          <li class="page-item {% if p == pager.page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
     </div>
   </div>
   {% endif %}
 
-  <!-- Tab 2: 결재대기 -->
+  {# ─────────────────────────────────────────
+     Tab 2: 결재대기 (pending_rows)
+     ───────────────────────────────────────── #}
   {% if tab == 'pending' %}
-  <div class="card">
+  <div class="card bb-card">
     <div class="card-body p-2">
       <table class="table table-sm table-hover align-middle mb-0">
-        <thead>
+        <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
-            <th>문서명</th>
-            <th style="width: 140px;">요청자</th>
+            <th style="width: 400px;">문서명</th>
+            <th style="width: 120px;">작성자</th>
             <th style="width: 120px;">내 역할</th>
-            <th style="width: 100px;">상태</th>
-            <th style="width: 260px;">결재선</th>
-            <th style="width: 160px;">요청일</th>
+            <th style="width: 90px;">상태</th>
+            <th style="width: 350px;">결재선</th>
+            <th style="width: 140px;">요청일</th>
           </tr>
         </thead>
         <tbody>
-          {% for doc, slot in pending_rows %}
+          {% for doc in pending_rows %}
           <tr>
             <td>{{ doc.id }}</td>
             <td>
-              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+              <a class="text-decoration-none" href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
                 {{ doc.doc_name or doc.orig_filename }}
               </a>
             </td>
+            <td>{{ doc.user.department or '' }} {{ doc.user.username or '' }}</td>
+
+            {# ✅ 내 pending step만 찾아서 역할 표시 (userid_snapshot 기준) #}
+            {% set my_steps = (doc.approval_steps
+                              | selectattr('status','equalto','pending')
+                              | selectattr('userid_snapshot','equalto', current_user.userid)
+                              | list) %}
             <td>
-              {{ doc.user.department or '' }} {{ doc.user.username or '' }}
+              {% if my_steps and my_steps[0] %}
+                {{ my_steps[0].step_type or '결재' }}
+              {% else %}
+                결재
+              {% endif %}
             </td>
+
             <td>
-              {{ slot.label or '결재' }}
+              {% set s = doc.status %}
+              {% if s == 'in_review' %}
+                <span class="badge bg-info text-dark status-badge">결재진행</span>
+              {% elif s == 'checked' %}
+                <span class="badge bg-warning text-dark status-badge">검토완료</span>
+              {% else %}
+                <span class="badge bg-light text-muted status-badge">{{ s }}</span>
+              {% endif %}
+            </td>
+
+            <td>
+              {% for step in doc.approval_steps|sort(attribute='col_index') %}
+                {% if step.status == 'done' %}
+                  {% set chip_class = 'approval-chip-done' %}
+                {% elif step.status == 'pending' %}
+                  {% set chip_class = 'approval-chip-pending' %}
+                {% else %}
+                  {% set chip_class = 'approval-chip-wait' %}
+                {% endif %}
+                <span class="approval-chip {{ chip_class }}">
+                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
+                </span>
+              {% endfor %}
+            </td>
+
+            <td>{{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center text-muted small py-3">
+              결재대기 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if pager and pager.pages > 1 %}
+      <nav class="mt-2">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+          </li>
+          {% for p in range(1, pager.pages + 1) %}
+          <li class="page-item {% if p == pager.page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ─────────────────────────────────────────
+     Tab 3: 결재진행사항 (docs_progress)
+     ───────────────────────────────────────── #}
+  {% if tab == 'progress' %}
+  <div class="card bb-card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th style="width: 420px;">문서명</th>
+            <th style="width: 100px;">상태</th>
+            <th style="width: 350px;">결재선</th>
+            <th style="width: 140px;">작성일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs_progress %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a class="text-decoration-none" href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
             </td>
             <td>
               {% set s = doc.status %}
@@ -212,6 +442,10 @@
                 <span class="badge bg-info text-dark status-badge">결재진행</span>
               {% elif s == 'checked' %}
                 <span class="badge bg-warning text-dark status-badge">검토완료</span>
+              {% elif s == 'approved' %}
+                <span class="badge bg-success status-badge">결재완료</span>
+              {% elif s == 'rejected' %}
+                <span class="badge bg-danger status-badge">반려</span>
               {% else %}
                 <span class="badge bg-light text-muted status-badge">{{ s }}</span>
               {% endif %}
@@ -234,164 +468,61 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="7" class="text-center text-muted small py-3">
-              결재대기 문서가 없습니다.
+            <td colspan="5" class="text-center text-muted small py-3">
+              결재 진행 문서가 없습니다.
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      {% if pager.pages > 1 %}
-        <nav class="mt-2">
-          <ul class="pagination pagination-sm mb-0">
-            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
-            </li>
 
-            {# 간단형: 1..pages #}
-            {% for p in range(1, pager.pages + 1) %}
-              <li class="page-item {% if p == pager.page %}active{% endif %}">
-                <a class="page-link"
-                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
-              </li>
-            {% endfor %}
-
-            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
-            </li>
-          </ul>
-        </nav>
-        {% endif %}      
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Tab 3: 결재진행사항 -->
-  {% if tab == 'progress' %}
-  <div class="card">
-    <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
-        <thead>
-          <tr>
-            <th style="width: 70px;">번호</th>
-            <th>문서명</th>
-            <th style="width: 140px;">작성자</th>
-            <th style="width: 100px;">상태</th>
-            <th style="width: 260px;">결재선</th>
-            <th style="width: 160px;">작성일</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for doc in docs_progress %}
-          <tr>
-            <td>{{ doc.id }}</td>
-            <td>
-              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
-                {{ doc.doc_name or doc.orig_filename }}
-              </a>
-            </td>
-            <td>
-              {{ doc.user.department or '' }} {{ doc.user.username or '' }}
-            </td>
-            <td>
-              {% set s = doc.status %}
-              {% if s == 'in_review' %}
-                <span class="badge bg-info text-dark status-badge">결재진행</span>
-              {% elif s == 'checked' %}
-                <span class="badge bg-warning text-dark status-badge">검토완료</span>
-              {% elif s == 'approved' %}
-                <span class="badge bg-success status-badge">결재완료</span>
-              {% elif s == 'rejected' %}
-                <span class="badge bg-danger status-badge">반려</span>
-              {% else %}
-                <span class="badge bg-secondary status-badge">{{ s }}</span>
-              {% endif %}
-            </td>
-            <td>
-              {% for step in doc.approval_steps|sort(attribute='col_index') %}
-                {% if step.status == 'done' %}
-                  {% set chip_class = 'approval-chip-done' %}
-                {% elif step.status == 'pending' %}
-                  {% set chip_class = 'approval-chip-pending' %}
-                {% else %}
-                  {% set chip_class = 'approval-chip-wait' %}
-                {% endif %}
-                <span class="approval-chip {{ chip_class }}">
-                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
-                </span>
-              {% endfor %}
-            </td>
-            <td>{{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}</td>
-          </tr>
-          {% else %}
-          <tr>
-            <td colspan="6" class="text-center text-muted small py-3">
-              표시할 문서가 없습니다.
-            </td>
-          </tr>
+      {% if pager and pager.pages > 1 %}
+      <nav class="mt-2">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+          </li>
+          {% for p in range(1, pager.pages + 1) %}
+          <li class="page-item {% if p == pager.page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+          </li>
           {% endfor %}
-        </tbody>
-      </table>
-      {% if pager.pages > 1 %}
-        <nav class="mt-2">
-          <ul class="pagination pagination-sm mb-0">
-            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
-            </li>
-
-            {# 간단형: 1..pages #}
-            {% for p in range(1, pager.pages + 1) %}
-              <li class="page-item {% if p == pager.page %}active{% endif %}">
-                <a class="page-link"
-                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
-              </li>
-            {% endfor %}
-
-            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
-            </li>
-          </ul>
-        </nav>
-        {% endif %}     
+          <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
     </div>
   </div>
   {% endif %}
 
-  <!-- Tab 4: 결재완료 -->
+  {# ─────────────────────────────────────────
+     Tab 4: 결재완료 (docs_completed)
+     ───────────────────────────────────────── #}
   {% if tab == 'completed' %}
-  <div class="card">
+  <div class="card bb-card">
     <div class="card-body p-2">
       <table class="table table-sm table-hover align-middle mb-0">
-        <thead>
+        <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
-            <th>문서명</th>
-            <th style="width: 140px;">작성자</th>
-            <th style="width: 260px;">결재선</th>
-            <th style="width: 160px;">완료일</th>
+            <th style="width: 420px;">문서명</th>
+            <th style="width: 350px;">결재선</th>
+            <th style="width: 140px;">완료일</th>
           </tr>
         </thead>
         <tbody>
           {% for doc in docs_completed %}
-          {% set last_signed = (doc.approval_steps | map(attribute='signed_at') | select) | list %}
-          {% if last_signed %}
-            {% set last_signed_at = last_signed | max %}
-          {% else %}
-            {% set last_signed_at = doc.updated_at %}
-          {% endif %}
           <tr>
             <td>{{ doc.id }}</td>
             <td>
-              <a href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+              <a class="text-decoration-none" href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
                 {{ doc.doc_name or doc.orig_filename }}
               </a>
-            </td>
-            <td>
-              {{ doc.user.department or '' }} {{ doc.user.username or '' }}
             </td>
             <td>
               {% for step in doc.approval_steps|sort(attribute='col_index') %}
@@ -407,42 +538,178 @@
                 </span>
               {% endfor %}
             </td>
-            <td>
-              {{ last_signed_at.strftime('%Y-%m-%d %H:%M') if last_signed_at else '' }}
-            </td>
+            <td>{{ doc.updated_at.strftime('%Y-%m-%d %H:%M') if doc.updated_at else (doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '') }}</td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="5" class="text-center text-muted small py-3">
+            <td colspan="4" class="text-center text-muted small py-3">
               결재완료 문서가 없습니다.
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      {% if pager.pages > 1 %}
-        <nav class="mt-2">
-          <ul class="pagination pagination-sm mb-0">
-            <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
-            </li>
 
-            {# 간단형: 1..pages #}
-            {% for p in range(1, pager.pages + 1) %}
-              <li class="page-item {% if p == pager.page %}active{% endif %}">
-                <a class="page-link"
-                  href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
-              </li>
-            {% endfor %}
+      {% if pager and pager.pages > 1 %}
+      <nav class="mt-2">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+          </li>
+          {% for p in range(1, pager.pages + 1) %}
+          <li class="page-item {% if p == pager.page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
 
-            <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
-              <a class="page-link"
-                href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
-            </li>
-          </ul>
-        </nav>
-        {% endif %}
+  {# ─────────────────────────────────────────
+     Tab 5: Bulletin_Files (docs_bulletin_files)
+     ───────────────────────────────────────── #}
+  {% if tab == 'bulletin_files' %}
+  {% set docs_bf = docs_bulletin_files|default([]) %}
+  <div class="card bb-card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th style="width: 520px;">문서명</th>
+            <th style="width: 160px;">작성자</th>
+            <th style="width: 140px;">작성일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs_bf %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a class="text-decoration-none" href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
+            </td>
+            <td>{{ doc.user.department or '' }} {{ doc.user.username or '' }}</td>
+            <td>{{ doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" class="text-center text-muted small py-3">
+              Bulletin_Files 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if pager and pager.pages > 1 %}
+      <nav class="mt-2">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+          </li>
+          {% for p in range(1, pager.pages + 1) %}
+          <li class="page-item {% if p == pager.page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ─────────────────────────────────────────
+     Tab 6: 반려함 (docs_rejected)
+     ───────────────────────────────────────── #}
+  {% if tab == 'rejected' %}
+  {% set docs_rj = docs_rejected|default([]) %}
+  <div class="card bb-card">
+    <div class="card-body p-2">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th style="width: 70px;">번호</th>
+            <th style="width: 420px;">문서명</th>
+            <th style="width: 160px;">작성자</th>
+            <th style="width: 350px;">결재선</th>
+            <th style="width: 140px;">반려일</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in docs_rj %}
+          <tr>
+            <td>{{ doc.id }}</td>
+            <td>
+              <a class="text-decoration-none" href="{{ url_for('bulletin.file_detail', doc_id=doc.id) }}">
+                {{ doc.doc_name or doc.orig_filename }}
+              </a>
+              <span class="badge bg-danger status-badge ms-2">반려</span>
+            </td>
+            <td>{{ doc.user.department or '' }} {{ doc.user.username or '' }}</td>
+            <td>
+              {% for step in doc.approval_steps|sort(attribute='col_index') %}
+                {% if step.status == 'done' %}
+                  {% set chip_class = 'approval-chip-done' %}
+                {% elif step.status == 'pending' %}
+                  {% set chip_class = 'approval-chip-pending' %}
+                {% else %}
+                  {% set chip_class = 'approval-chip-wait' %}
+                {% endif %}
+                <span class="approval-chip {{ chip_class }}">
+                  {{ step.step_type }} / {{ step.username_snapshot or '미지정' }}
+                </span>
+              {% endfor %}
+            </td>
+            <td>{{ doc.updated_at.strftime('%Y-%m-%d %H:%M') if doc.updated_at else (doc.created_at.strftime('%Y-%m-%d %H:%M') if doc.created_at else '') }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted small py-3">
+              반려 문서가 없습니다.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      {% if pager and pager.pages > 1 %}
+      <nav class="mt-2">
+        <ul class="pagination pagination-sm mb-0">
+          <li class="page-item {% if pager.page <= 1 %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page-1) }}">이전</a>
+          </li>
+          {% for p in range(1, pager.pages + 1) %}
+          <li class="page-item {% if p == pager.page %}active{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=p) }}">{{ p }}</a>
+          </li>
+          {% endfor %}
+          <li class="page-item {% if pager.page >= pager.pages %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('bulletin.file_table', tab=tab, q=search, status=status, date_from=date_from, date_to=date_to, page=pager.page+1) }}">다음</a>
+          </li>
+        </ul>
+      </nav>
+      {% endif %}
     </div>
   </div>
   {% endif %}
