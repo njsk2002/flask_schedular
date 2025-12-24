@@ -1888,9 +1888,7 @@ def file_table():
     per_page = 15
 
     user_id = current_user.no
-
-    # current_app.logger.debug("[ENUM] DocumentApprovalStep file=%s", inspect.getfile(DocumentApprovalStep))
-    # current_app.logger.debug("[ENUM] DocumentApprovalStep enums=%s", DocumentApprovalStep.__table__.c.status.type.enums)
+    user_userid = getattr(current_user, "userid", None)  # 문자열 userid
 
     def _paginate(items):
         total = len(items or [])
@@ -1900,8 +1898,17 @@ def file_table():
         end = start + per_page
         return (items or [])[start:end], {"page": p, "per_page": per_page, "total": total, "pages": pages}
 
+    # 템플릿에 내려줄 기본 변수들
+    docs_author = []
+    docs_author_bulletin = []   # ✅ (선택) 내가 작성한 bulletin_files
+    pending_rows = []
+    docs_progress = []
+    docs_completed = []
+    docs_rejected = []          # ✅ 반려 탭
+    docs_bulletin_files = []    # ✅ 전체 bulletin_files
+    pager = {"page": page, "per_page": per_page, "total": 0, "pages": 1}
+
     if RepositoryEINK is None:
-        # ✅ 템플릿 경로 통일
         return render_template(
             "bulletinboard/e_file_table.html",
             tab=tab,
@@ -1909,30 +1916,42 @@ def file_table():
             status=status,
             date_from=date_from or "",
             date_to=date_to or "",
-            docs_author=[],
-            pending_rows=[],
-            docs_progress=[],
-            docs_completed=[],
+            docs_author=docs_author,
+            docs_author_bulletin=docs_author_bulletin,
+            pending_rows=pending_rows,
+            docs_progress=docs_progress,
+            docs_completed=docs_completed,
+            docs_rejected=docs_rejected,
+            docs_bulletin_files=docs_bulletin_files,
             pager={"page": 1, "per_page": per_page, "total": 0, "pages": 1},
         )
 
-    docs_author = []
-    pending_rows = []
-    docs_progress = []
-    docs_completed = []
-    pager = {"page": page, "per_page": per_page, "total": 0, "pages": 1}
-
+    # ─────────────────────────────
+    # Tab routing
+    # ─────────────────────────────
     if tab == "author":
+        # ✅ 결재문서(need_approval=1) 중 "내가 작성한 것"만
         docs_author = RepositoryEINK.list_author_documents(
             user_id=user_id, search=search, status=status, date_from=date_from, date_to=date_to
         )
         docs_author, pager = _paginate(docs_author)
 
-    elif tab == "pending":
-        pending_rows = RepositoryEINK.list_my_pending_documents(
-            user_id=user_id, search=search, status=status, date_from=date_from, date_to=date_to
+    elif tab == "author_bulletin":
+        # ✅ (선택) 내가 작성한 bulletin_files만 따로 보고 싶을 때
+        docs_author_bulletin = RepositoryEINK.list_my_bulletin_files_documents(
+            user_id=user_id, search=search, date_from=date_from, date_to=date_to
         )
-        pending_rows, pager = _paginate(pending_rows)
+        docs_author_bulletin, pager = _paginate(docs_author_bulletin)
+
+    elif tab == "pending":
+        # ✅ 핵심: "결재대기" = pending step의 대상자가 나인 문서만
+        #    DocumentApprovalStep.status='pending' AND userid_snapshot == current_user.userid (또는 id 매칭)
+        pending_docs = RepositoryEINK.list_my_pending_documents(
+            user_id=user_id,
+            user_userid=user_userid,
+            search=search, status=status, date_from=date_from, date_to=date_to
+        )
+        pending_rows, pager = _paginate(pending_docs)
 
     elif tab == "progress":
         docs_progress = RepositoryEINK.list_my_progress_documents(
@@ -1946,9 +1965,27 @@ def file_table():
         )
         docs_completed, pager = _paginate(docs_completed)
 
+    elif tab == "rejected":
+        # ✅ 반려 탭
+        docs_rejected = RepositoryEINK.list_my_rejected_documents(
+            user_id=user_id,
+            user_userid=user_userid,
+            search=search, status=status, date_from=date_from, date_to=date_to
+        )
+        docs_rejected, pager = _paginate(docs_rejected)
+
+    elif tab == "bulletin_files":
+        # ✅ 전체 bulletin_files: need_approval=0 AND status='bulletin_files'
+        docs_bulletin_files = RepositoryEINK.list_bulletin_files_documents(
+            search=search, date_from=date_from, date_to=date_to
+        )
+        docs_bulletin_files, pager = _paginate(docs_bulletin_files)
+
     else:
         tab = "author"
-        docs_author = RepositoryEINK.list_author_documents(user_id=user_id)
+        docs_author = RepositoryEINK.list_author_documents(
+            user_id=user_id, search=search, status=status, date_from=date_from, date_to=date_to
+        )
         docs_author, pager = _paginate(docs_author)
 
     return render_template(
@@ -1959,11 +1996,16 @@ def file_table():
         date_from=date_from or "",
         date_to=date_to or "",
         docs_author=docs_author,
+        docs_author_bulletin=docs_author_bulletin,
         pending_rows=pending_rows,
         docs_progress=docs_progress,
         docs_completed=docs_completed,
+        docs_rejected=docs_rejected,
+        docs_bulletin_files=docs_bulletin_files,
         pager=pager,
     )
+
+
 
 
 

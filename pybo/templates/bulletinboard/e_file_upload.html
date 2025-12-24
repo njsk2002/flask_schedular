@@ -1,0 +1,1548 @@
+{% extends 'e_base.html' %}
+
+{% block content %}
+<div class="container-fluid py-3">
+
+  <!-- top header -->
+  <div class="d-flex align-items-center justify-content-between mb-2">
+    <div>
+      <h3 class="mb-0">E-Ink 업로드 및 스케줄 설정</h3>
+      <div class="text-muted small">
+        Device: <span class="fw-semibold">{{ device_id }}</span>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 align-items-center">
+      <a class="btn btn-outline-secondary" href="/dashboard/presentation">Presentation</a>
+      <button id="btnRefresh" class="btn btn-outline-dark">새로고침</button>
+    </div>
+  </div>
+
+  <style>
+    :root{
+      --card-bd:#e9ecef;
+      --card-shadow: 0 2px 10px rgba(0,0,0,.05);
+      --radius: 16px;
+      --muted:#6c757d;
+      --soft:#f8f9fa;
+    }
+
+    .card-soft{border:1px solid var(--card-bd); border-radius:var(--radius); box-shadow:var(--card-shadow);}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    .badge-pill{border:1px solid #dee2e6; background:#fff; font-weight:700;}
+    .mini-btn{padding:.25rem .55rem; font-size:.82rem;}
+
+    .tbl-fixed{table-layout:fixed;}
+    .tbl-fixed td, .tbl-fixed th{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .row-click{cursor:pointer;}
+    .row-click:hover{background:var(--soft);}
+
+    .row-selected{background: #eef5ff !important;}
+    .row-selected:hover{background: #e6f0ff !important;}
+
+    .preview-surface{background:var(--soft); border-radius:var(--radius); overflow:hidden; border:1px solid var(--card-bd);}
+    .preview-surface.big{height: clamp(380px, 58vh, 820px);}
+    .preview-surface.mid{height: clamp(320px, 46vh, 620px);}
+    .preview-img{width:100%; height:100%; object-fit:contain;}
+
+    .grid-3{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(280px, 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 1200px){
+      .grid-3{ grid-template-columns: repeat(2, minmax(280px, 1fr)); }
+    }
+    @media (max-width: 768px){
+      .grid-3{ grid-template-columns: 1fr; }
+    }
+
+    .device-strip{border:1px solid var(--card-bd); border-radius:var(--radius); background:#fff; box-shadow:var(--card-shadow);}
+    .device-strip .dev-wrap{display:flex; gap:.5rem; overflow:auto; padding-bottom:2px;}
+    .device-strip .dev-item{
+      display:inline-flex; flex-direction:column; gap:2px;
+      min-width: 170px;
+      padding:8px 10px;
+      border:1px solid var(--card-bd); border-radius:14px;
+      text-decoration:none;
+      color:#111;
+      background:#fff;
+      transition: transform .08s ease, box-shadow .08s ease, background .08s ease;
+    }
+    .device-strip .dev-item:hover{background:var(--soft); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(0,0,0,.06);}
+    .device-strip .dev-item.active{background:#111; color:#fff; border-color:#111;}
+    .device-strip .dev-item .muted{opacity:.78;}
+    .device-strip .dev-item.active .muted{opacity:.9;}
+
+    .btn-icon{
+      width:28px; height:28px; padding:0;
+      display:inline-flex; align-items:center; justify-content:center;
+      border-radius:10px;
+    }
+
+    .finder-head{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .finder-head .left{
+      display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    }
+
+    .subtle-box{
+      border:1px dashed #dee2e6;
+      border-radius: 14px;
+      background: #fbfbfc;
+      padding: 10px 12px;
+    }
+
+    .muted{color:var(--muted);}
+    .tiny{font-size:.82rem;}
+
+    .edit-pill{
+      display:inline-flex; align-items:center; gap:.35rem;
+      padding:.15rem .55rem;
+      border-radius:999px;
+      border:1px solid #dee2e6;
+      background:#fff;
+      font-size:.82rem;
+      color:#111;
+      user-select:none;
+    }
+    .edit-pill.on{
+      border-color:#111;
+      background:#111;
+      color:#fff;
+    }
+  </style>
+
+  <!-- TOP NAV: board + devices -->
+  <div class="device-strip mb-3">
+    <div class="p-2">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="fw-semibold">게시판 / 디바이스</div>
+        <div class="text-muted small">※ 게시판 선택 시 연결된 디바이스만 표시됩니다.</div>
+      </div>
+
+      <div class="d-flex gap-2 align-items-start">
+
+        <!-- LEFT: board selector -->
+        <div class="border rounded-4 p-2 bg-light-subtle" style="min-width:320px;">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">게시판</div>
+            <div class="small text-muted">building_id=2 / floor_no=2</div>
+          </div>
+
+          <div class="d-flex gap-2 align-items-center mt-2">
+            <select id="selBoardNo" class="form-select form-select-sm" style="width:200px;">
+              <option value="1">로딩 중...</option>
+            </select>
+            <div class="ms-auto small">
+              <span class="text-muted">선택:</span>
+              <span class="fw-semibold mono" id="txtBoardCode">-</span>
+            </div>
+          </div>
+
+          <div class="small text-muted mt-1">
+            ※ 표시 항목: board_code / 기본값: board_no=1
+          </div>
+        </div>
+
+        <!-- RIGHT: devices strip (board에 따라 동적 변경) -->
+        <div class="dev-wrap flex-grow-1" id="devStrip">
+          <div class="small text-muted py-2">디바이스 목록을 불러오는 중입니다…</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- FINDER TOGGLE -->
+  <div class="card card-soft mb-3">
+    <div class="card-body py-2">
+      <div class="finder-head">
+        <div class="left">
+          <div class="fw-semibold">문서 선택</div>
+
+          <div class="form-check form-switch mb-0">
+            <input class="check-input" type="checkbox" role="switch" id="chkFinderDocs">
+            <label class="form-check-label" for="chkFinderDocs">UPLOAD 파일 찾기</label>
+          </div>
+
+          <div class="text-muted small">
+            ※ ON 시 문서 목록 / 선택 정보 / 미리보기 영역이 3분할로 표시됩니다.
+          </div>
+        </div>
+
+        <span class="badge rounded-pill badge-pill">{{ device_id }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOC FINDER AREA -->
+  <div id="docFinderArea" class="grid-3 mb-3" style="display:none;">
+
+    <!-- (1) docs -->
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">문서 목록</div>
+          <span class="badge rounded-pill badge-pill">docs</span>
+        </div>
+
+        <ul class="nav nav-pills nav-fill mb-2" id="tabChannel">
+          <li class="nav-item">
+            <button class="nav-link active" data-ch="bulletin" type="button">
+              게시용(bulletin_files)
+            </button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-ch="approved" type="button">
+              결재 완료(approved)
+            </button>
+          </li>
+        </ul>
+
+        <div class="d-flex gap-2 align-items-center mb-2">
+          <input id="inSearch" class="form-control form-control-sm" placeholder="파일명 검색(부분일치)" />
+          <select id="selSort" class="form-select form-select-sm" style="width:auto;">
+            <option value="newest">최신순</option>
+            <option value="oldest">오래된순</option>
+            <option value="name">파일명</option>
+          </select>
+        </div>
+
+        <div class="d-flex gap-2 align-items-center mb-2">
+          <button id="btnPrev" class="btn btn-sm btn-outline-secondary">이전</button>
+          <button id="btnNext" class="btn btn-sm btn-outline-secondary">다음</button>
+          <div class="ms-auto small text-muted">
+            page <span id="pageNo">1</span>
+          </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 46vh;">
+          <table class="table table-sm align-middle mb-0 tbl-fixed">
+            <thead class="table-light">
+              <tr>
+                <th style="width:64px;">ID</th>
+                <th>파일명</th>
+                <th style="width:120px;">등록일</th>
+                <th style="width:120px;">승인일</th>
+                <th style="width:120px;">게시기간</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyDocs">
+              <tr><td colspan="5" class="text-muted small py-3">로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="small text-muted mt-2">
+          ※ approved/bulletin은 DocumentInfo 기준으로만 선택 가능합니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- (2) selected + schedule -->
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">선택 정보</div>
+          <span class="badge rounded-pill badge-pill">selected</span>
+        </div>
+
+        <div class="subtle-box">
+          <div class="fw-semibold" id="selDocLabel">-</div>
+          <div class="small text-muted" id="selDocPath" style="word-break:break-all;"></div>
+        </div>
+
+        <div class="d-flex gap-2 mt-2">
+          <button id="btnApplyUpload" class="btn btn-sm btn-primary flex-grow-1" disabled>
+            최종 확인 후 업로드 대상으로 확정
+          </button>
+          <button id="btnClearSel" class="btn btn-sm btn-outline-secondary" disabled>
+            선택 해제
+          </button>
+        </div>
+
+        <div class="mt-3 border rounded-4 p-2 bg-light-subtle">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">게시시간</div>
+
+            <div class="d-flex align-items-center gap-3">
+              <div class="small text-muted" id="txtRemainHint"></div>
+
+              <!-- ✅ 스케줄 사용: 항상 ON, UI 숨김 -->
+              <div class="form-check form-switch mb-0 d-none">
+                <input class="form-check-input" type="checkbox" role="switch" id="chkScheduleUse" checked>
+                <label class="form-check-label" for="chkScheduleUse">스케줄 사용</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="small text-muted mt-1" id="txtScheduleTopHint">
+            파일을 선택하면 게시시간 설정이 활성화됩니다.
+          </div>
+
+          <div class="mt-2 border rounded-4 p-2 bg-white" id="schedulePanel">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="btn-group btn-group-sm" role="group" aria-label="startMode">
+                <input type="radio" class="btn-check" name="startMode" id="startModeNow" autocomplete="off" checked>
+                <label class="btn btn-outline-primary" for="startModeNow">즉시 게시(현재 시각)</label>
+
+                <input type="radio" class="btn-check" name="startMode" id="startModeAt" autocomplete="off">
+                <label class="btn btn-outline-primary" for="startModeAt">예약 게시(시각 지정)</label>
+              </div>
+              <div class="small text-muted" id="txtStartModeHint"></div>
+            </div>
+
+            <div id="nowStartRow" class="mb-2" style="display:none;">
+              <div class="tiny text-muted">시작(게시 예정)</div>
+              <div class="fw-semibold mono" id="txtNowStart">업로드 시점(서버 기준)</div>
+              <div class="tiny text-muted mt-1">예상 종료(기간 기준)</div>
+              <div class="fw-semibold mono" id="txtNowEnd">-</div>
+              <div class="tiny text-muted mt-1" id="txtNowQueueHint"></div>
+            </div>
+
+            <div class="row g-2 align-items-end" id="atStartRow">
+              <div class="col-6">
+                <label class="form-label small text-muted mb-1">시작(게시 예정)</label>
+                <input id="dtStart" type="datetime-local" class="form-control form-control-sm">
+              </div>
+              <div class="col-6">
+                <label class="form-label small text-muted mb-1">종료(만료 예정)</label>
+                <input id="dtEnd" type="datetime-local" class="form-control form-control-sm">
+              </div>
+            </div>
+
+            <div class="mt-2">
+              <div class="d-flex gap-2 align-items-end">
+                <div style="min-width:72px;">
+                  <label class="form-label small text-muted mb-1">DD</label>
+                  <input id="durD" type="number" class="form-control form-control-sm" min="0" value="0">
+                </div>
+                <div style="min-width:72px;">
+                  <label class="form-label small text-muted mb-1">HH</label>
+                  <input id="durH" type="number" class="form-control form-control-sm" min="0" max="999" value="1">
+                </div>
+                <div style="min-width:72px;">
+                  <label class="form-label small text-muted mb-1">MM</label>
+                  <input id="durM" type="number" class="form-control form-control-sm" min="0" max="59" value="0">
+                </div>
+
+                <div class="ms-auto small">
+                  <div class="text-muted">계산된 게시시간</div>
+                  <div class="fw-semibold mono" id="txtPeriod">00:01:00</div>
+                </div>
+              </div>
+
+              <div class="small text-muted mt-1">
+                ※ 예약 모드: 종료일 ↔ 기간 자동 계산<br>
+                ※ 즉시 모드: 업로드 시점 기준으로 기간이 적용됩니다.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="small text-muted mt-2">
+          ※ 프리뷰는 onelayer.bmp 기준입니다.
+        </div>
+      </div>
+    </div>
+
+    <!-- (3) preview -->
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">선택 문서 미리보기(onelayer.bmp)</div>
+          <span class="badge rounded-pill badge-pill">preview</span>
+        </div>
+
+        <div class="preview-surface mid">
+          <img id="imgSelected" class="preview-img" src="" alt="선택 문서 프리뷰">
+        </div>
+
+        <div class="small text-muted mt-2" id="selPreviewHint">
+          좌측 목록에서 문서를 선택하면 미리보기가 표시됩니다.
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /docFinderArea -->
+
+  <!-- BELOW AREA -->
+  <div class="grid-3">
+
+    <!-- schedule table -->
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">디바이스 게시 스케줄(확정)</div>
+
+          <div class="d-flex gap-2 align-items-center">
+            <!-- ✅ (2) 재계산 -> 수정(편집 모드 토글 + 만료처리 가능) -->
+            <button id="btnEdit" class="btn btn-sm btn-outline-secondary mini-btn">수정</button>
+            <button id="btnApplyReorder" class="btn btn-sm btn-dark mini-btn" disabled>변경 적용</button>
+            <span class="edit-pill" id="pillEdit">편집 OFF</span>
+          </div>
+        </div>
+
+        <div class="small text-muted mb-2" id="scheduleRuleHint">
+          ※ 기본 제외: expire_time &lt; 현재 시각 또는 status=expired<br>
+          ※ active는 이동 불가 / wait만 순서 변경 가능(이동 시 expire_time 기준으로 연쇄 재계산)<br>
+          ※ <span class="fw-semibold">편집 ON</span>에서 wait/active 항목을 <span class="fw-semibold">expired</span>로 “만료 처리” 가능
+        </div>
+
+        <div class="table-responsive" style="max-height: 28vh;">
+          <table class="table table-sm align-middle mb-0 tbl-fixed">
+            <thead class="table-light">
+              <tr>
+                <th style="width:40px;"></th>
+                <th style="width:50px;">ID</th>
+                <th style="width:140px;">파일명</th>
+                <th style="width:100px;">상태</th>
+                <th style="width:160px;">게시(예정)시간</th>
+                <th style="width:120px;">게시기간</th>
+                <th style="width:160px;">게시완료시간</th>
+              </tr>
+            </thead>
+            <tbody id="tbodySchedule">
+              <tr><td colspan="7" class="text-muted small py-3">로딩 중...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="small text-muted mt-2" id="txtScheduleInfo"></div>
+      </div>
+    </div>
+
+    <!-- current preview -->
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">현재 디바이스 표시</div>
+          <div class="small text-muted">current</div>
+        </div>
+
+        <div class="preview-surface big">
+          <img id="imgCurrent" class="preview-img" src="" alt="현재 표시 프리뷰">
+        </div>
+
+        <div class="small text-muted mt-2">
+          Current: <span id="curInfo">-</span> / CRC: <span id="curCrc">-</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- next preview -->
+    <div class="card card-soft">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <!-- ✅ (4) 클릭 시 “다음 표시 프리뷰” -> “미리보기”로 변경 -->
+          <div>
+            <div class="fw-semibold" id="nextTitle">다음 표시 프리뷰</div>
+            <div class="small text-muted" id="nextInfo">-</div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <button id="btnPreviewReset" class="btn btn-sm btn-outline-secondary mini-btn" style="display:none;">다음 표시로</button>
+            <div class="small text-muted">next</div>
+          </div>
+        </div>
+
+        <div class="preview-surface big">
+          <img id="imgNext" class="preview-img" src="" alt="다음 표시 프리뷰">
+        </div>
+
+        <div class="small text-muted mt-2" id="nextHint">
+          스케줄이 존재할 경우 다음 표시(첫 wait)가 이 영역에 표시됩니다. (PNG)
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+(() => {
+  const DBG = false;
+  function dbg(...a){ if(DBG) console.debug("[e_file_upload]", ...a); }
+
+  const ENABLE_DEVICE_LOG = false;
+
+  const DEVICE_ID = "{{ device_id }}";
+  const LIMIT = 10;
+
+  const st = {
+    channel: "bulletin",
+    q: "",
+    sort: "newest",
+    page: 1,
+    selected: null,
+
+    building_id: 2,
+    floor_no: 2,
+    board_no: 1,
+    board_code: "",
+
+    schedule_items: [],
+    schedule_dirty: false,
+
+    // ✅ 변경 종류 분리
+    schedule_dirty_reorder: false,
+    schedule_dirty_status: false,
+
+    // ✅ 편집 모드
+    schedule_edit_mode: false,
+
+    // ✅ (4) 스케줄 테이블 클릭 미리보기(override)
+    preview_override: null,
+    preview_selected_idx: -1,
+
+    // ✅ (1) “그 다음 스케줄(첫 wait)” 캐시
+    next_from_schedule: null,
+
+    docs_has_next: false,
+  };
+
+  let _devReqSeq = 0;
+  let _scheduleMinStart = null;
+  let _scheduleBaseMaxExpire = null;
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){
+    return (s||"")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;");
+  }
+  function setImg(imgEl, url){
+    imgEl.src = url ? (url + (url.includes('?')?'&':'?') + 't=' + Date.now()) : '';
+  }
+
+  async function api(url, opt){
+    dbg("api:", url, opt||{});
+    const r = await fetch(url, opt);
+    if(!r.ok){
+      const t = await r.text().catch(()=> "");
+      dbg("api fail:", r.status, t);
+      throw new Error(`${url} -> ${r.status} ${t ? ("| " + t.slice(0,200)) : ""}`);
+    }
+    return r.json();
+  }
+
+  async function loadBoards(){
+    const qs = new URLSearchParams({ building_id: String(st.building_id), floor_no: String(st.floor_no) });
+    return api(`/dashboard/boards?` + qs.toString());
+  }
+  async function loadDocs(){
+    return api(`/dashboard/docs?` + new URLSearchParams({
+      device_id: DEVICE_ID,
+      channel: st.channel,
+      q: st.q || "",
+      page: String(st.page),
+      limit: String(LIMIT),
+      sort: st.sort || "newest",
+    }).toString());
+  }
+  async function loadBoard(){
+    return api(`/dashboard/board?device_id=${encodeURIComponent(DEVICE_ID)}`);
+  }
+  async function loadSchedule(){
+    return api(`/dashboard/schedule/list?` + new URLSearchParams({ device_id: DEVICE_ID }).toString());
+  }
+  async function applyUploadSelected(payload){
+    return api(`/dashboard/upload/select`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+  }
+  async function applyScheduleReorder(items){
+    return api(`/dashboard/schedule/reorder`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ device_id: DEVICE_ID, items })
+    });
+  }
+
+  // ✅ (2) wait/active -> expired 상태 변경 API (batch)
+  async function applyScheduleExpire(changes){
+    return api(`/dashboard/schedule/status`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ device_id: DEVICE_ID, items: changes })
+    });
+  }
+
+  async function logAccess(event, data){
+    if(!ENABLE_DEVICE_LOG) return;
+    try{
+      await api(`/dashboard/device/log`, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({ device_id: DEVICE_ID, event, data: data||{} })
+      });
+    }catch(e){
+      dbg("logAccess skipped:", e?.message);
+    }
+  }
+
+  (function initBoardFromQuery(){
+    const qs = new URLSearchParams(location.search || "");
+    const bno = Number(qs.get("board_no") || 0);
+    if(bno > 0) st.board_no = bno;
+  })();
+
+  function pad2(n){ return String(n).padStart(2,"0"); }
+  function fmtDT(s){ if(!s) return "-"; return String(s).replace("T"," ").slice(0,16); }
+  function parseServerDT(s){
+    if(!s) return null;
+    const v = String(s).trim().replace(" ", "T");
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function maxDate(arr){
+    let m = null;
+    for(const d of (arr||[])){
+      if(!d || isNaN(d.getTime())) continue;
+      if(!m || d.getTime() > m.getTime()) m = d;
+    }
+    return m;
+  }
+  function toLocalInputValue(dt){
+    const y = dt.getFullYear();
+    const m = pad2(dt.getMonth()+1);
+    const d = pad2(dt.getDate());
+    const hh = pad2(dt.getHours());
+    const mm = pad2(dt.getMinutes());
+    return `${y}-${m}-${d}T${hh}:${mm}`;
+  }
+  function parseLocalInputValue(v){
+    if(!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function secToDDHHMM(sec){
+    sec = Math.max(0, Number(sec||0));
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return {d, h, m};
+  }
+  function fmtPeriod(sec){
+    const t = secToDDHHMM(sec);
+    return `${pad2(t.d)}:${pad2(t.h)}:${pad2(t.m)}`;
+  }
+  function toast(msg){ alert(msg); }
+
+  // ---------- Device strip (원본 유지) ----------
+  function renderDeviceStrip(devices, opt = {}) {
+    const wrap = $("devStrip");
+    if (!wrap) return;
+
+    const state = opt.state || "ready";
+    if (state === "loading") {
+      wrap.innerHTML = `<div class="small text-muted py-2">디바이스 목록을 불러오는 중입니다…</div>`;
+      return;
+    }
+    if (state === "switching") {
+      const msg = opt.msg || "선택한 게시판의 디바이스로 전환 중입니다…";
+      wrap.innerHTML = `<div class="small text-muted py-2">${msg}</div>`;
+      return;
+    }
+
+    if (!Array.isArray(devices) || devices.length === 0) {
+      wrap.innerHTML = `<div class="small text-muted py-2">선택한 게시판에 등록된 디바이스가 없습니다.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = devices.map(d => {
+      const did = String(d.device_id || "");
+      const isActive = (did === String(DEVICE_ID));
+      return `
+        <a class="dev-item ${isActive ? "active" : ""}" href="/dashboard/device/${encodeURIComponent(did)}">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="fw-semibold">${did}</div>
+          </div>
+        </a>
+      `;
+    }).join("");
+  }
+
+  async function refreshDevicesByBoard() {
+    const seq = ++_devReqSeq;
+    renderDeviceStrip(null, { state: "loading" });
+
+    const url =
+      `/dashboard/board_devices?building_id=${encodeURIComponent(st.building_id)}&floor_no=${encodeURIComponent(st.floor_no)}&board_no=${encodeURIComponent(st.board_no)}`;
+
+    let data;
+    try { data = await api(url); }
+    catch (e) {
+      if (seq !== _devReqSeq) return;
+      renderDeviceStrip([], { state: "ready" });
+      return;
+    }
+    if (seq !== _devReqSeq) return;
+
+    const devices = Array.isArray(data?.items) ? data.items : [];
+    const hasCurrent = devices.some(x => String(x.device_id) === String(DEVICE_ID));
+
+    if (devices.length > 0 && !hasCurrent) {
+      renderDeviceStrip(null, {
+        state: "switching",
+        msg: `선택한 게시판의 첫 디바이스(${devices[0].device_id})로 이동합니다…`
+      });
+      location.href = `/dashboard/device/${encodeURIComponent(devices[0].device_id)}`;
+      return;
+    }
+    renderDeviceStrip(devices);
+  }
+
+  async function renderBoards(){
+    const data = await loadBoards();
+    const items = data.items || [];
+    const defNo = Number(data.default_board_no || 1);
+
+    if(!items.some(x => Number(x.board_no) === Number(st.board_no))){
+      st.board_no = Number(defNo || 1);
+    }
+
+    const sel = $("selBoardNo");
+    sel.innerHTML = items.length
+      ? items.map(b => {
+          const no = Number(b.board_no);
+          const code = String(b.board_code||"");
+          const selected = (no === st.board_no) ? "selected" : "";
+          return `<option value="${esc(String(no))}" ${selected}>${esc(code||("-"))}</option>`;
+        }).join("")
+      : `<option value="1" selected>-</option>`;
+
+    const cur = items.find(x => Number(x.board_no) === st.board_no) || items[0] || null;
+    st.board_code = cur ? String(cur.board_code||"") : "";
+    $("txtBoardCode").textContent = st.board_code || "-";
+
+    sel.onchange = async () => {
+      st.board_no = Number(sel.value || 1);
+      const picked = items.find(x => Number(x.board_no) === st.board_no) || null;
+      st.board_code = picked ? String(picked.board_code||"") : "";
+      $("txtBoardCode").textContent = st.board_code || "-";
+
+      logAccess("board_change", {
+        building_id: st.building_id,
+        floor_no: st.floor_no,
+        board_no: st.board_no,
+        board_code: st.board_code
+      });
+
+      await refreshDevicesByBoard();
+    };
+  }
+
+  // ---------- Selected ----------
+  function setScheduleInputsDisabled(disabled){
+    const ids = ["startModeNow","startModeAt","dtStart","dtEnd","durD","durH","durM"];
+    ids.forEach(id => {
+      const el = $(id);
+      if(!el) return;
+      el.disabled = !!disabled;
+    });
+  }
+
+  function renderSelected(){
+    const s = st.selected;
+
+    $("selDocLabel").textContent = s ? `[${s.id}] ${s.orig_filename || "-"}` : "-";
+    $("selDocPath").textContent  = s ? (s.stored_path || "") : "";
+    $("btnApplyUpload").disabled = !s;
+    $("btnClearSel").disabled    = !s;
+    setImg($("imgSelected"), s?.preview_url);
+    $("selPreviewHint").textContent = s ? "미리보기를 확인하신 후 확정할 수 있습니다." : "좌측 목록에서 문서를 선택하면 미리보기가 표시됩니다.";
+
+    $("chkScheduleUse").checked = true;
+
+    if(!s){
+      $("txtScheduleTopHint").textContent = "파일을 선택하면 게시시간 설정이 활성화됩니다.";
+      setScheduleInputsDisabled(true);
+      $("txtRemainHint").textContent = "";
+      applyStartModeUI();
+      return;
+    }
+
+    $("txtScheduleTopHint").textContent = "선택한 파일에 대해 게시 스케줄을 설정할 수 있습니다.";
+    setScheduleInputsDisabled(false);
+
+    primeSchedulePanelFromDevice().catch(()=>{});
+  }
+
+  async function renderDocs(){
+    $("tbodyDocs").innerHTML = `<tr><td colspan="5" class="text-muted small py-3">로딩 중...</td></tr>`;
+    const data = await loadDocs();
+
+    $("pageNo").textContent = String(st.page);
+
+    const items = data.items || [];
+    if(items.length === 0){
+      $("tbodyDocs").innerHTML = `<tr><td colspan="5" class="text-muted small py-3">검색 결과가 없습니다.</td></tr>`;
+      return;
+    }
+
+    $("tbodyDocs").innerHTML = items.map(it => `
+      <tr class="row-click" data-id="${esc(String(it.id))}">
+        <td class="text-muted">${esc(String(it.id))}</td>
+        <td title="${esc(it.orig_filename||"")}">${esc(it.orig_filename || "-")}</td>
+        <td class="text-muted">${esc(fmtDT(it.created_at))}</td>
+        <td class="text-muted">${esc(fmtDT(it.approved_at))}</td>
+        <td class="text-muted">${esc(it.post_period || "-")}</td>
+      </tr>
+    `).join("");
+
+    $("tbodyDocs").querySelectorAll("tr.row-click").forEach(tr=>{
+      tr.addEventListener("click", ()=> {
+        const id = Number(tr.dataset.id);
+        const picked = items.find(x => Number(x.id) === id);
+        if(!picked) return;
+
+        const same = st.selected && Number(st.selected.id) === id;
+        $("tbodyDocs").querySelectorAll("tr.row-click").forEach(x=>x.classList.remove("table-active"));
+
+        if(same){
+          st.selected = null;
+          renderSelected();
+          logAccess("doc_select_clear", { doc_id: id, channel: st.channel });
+          return;
+        }
+
+        tr.classList.add("table-active");
+        st.selected = picked;
+        renderSelected();
+        // ✅ docs row-click 시, next preview를 "미리보기"로 전환해서 선택한 문서 프리뷰 표시
+        st.preview_selected_idx = -1;           // schedule table 선택 흔적 제거
+        st.preview_override = {
+          id: picked.id,
+          orig_filename: picked.orig_filename || "-",
+          preview_png_url: picked.preview_url || ""   // doc preview_url 그대로 사용
+        };
+        // schedule table 하이라이트 제거
+        $("tbodySchedule")?.querySelectorAll("tr")?.forEach(x => x.classList.remove("row-selected"));
+
+        applyNextPreview();
+
+
+        logAccess("doc_select", { doc_id: id, channel: st.channel, filename: picked.orig_filename });
+      });
+    });
+
+    st.docs_has_next = !!data.has_next;
+    $("btnPrev").disabled = (st.page <= 1);
+    $("btnNext").disabled = !st.docs_has_next;
+  }
+
+  // ---------- Board current/next ----------
+  async function renderBoard(){
+    const b = await loadBoard();
+
+    const cur = b.current || null;
+    const nxt = b.next || null;
+
+    $("curInfo").textContent = cur ? (cur.title || `doc#${cur.doc_id || cur.asset_id}`) : "-";
+    $("curCrc").textContent  = cur ? (cur.crc32 || "-") : "-";
+    setImg($("imgCurrent"), cur?.preview_url);
+
+    // “다음”은 스케줄 기반 PNG가 우선 (요구사항 1)
+    // fallback: /dashboard/board next
+    if(!st.preview_override){
+      if(st.next_from_schedule && st.next_from_schedule.preview_png_url){
+        setImg($("imgNext"), st.next_from_schedule.preview_png_url);
+        $("nextInfo").textContent = `next(wait): #${st.next_from_schedule.id} / ${st.next_from_schedule.orig_filename || "-"}`;
+      } else {
+        setImg($("imgNext"), nxt?.preview_url);
+        $("nextInfo").textContent = nxt ? `next(board): ${nxt.title || ("#"+(nxt.asset_id||nxt.doc_id||"-"))}` : "-";
+      }
+    }
+  }
+
+  // ---------- Next preview (override 포함) ----------
+  function setNextHeader(mode){
+    // mode: "next" | "preview"
+    if(mode === "preview"){
+      $("nextTitle").textContent = "미리보기";
+      $("btnPreviewReset").style.display = "";
+    } else {
+      $("nextTitle").textContent = "다음 표시 프리뷰";
+      $("btnPreviewReset").style.display = "none";
+    }
+  }
+
+  function applyNextPreview(){
+    if(st.preview_override){
+      const it = st.preview_override;
+      setNextHeader("preview");
+      const url = it.preview_png_url || it.preview_url || "";
+      setImg($("imgNext"), url);
+      $("nextInfo").textContent = `preview: #${it.id} / ${it.orig_filename || "-"}`;
+      $("nextHint").textContent = "스케줄 테이블에서 선택된 항목의 PNG 미리보기입니다.";
+      return;
+    }
+
+    setNextHeader("next");
+    $("nextHint").textContent = "스케줄이 존재할 경우 다음 표시(첫 wait)가 이 영역에 표시됩니다. (PNG)";
+
+    if(st.next_from_schedule && st.next_from_schedule.preview_png_url){
+      setImg($("imgNext"), st.next_from_schedule.preview_png_url);
+      $("nextInfo").textContent = `next(wait): #${st.next_from_schedule.id} / ${st.next_from_schedule.orig_filename || "-"}`;
+      return;
+    }
+
+    // fallback: renderBoard에서 /dashboard/board next로 채우므로 여기서는 info만
+    $("nextInfo").textContent = $("nextInfo").textContent || "-";
+  }
+
+  $("btnPreviewReset").addEventListener("click", ()=>{
+    st.preview_override = null;
+    st.preview_selected_idx = -1;
+    $("tbodySchedule")?.querySelectorAll("tr")?.forEach(x=>x.classList.remove("row-selected"));
+    applyNextPreview();
+  });
+
+  // ---------- Schedule panel (원본 유지) ----------
+  function getStartMode(){
+    const rNow = $("startModeNow");
+    if(rNow && rNow.checked) return "now";
+    return "at";
+  }
+
+  function applyStartModeUI(){
+    const mode = getStartMode();
+    $("nowStartRow").style.display = (mode === "now") ? "" : "none";
+    $("atStartRow").style.display  = (mode === "at")  ? "" : "none";
+
+    const hint = $("txtStartModeHint");
+    hint.textContent = (mode === "now") ? "업로드 확정 시 서버 시각 기준으로 시작됩니다." : "";
+
+    renderNowQueueHint();
+    updateEndFromPeriod();
+  }
+
+  function renderNowQueueHint(){
+    const el = $("txtNowQueueHint");
+    if(!el) return;
+
+    const now = new Date();
+    if(_scheduleBaseMaxExpire && _scheduleBaseMaxExpire.getTime() > now.getTime()){
+      const baseStr = fmtDT(toLocalInputValue(_scheduleBaseMaxExpire));
+      el.textContent = `※ 현재 게시 또는 예약이 존재합니다. 실제 시작 시각은 ${baseStr} 이후로 자동 대기 처리됩니다.`;
+    } else {
+      el.textContent = "";
+    }
+  }
+
+  function updatePeriodFromDates(){
+    if(getStartMode() !== "at") return;
+
+    const s = parseLocalInputValue($("dtStart").value);
+    const e = parseLocalInputValue($("dtEnd").value);
+    if(!s || !e) return;
+
+    const sec = Math.max(60, Math.floor((e.getTime() - s.getTime()) / 1000));
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+
+    $("durD").value = String(d);
+    $("durH").value = String(h);
+    $("durM").value = String(m);
+
+    $("txtPeriod").textContent = fmtPeriod(sec);
+  }
+
+  function updateEndFromPeriod(){
+    const d = parseInt($("durD").value || "0", 10);
+    const h = parseInt($("durH").value || "0", 10);
+    const m = parseInt($("durM").value || "0", 10);
+    const sec = Math.max(60, (d*86400) + (h*3600) + (m*60));
+    $("txtPeriod").textContent = fmtPeriod(sec);
+
+    const mode = getStartMode();
+    if(mode === "now"){
+      const now = new Date();
+      const e = new Date(now.getTime() + sec*1000);
+      $("txtNowStart").textContent = "업로드 확정 시점(서버 기준)";
+      $("txtNowEnd").textContent = fmtDT(toLocalInputValue(e));
+      return;
+    }
+
+    const s = parseLocalInputValue($("dtStart").value);
+    if(!s) return;
+    const e = new Date(s.getTime() + sec*1000);
+    $("dtEnd").value = toLocalInputValue(e);
+  }
+
+  function clampScheduleStartMin(){
+    if(getStartMode() !== "at") return;
+    if(!_scheduleMinStart) return;
+
+    const s = parseLocalInputValue($("dtStart").value);
+    if(!s) return;
+
+    if(s.getTime() < _scheduleMinStart.getTime()){
+      $("dtStart").value = toLocalInputValue(_scheduleMinStart);
+      updateEndFromPeriod();
+      toast("게시 시작 시각은 기존 게시(또는 예약) 만료 이후로만 설정할 수 있습니다.");
+    }
+  }
+
+  async function primeSchedulePanelFromDevice(){
+    const sc = await loadSchedule().catch(()=>null);
+    const now = new Date();
+
+    let baseMax = null;
+    if(sc && sc.active_expire_time){
+      baseMax = parseServerDT(sc.active_expire_time);
+    }
+
+    const itemExp = [];
+    for(const it of (sc && sc.items) ? sc.items : []){
+      const d = parseServerDT(it && it.expire_time);
+      if(d) itemExp.push(d);
+    }
+    const maxItemExpire = maxDate(itemExp);
+    baseMax = maxDate([baseMax, maxItemExpire]);
+    _scheduleBaseMaxExpire = baseMax;
+
+    const minStart = (baseMax && baseMax.getTime() > now.getTime()) ? baseMax : now;
+    _scheduleMinStart = minStart;
+
+    $("dtStart").min = toLocalInputValue(minStart);
+    $("dtEnd").min   = toLocalInputValue(minStart);
+
+    if(getStartMode() === "at"){
+      $("dtStart").value = toLocalInputValue(minStart);
+      updateEndFromPeriod();
+    } else {
+      updateEndFromPeriod();
+    }
+
+    if(baseMax && baseMax.getTime() > now.getTime()){
+      const remainSec = Math.max(0, Math.floor((baseMax.getTime() - now.getTime()) / 1000));
+      $("txtRemainHint").textContent = `남은 게시: ${fmtPeriod(remainSec)} (만료: ${fmtDT(toLocalInputValue(baseMax))})`;
+    } else {
+      $("txtRemainHint").textContent = "";
+    }
+
+    renderNowQueueHint();
+  }
+
+  $("dtStart").addEventListener("change", ()=>{
+    clampScheduleStartMin();
+    updateEndFromPeriod();
+  });
+  $("dtEnd").addEventListener("change", ()=>{
+    const s = parseLocalInputValue($("dtStart").value);
+    let e = parseLocalInputValue($("dtEnd").value);
+    if(!s || !e) return;
+    if(e.getTime() <= s.getTime()){
+      e = new Date(s.getTime() + 60*1000);
+      $("dtEnd").value = toLocalInputValue(e);
+    }
+    updatePeriodFromDates();
+  });
+  ["durD","durH","durM"].forEach(id=>{
+    $(id).addEventListener("input", ()=>{
+      clampScheduleStartMin();
+      updateEndFromPeriod();
+    });
+  });
+  $("startModeNow").addEventListener("change", applyStartModeUI);
+  $("startModeAt").addEventListener("change", applyStartModeUI);
+
+  // ---------- Schedule edit / dirty ----------
+  function setEditPill(on){
+    const pill = $("pillEdit");
+    pill.classList.toggle("on", !!on);
+    pill.textContent = on ? "편집 ON" : "편집 OFF";
+  }
+
+  function markDirty(reason){
+    // reason: "reorder" | "status" | undefined
+    if(reason === "reorder") st.schedule_dirty_reorder = true;
+    if(reason === "status") st.schedule_dirty_status = true;
+
+    st.schedule_dirty = !!(st.schedule_dirty_reorder || st.schedule_dirty_status);
+    $("btnApplyReorder").disabled = !st.schedule_dirty;
+  }
+
+  function recomputeScheduleTimes(){
+    const now = new Date();
+    const items = st.schedule_items || [];
+    const active = items.find(x => x.status === "active") || null;
+
+    let anchor = null;
+    if(active && active.expire_time){
+      anchor = parseServerDT(active.expire_time);
+    }
+    if(!anchor) anchor = now;
+
+    let prevExpire = anchor;
+
+    for(const it of items){
+      if(it.status === "active"){
+        const e = parseServerDT(it.expire_time);
+        if(e) prevExpire = e;
+        continue;
+      }
+      if(it.status !== "wait") continue;
+      if(it._pending_status === "expired") continue; // ✅ 만료 예약은 계산 제외
+
+      const periodSec = Number(it.posting_period_time || 0);
+      const minSec = Math.max(60, periodSec);
+      const newStart = new Date(prevExpire.getTime());
+      const newEnd   = new Date(prevExpire.getTime() + minSec*1000);
+
+      it.expect_post_time = toLocalInputValue(newStart).replace("T"," ") + ":00";
+      it.expire_time      = toLocalInputValue(newEnd).replace("T"," ") + ":00";
+      prevExpire = newEnd;
+    }
+  }
+
+  // ✅ (3) apply 전에 “stale schedule” 감지: expect_post < now 인 wait가 있으면 reload 후 중단
+  function detectStaleSchedule(){
+    const now = new Date();
+    for(const it of (st.schedule_items||[])){
+      if(String(it.status||"") !== "wait") continue;
+      if(it._pending_status === "expired") continue;
+      const d = parseServerDT(it.expect_post_time);
+      if(d && d.getTime() + 2000 < now.getTime()){ // 2초 여유
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // ✅ (1) 다음 표시(next) 후보를 “첫 wait”로 잡기
+  function refreshNextFromSchedule(){
+    const items = st.schedule_items || [];
+    const firstWait = items.find(x => String(x.status||"") === "wait" && x._pending_status !== "expired") || null;
+    st.next_from_schedule = firstWait ? {
+      id: firstWait.id ?? firstWait.asset_id ?? "-",
+      orig_filename: firstWait.orig_filename || "-",
+      preview_png_url: firstWait.preview_png_url || firstWait.preview_url || ""
+    } : null;
+  }
+
+  function renderScheduleTable(){
+    const items = st.schedule_items || [];
+    if(items.length === 0){
+      $("tbodySchedule").innerHTML = `<tr><td colspan="7" class="text-muted small py-3">표시할 항목이 없습니다.</td></tr>`;
+      $("txtScheduleInfo").textContent = "";
+      return;
+    }
+
+    const activeExpire = (items.find(x=>x.status==="active")||{}).expire_time || "-";
+    $("txtScheduleInfo").textContent = `active 만료 기준: ${fmtDT(activeExpire)} / wait 항목은 순서대로 자동 계산됩니다.`;
+
+    $("tbodySchedule").innerHTML = items.map((it, idx) => {
+      const isActive = it.status === "active";
+      const canUp = !isActive && it.status === "wait" && idx > 0 && items[idx-1].status !== "active";
+      const canDn = !isActive && it.status === "wait" && idx < items.length-1;
+
+      const pendingExpired = (it._pending_status === "expired");
+      const showStatus = pendingExpired ? "expired*" : (it.status||"-");
+
+      const badgeClass = pendingExpired
+        ? "text-bg-warning"
+        : ((it.status==="active") ? "text-bg-success" : "text-bg-secondary");
+
+      const periodTxt = fmtPeriod(Number(it.posting_period_time||0));
+
+      const canExpire = st.schedule_edit_mode && (it.status==="wait" || it.status==="active");
+
+      // ✅ 편집 ON 일 때만 “만료” 버튼 노출
+      const expireBtn = canExpire
+        ? `<button class="btn btn-sm btn-outline-danger mini-btn btn-expire" ${pendingExpired ? "disabled" : ""} title="expired로 변경">만료</button>`
+        : ``;
+
+      return `
+        <tr data-idx="${esc(String(idx))}" class="${(idx===st.preview_selected_idx) ? "row-selected" : ""}">
+          <td class="text-muted">
+            <div class="d-flex gap-1">
+              <button class="btn btn-outline-secondary btn-sm btn-icon btn-up" ${canUp ? "" : "disabled"} title="위로 이동">▲</button>
+              <button class="btn btn-outline-secondary btn-sm btn-icon btn-dn" ${canDn ? "" : "disabled"} title="아래로 이동">▼</button>
+            </div>
+          </td>
+          <td class="text-muted">${esc(String(it.id ?? it.asset_id ?? "-"))}</td>
+          <td title="${esc(it.orig_filename||"")}">${esc(it.orig_filename||"-")}</td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge ${badgeClass}">${esc(showStatus)}</span>
+              ${expireBtn}
+            </div>
+          </td>
+          <td class="text-muted mono">${esc(fmtDT(it.expect_post_time))}</td>
+          <td class="text-muted mono">${esc(periodTxt)}</td>
+          <td class="text-muted mono">${esc(fmtDT(it.expire_time))}</td>
+        </tr>
+      `;
+    }).join("");
+
+    $("tbodySchedule").querySelectorAll("tr").forEach(tr=>{
+      const idx = Number(tr.dataset.idx);
+      const btnUp = tr.querySelector(".btn-up");
+      const btnDn = tr.querySelector(".btn-dn");
+      const btnExpire = tr.querySelector(".btn-expire");
+
+      if(btnUp) btnUp.addEventListener("click", (e)=>{ e.stopPropagation(); moveSchedule(idx, -1); });
+      if(btnDn) btnDn.addEventListener("click", (e)=>{ e.stopPropagation(); moveSchedule(idx, +1); });
+
+      // ✅ (2) 만료 처리(편집 ON에서만)
+      if(btnExpire) btnExpire.addEventListener("click", (e)=>{
+        e.stopPropagation();
+        setPendingExpire(idx);
+      });
+
+      // ✅ (4) 테이블 클릭 -> “다음 표시 프리뷰”를 “미리보기”로 전환 + PNG 표시
+      tr.addEventListener("click", ()=>{
+        const it = st.schedule_items[idx];
+        if(!it) return;
+
+        // 같은 항목 다시 누르면 토글 해제
+        if(st.preview_selected_idx === idx){
+          st.preview_override = null;
+          st.preview_selected_idx = -1;
+          $("tbodySchedule").querySelectorAll("tr").forEach(x=>x.classList.remove("row-selected"));
+          applyNextPreview();
+          return;
+        }
+
+        st.preview_selected_idx = idx;
+        $("tbodySchedule").querySelectorAll("tr").forEach(x=>x.classList.remove("row-selected"));
+        tr.classList.add("row-selected");
+
+        st.preview_override = {
+          id: it.id ?? it.asset_id ?? "-",
+          orig_filename: it.orig_filename || "-",
+          preview_png_url: it.preview_png_url || it.preview_url || ""
+        };
+        applyNextPreview();
+      });
+    });
+  }
+
+  function moveSchedule(idx, dir){
+    const items = st.schedule_items || [];
+    const cur = items[idx];
+    if(!cur || cur.status !== "wait") return;
+    if(cur._pending_status === "expired") return; // 만료 예약된 항목은 이동 의미 없음
+
+    const j = idx + dir;
+    if(j < 0 || j >= items.length) return;
+    if(items[j] && items[j].status === "active" && dir < 0) return;
+    if(items[j] && items[j]._pending_status === "expired") return;
+
+    items[idx] = items[j];
+    items[j] = cur;
+
+    recomputeScheduleTimes();
+    renderScheduleTable();
+    markDirty("reorder");
+
+    logAccess("schedule_move", { from: idx, to: j, asset_id: cur.asset_id ?? cur.id });
+  }
+
+  function setPendingExpire(idx){
+    const it = st.schedule_items[idx];
+    if(!it) return;
+    if(!(it.status === "wait" || it.status === "active")) return;
+    if(it._pending_status === "expired") return;
+
+    const ok = confirm(
+      `해당 항목을 expired로 변경하시겠습니까?\n\n` +
+      `- ID: ${it.id ?? it.asset_id ?? "-"}\n` +
+      `- 파일: ${it.orig_filename || "-"}\n` +
+      `- 현재상태: ${it.status}\n\n` +
+      `※ “변경 적용”을 눌러야 DB에 반영됩니다.`
+    );
+    if(!ok) return;
+
+    it._pending_status = "expired";
+    markDirty("status");
+    recomputeScheduleTimes();
+    renderScheduleTable();
+
+    // next 후보 재계산 + 프리뷰 반영
+    refreshNextFromSchedule();
+    if(!st.preview_override) applyNextPreview();
+  }
+
+  async function renderSchedule(){
+    $("tbodySchedule").innerHTML = `<tr><td colspan="7" class="text-muted small py-3">로딩 중...</td></tr>`;
+    const data = await loadSchedule();
+
+    st.schedule_items = (data.items || []).map(x => ({...x, _pending_status: null}));
+
+    // 기본 필터 유지
+    const now = new Date();
+    st.schedule_items = st.schedule_items.filter(it => {
+      const stt = String(it.status||"");
+      if(stt === "expired") return false;
+      const exp = parseServerDT(it.expire_time);
+      if(exp && exp.getTime() < now.getTime()) return false;
+      return true;
+    });
+
+    // ✅ 다음 표시 후보 업데이트 (요구사항 1)
+    refreshNextFromSchedule();
+
+    // ✅ 프리뷰 오버라이드 상태면, 스케줄 reload 후에도 유지 가능한지 체크
+    if(st.preview_selected_idx >= 0){
+      if(st.preview_selected_idx >= st.schedule_items.length){
+        st.preview_selected_idx = -1;
+        st.preview_override = null;
+      }
+    }
+
+    renderScheduleTable();
+
+    // dirty reset
+    st.schedule_dirty = false;
+    st.schedule_dirty_reorder = false;
+    st.schedule_dirty_status = false;
+    $("btnApplyReorder").disabled = true;
+
+    // next preview 재적용
+    applyNextPreview();
+  }
+
+  // ---------- Refresh all ----------
+  async function refreshAll(){
+    try{
+      await renderBoards();
+      await refreshDevicesByBoard();
+      await Promise.all([ renderDocs(), renderSchedule() ]);
+      // renderBoard는 schedule 기반 next를 우선하므로 schedule 후 호출
+      await renderBoard();
+      applyNextPreview();
+    }catch(e){
+      console.debug("[e_file_upload] refreshAll error", e);
+      alert("대시보드 데이터를 불러오지 못했습니다.\n브라우저 콘솔 로그를 확인해 주십시오.");
+    }
+  }
+
+  // ---------- Channel / Search ----------
+  document.querySelectorAll("#tabChannel .nav-link").forEach(btn=>{
+    btn.addEventListener("click", async ()=>{
+      document.querySelectorAll("#tabChannel .nav-link").forEach(x=>x.classList.remove("active"));
+      btn.classList.add("active");
+
+      st.channel = btn.dataset.ch;
+      st.page = 1;
+      st.selected = null;
+      renderSelected();
+      await renderDocs();
+
+      logAccess("channel_change", { channel: st.channel });
+    });
+  });
+
+  let tSearch = null;
+  $("inSearch").addEventListener("input", ()=>{
+    clearTimeout(tSearch);
+    tSearch = setTimeout(async ()=>{
+      st.q = $("inSearch").value.trim();
+      st.page = 1;
+      await renderDocs();
+    }, 250);
+  });
+
+  $("selSort").addEventListener("change", async (e)=>{
+    st.sort = e.target.value;
+    st.page = 1;
+    await renderDocs();
+  });
+
+  $("btnPrev").addEventListener("click", async ()=>{
+    if(st.page <= 1) return;
+    st.page -= 1;
+    await renderDocs();
+  });
+  $("btnNext").addEventListener("click", async ()=>{
+    if(!st.docs_has_next) return;
+    st.page += 1;
+    await renderDocs();
+  });
+
+  $("btnClearSel").addEventListener("click", ()=>{
+    st.selected = null;
+    renderSelected();
+  });
+
+  // ---------- Upload apply ----------
+  $("btnApplyUpload").addEventListener("click", async ()=>{
+    if(!st.selected) return;
+
+    $("chkScheduleUse").checked = true;
+
+    const dd = parseInt($("durD").value || "0", 10);
+    const hh = parseInt($("durH").value || "0", 10);
+    const mm = parseInt($("durM").value || "0", 10);
+    const periodSec = Math.max(60, (dd*86400) + (hh*3600) + (mm*60));
+
+    const mode = getStartMode();
+    let schedule = { enabled:true, start_mode: mode, posting_period_time: periodSec };
+
+    if(mode === "at"){
+      const s = parseLocalInputValue($("dtStart").value);
+      const e = parseLocalInputValue($("dtEnd").value);
+      if(!s || !e || e.getTime() <= s.getTime()){
+        alert("게시시간 설정이 올바르지 않습니다.\n시작 및 종료 시각을 확인해 주십시오.");
+        return;
+      }
+      if(_scheduleMinStart && s.getTime() < _scheduleMinStart.getTime()){
+        alert("게시 시작 시각은 기존 게시(또는 예약) 만료 이후로만 설정할 수 있습니다.");
+        await primeSchedulePanelFromDevice();
+        return;
+      }
+      schedule = {
+        enabled:true,
+        start_mode:"at",
+        expect_post_time: toLocalInputValue(s).replace("T"," ") + ":00",
+        posting_period_time: periodSec,
+        expire_time: toLocalInputValue(new Date(s.getTime() + periodSec*1000)).replace("T"," ") + ":00",
+      };
+    }
+
+    const scheduleText =
+      (schedule.start_mode === "now")
+        ? `\n[스케줄]\n- 모드: 즉시 게시\n- 시작: 업로드 확정 시점(서버 기준, 중복 시 자동 대기)\n- 기간: ${fmtPeriod(schedule.posting_period_time)}\n`
+        : `\n[스케줄]\n- 모드: 예약 게시\n- 시작: ${schedule.expect_post_time}\n- 종료: ${schedule.expire_time}\n- 기간: ${fmtPeriod(schedule.posting_period_time)}\n`;
+
+    const ok = confirm(
+      `선택한 문서를 ${DEVICE_ID} 업로드 대상으로 확정하시겠습니까?\n\n`+
+      `- 문서: [${st.selected.id}] ${st.selected.orig_filename || ""}\n`+
+      `- 채널: ${st.channel}\n`+
+      `- 게시판: ${st.board_code || "-"} (board_no=${st.board_no})\n`+
+      scheduleText +
+      `\n※ 미리보기(onelayer.bmp)를 확인하셨다면 “확인”을 선택해 주십시오.`
+    );
+    if(!ok) return;
+
+    const payload = {
+      device_id: DEVICE_ID,
+      doc_id: st.selected.id,
+      channel: st.channel,
+      board: { building_id: st.building_id, floor_no: st.floor_no, board_no: st.board_no },
+      schedule,
+    };
+
+    await applyUploadSelected(payload);
+    await Promise.all([renderSchedule(), renderBoard()]);
+    alert("적용이 완료되었습니다.");
+    logAccess("upload_select_apply", payload);
+  });
+
+  // ---------- (2) 수정 버튼: 편집 모드 토글 ----------
+  $("btnEdit").addEventListener("click", ()=>{
+    st.schedule_edit_mode = !st.schedule_edit_mode;
+    setEditPill(st.schedule_edit_mode);
+
+    // 편집 OFF로 끌 때 변경사항이 남아있으면 경고
+    if(!st.schedule_edit_mode && st.schedule_dirty){
+      const ok = confirm("편집을 종료합니다.\n변경사항이 아직 적용되지 않았습니다.\n그대로 종료하시겠습니까?");
+      if(!ok){
+        st.schedule_edit_mode = true;
+        setEditPill(true);
+        return;
+      }
+    }
+
+    renderScheduleTable();
+  });
+
+  // ---------- (3) + (2) 변경 적용 버튼 ----------
+  $("btnApplyReorder").addEventListener("click", async ()=>{
+    if(!st.schedule_dirty) return;
+
+    // ✅ (3) stale 감지: expect_post_time이 이미 과거면, 서버에서 최신 상태를 다시 받아온 뒤 적용 유도
+    if(detectStaleSchedule()){
+      toast("현재 화면의 스케줄 정보가 최신이 아닙니다.\nDB에서 최신 스케줄을 다시 불러온 뒤 적용해 주세요.");
+      await renderSchedule();
+      await renderBoard();
+      return;
+    }
+
+    const warn = confirm(
+      "게시 스케줄(DB)을 변경합니다.\n" +
+      "변경 결과는 즉시 반영되며, 디바이스 게시 시각이 변경될 수 있습니다.\n\n" +
+      "변경을 적용하시겠습니까?"
+    );
+    if(!warn) return;
+
+    // 1) status 변경(만료 처리) 먼저
+    if(st.schedule_dirty_status){
+      const changes = (st.schedule_items||[])
+        .filter(it => it._pending_status === "expired" && (it.status==="wait" || it.status==="active"))
+        .map(it => ({ asset_id: it.asset_id ?? it.id, status: "expired" }));
+
+      if(changes.length > 0){
+        await applyScheduleExpire(changes);
+      }
+    }
+
+    // 2) reorder 적용 (만료 예약된 항목 제외)
+    if(st.schedule_dirty_reorder){
+      const items = (st.schedule_items || [])
+        .filter(it => it._pending_status !== "expired")
+        .map(it => ({
+          asset_id: it.asset_id ?? it.id,
+          expect_post_time: it.expect_post_time,
+          posting_period_time: Number(it.posting_period_time||0),
+        }));
+
+      await applyScheduleReorder(items);
+    }
+
+    // reload
+    st.preview_override = null;
+    st.preview_selected_idx = -1;
+    await renderSchedule();
+    await renderBoard();
+
+    alert("스케줄 변경이 반영되었습니다.");
+    logAccess("schedule_apply", {
+      reorder: st.schedule_dirty_reorder,
+      status: st.schedule_dirty_status
+    });
+  });
+
+  $("btnRefresh").addEventListener("click", refreshAll);
+
+  function setDocFinderVisible(on){
+    $("docFinderArea").style.display = on ? "" : "none";
+    if(on){
+      renderDocs().catch(()=>{});
+      renderSelected();
+      applyStartModeUI();
+    }
+  }
+  $("chkFinderDocs").addEventListener("change", (e)=>{
+    setDocFinderVisible(e.target.checked);
+  });
+
+  // init
+  $("chkFinderDocs").checked = false;
+  $("docFinderArea").style.display = "none";
+
+  $("chkScheduleUse").checked = true;
+  setScheduleInputsDisabled(true);
+  applyStartModeUI();
+  renderSelected();
+
+  // edit pill init
+  setEditPill(false);
+
+  refreshAll();
+})();
+</script>
+{% endblock %}

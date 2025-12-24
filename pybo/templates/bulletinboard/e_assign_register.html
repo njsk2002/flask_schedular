@@ -1,0 +1,1452 @@
+{% extends "e_base.html" %}
+{% block content %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="container-fluid mt-2">
+      {% for cat, msg in messages %}
+        <div class="alert alert-{{ cat }} py-2 mb-2">{{ msg }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+<div class="container-fluid py-3 assign-page">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h4 class="m-0">할당(Assign) 관리</h4>
+      <div class="small text-muted">
+        Step 1: 회사/건물 → Step 2: 게시판 → Step 3: 디바이스 → Step 4: 게시판↔디바이스 연결
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs assign-tabs" id="assignTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-company-building" data-bs-toggle="tab"
+              data-bs-target="#pane-company-building" type="button" role="tab">
+        1) 회사/건물 등록
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-board" data-bs-toggle="tab"
+              data-bs-target="#pane-board" type="button" role="tab">
+        2) 게시판 등록
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-device-register" data-bs-toggle="tab"
+              data-bs-target="#pane-device-register" type="button" role="tab">
+        3) 디바이스 등록
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-binding" data-bs-toggle="tab"
+              data-bs-target="#pane-binding" type="button" role="tab">
+        4)게시판↔디바이스 연결
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content pt-3">
+
+    <!-- =======================================================
+         TAB 1) Company / Building Register
+         ======================================================= -->
+    <div class="tab-pane fade show active" id="pane-company-building" role="tabpanel">
+
+      <!-- Company register -->
+      <div class="card card-soft mb-3">
+        <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+          <div class="fw-bold">회사 등록</div>
+          <div class="small text-muted">회사명/코드 중복 금지</div>
+        </div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('assign.company_register_post') }}"
+                class="row g-2 align-items-end w-100 mx-0">
+            <div class="col-12 col-lg-6 px-1">
+              <label class="form-label">회사명</label>
+              <input name="company_name" class="form-control" placeholder="예: 아이센스(ICEnse)" required>
+            </div>
+
+            <div class="col-12 col-lg-3 px-1">
+              <label class="form-label">회사코드(라벨용) <span class="text-danger">*</span></label>
+              <input name="company_code" class="form-control" placeholder="예: ICE" maxlength="8" required
+                     pattern="[A-Za-z0-9]{2,8}" title="영문/숫자 2~8자리 (예: ICE)">
+              <div class="form-text">Board 등록에 필수</div>
+            </div>
+
+            <div class="col-12 col-lg-3 d-grid px-1">
+              <button class="btn btn-primary btn-soft">회사 등록</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Building register -->
+      <div class="card card-soft mb-3">
+        <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+          <div class="fw-bold">건물 등록</div>
+          <div class="small text-muted">회사 선택 후 건물 추가</div>
+        </div>
+        <div class="card-body">
+          <form id="buildingForm" method="post" action="{{ url_for('assign.building_register_post') }}"
+                class="row g-2 align-items-end w-100 mx-0">
+
+            <div class="col-12 col-lg-3 px-1">
+              <label class="form-label">회사 선택</label>
+              <select class="form-select" name="company_id" required>
+                <option value="">-- 선택 --</option>
+                {% for c in companies %}
+                  <option value="{{ c.id }}">{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-lg-3 px-1">
+              <label class="form-label">건물명</label>
+              <input name="building_name" class="form-control" placeholder="예: 본관 / 공장동" required>
+            </div>
+
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">건물코드 <span class="text-danger">*</span></label>
+              <input name="building_code" class="form-control" placeholder="예: B01"
+                     maxlength="10" required
+                     pattern="[A-Za-z0-9]{2,10}" title="영문/숫자 2~10자리 (예: B01)">
+              <div class="form-text">Board 등록에 필수</div>
+            </div>
+
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">주소(선택)</label>
+              <input name="building_address" class="form-control" placeholder="예: 서울시 ...">
+            </div>
+
+            <div class="col-12 col-lg-2 d-grid px-1">
+              <button class="btn btn-primary btn-soft">건물 등록</button>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      <!-- Lists -->
+      <div class="row g-3">
+        <div class="col-xl-5">
+          <div class="card card-soft h-100">
+            <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+              <div class="fw-bold">회사 목록</div>
+              <div class="small text-muted">{{ companies|length }}개</div>
+            </div>
+            <div class="card-body table-wrap">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>ID</th><th>Company</th><th>Code</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for c in companies %}
+                    <tr>
+                      <td class="text-muted">{{ c.id }}</td>
+                      <td class="fw-semibold">{{ c.name }}</td>
+                      <td class="mono">{{ c.code or "-" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="card-footer small text-muted">
+              회사/건물 등록 후 게시판 등록 진행
+            </div>
+          </div>
+        </div>
+
+        <div class="col-xl-7">
+          <div class="card card-soft h-100">
+            <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+              <div class="fw-bold">건물 목록</div>
+              <div class="small text-muted">최근 {{ buildings|length }}개</div>
+            </div>
+            <div class="card-body table-wrap">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>ID</th><th>Company</th><th>Building</th><th>Code</th><th>Address</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for b in buildings %}
+                    <tr>
+                      <td class="text-muted">{{ b.id }}</td>
+                      <td>{{ b.company.name if b.company else "-" }}</td>
+                      <td class="fw-semibold">{{ b.name }}</td>
+                      <td class="mono">{{ b.code or "-" }}</td>
+                      <td class="text-muted">{{ b.address or "" }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="card-footer small text-muted">
+              건물코드가 있어야 게시판 등록 가능
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- =======================================================
+         TAB 2) Board Register
+         ======================================================= -->
+    <div class="tab-pane fade" id="pane-board" role="tabpanel">
+
+      {% if companies|length == 0 %}
+        <div class="alert alert-warning">
+          회사가 아직 없어. 먼저 <b>1) 회사/건물 등록</b> 탭에서 회사를 등록해줘.
+        </div>
+      {% endif %}
+
+      <div class="card card-soft mb-3">
+        <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+          <div class="fw-bold">게시판 등록</div>
+          <div class="small text-muted">회사/건물 선택 기반 · 코드 없으면 등록 불가</div>
+        </div>
+
+        <div class="card-body">
+          <form method="post" action="{{ url_for('assign.board_register_post') }}"
+                class="row g-2 align-items-end w-100 mx-0" id="boardForm">
+
+            <div class="col-12 col-lg-3 px-1">
+              <label class="form-label">회사 선택</label>
+              <select class="form-select" name="company_id" id="companySelect2">
+                <option value="">-- 선택 --</option>
+                {% for c in companies %}
+                  <option value="{{ c.id }}" data-code="{{ c.code or '' }}">{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">지점(SITE)</label>
+              <input class="form-control" name="site_code" id="siteCode2" value="HQ" maxlength="10">
+            </div>
+
+            <div class="col-12 col-lg-4 px-1">
+              <label class="form-label">건물 선택</label>
+              <select class="form-select" name="building_id" id="buildingSelect2" disabled required>
+                <option value="">회사 먼저 선택</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-lg-3 px-1">
+              <label class="form-label">건물코드(자동 표시)</label>
+              <input class="form-control mono" id="buildingCode2" placeholder="B01" maxlength="10" readonly>
+              <div class="form-text">건물코드가 없으면 등록 불가</div>
+            </div>
+
+            <div class="col-12"><hr class="my-2"></div>
+
+            <!-- 6개 한 줄 -->
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">층 구분</label>
+              <select class="form-select" id="floorType2">
+                <option value="G" selected>지상</option>
+                <option value="B">지하</option>
+                <option value="O">옥외/미정</option>
+              </select>
+            </div>
+
+            <div class="col-12 col-lg-1 px-1">
+              <label class="form-label">층 번호</label>
+              <input type="number" class="form-control" id="floorNumber2" value="1" min="1" max="99">
+              <input type="hidden" name="floor_no" id="floorNoHidden2" value="1">
+            </div>
+
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">게시판 번호(board_no)</label>
+              <div class="input-group">
+                <input type="number" class="form-control" name="board_no" id="boardNo2"
+                       placeholder="자동" min="1" max="999">
+                <span class="input-group-text">
+                  <input class="form-check-input mt-0" type="checkbox" id="autoBoardNo2" checked>
+                  <span class="ms-2">자동</span>
+                </span>
+              </div>
+              <div class="form-text">UNIQUE: (building_id,floor_no,board_no)</div>
+            </div>
+
+            <div class="col-12 col-lg-3 px-1">
+              <label class="form-label">게시판 이름</label>
+              <input class="form-control" name="name" id="boardName2" placeholder="예: 3층 엘리베이터 앞" required>
+            </div>
+
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">위치 설명(선택)</label>
+              <input class="form-control" name="location_desc" placeholder="예: 우측 벽면 / 5m">
+            </div>
+
+            <div class="col-12 col-lg-2 px-1">
+              <label class="form-label">board_code (미리보기)</label>
+              <div class="input-group">
+                <input class="form-control mono" name="board_code" id="boardCode2" readonly>
+                <button class="btn btn-primary btn-soft" id="btnBoardSubmit2" type="submit">등록</button>
+              </div>
+              <div id="boardSubmitHelp2" class="small text-danger mt-1"></div>
+            </div>
+
+          </form>
+        </div>
+      </div>
+
+      {% if boards %}
+      <div class="card card-soft">
+        <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+          <div class="fw-bold">등록된 게시판</div>
+          <div class="small text-muted">최근 {{ boards|length }}개</div>
+        </div>
+        <div class="card-body table-wrap">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th>ID</th><th>Company</th><th>Building</th><th>Floor</th><th>No</th><th>Code</th><th>Name</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in boards %}
+              <tr>
+                <td class="text-muted">{{ b.id }}</td>
+                <td>{{ b.building.company.name if b.building and b.building.company else "-" }}</td>
+                <td>{{ b.building.name if b.building else "-" }}</td>
+                <td>{{ b.floor_no }}</td>
+                <td>{{ b.board_no }}</td>
+                <td class="mono">{{ b.board_code }}</td>
+                <td class="fw-semibold">{{ b.name }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- =======================================================
+         TAB 3) Device Register (분리)
+         ======================================================= -->
+    <div class="tab-pane fade" id="pane-device-register" role="tabpanel">
+      {% set devices = devices|default([]) %}
+
+      <div class="row g-3">
+
+        <!-- Device register form -->
+        <div class="col-12">
+          <div class="card card-soft">
+            <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+              <div class="fw-bold">디바이스 등록 (EInkDevice)</div>
+              <div class="small text-muted">device_id 전역 UNIQUE · 등록 후 “연결” 탭에서 바인딩</div>
+            </div>
+
+            <div class="card-body">
+              <form method="post" action="{{ url_for('assign.device_register_post') }}"
+                    class="row g-2 align-items-end w-100 mx-0" id="deviceForm">
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">회사 선택</label>
+                  <select class="form-select" name="company_id" id="devCompanySelect" required>
+                    <option value="">-- 선택 --</option>
+                    {% for c in companies %}
+                      <option value="{{ c.id }}">{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">회사 단위로 디바이스 관리</div>
+                </div>
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">device_id</label>
+                  <input class="form-control mono" name="device_id" placeholder="예: ESP32-ABC123" required maxlength="64">
+                </div>
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">device_name <span class="text-danger">*</span></label>
+                  <input class="form-control" name="device_name" placeholder="예: 3F-엘베앞-01" required maxlength="128">
+                </div>
+
+                <div class="col-12 col-lg-2 px-1">
+                  <label class="form-label">panel_res</label>
+                  <input class="form-control mono" name="panel_res" placeholder="예: 1200x1600" required maxlength="16">
+                </div>
+
+                <div class="col-12 col-lg-1 d-grid px-1">
+                  <button class="btn btn-primary btn-soft">등록</button>
+                </div>
+
+                <!-- 기본값 -->
+                <input type="hidden" name="bpp" value="4">
+                <input type="hidden" name="cap" value="BWR">
+                <input type="hidden" name="supports_partial" value="1">
+                <input type="hidden" name="supports_rle" value="1">
+                <input type="hidden" name="supports_zlib" value="1">
+
+                <!-- 사용자 정보(형 요청) -->
+                <input type="hidden" name="user_no" value="{{ current_user.no }}">
+                <input type="hidden" name="user_userid" value="{{ current_user.userid }}">
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <!-- Device list with filters + paging 15 -->
+        <div class="col-12">
+          <div class="card card-soft">
+            <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+              <div class="fw-bold">디바이스 목록</div>
+              <div class="small text-muted">검색/정렬/페이징 (15개)</div>
+            </div>
+
+            <div class="card-body">
+
+              <!-- Filters -->
+              <div class="row g-2 align-items-end w-100 mx-0 mb-2">
+                <div class="col-12 col-lg-4 px-1">
+                  <label class="form-label">검색</label>
+                  <input class="form-control" id="devSearchText"
+                         placeholder="device_id / device_name / panel / 회사명 / 게시판명">
+                </div>
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">게시판명(필터)</label>
+                  <input class="form-control" id="devSearchBoard"
+                         placeholder="게시판명 또는 board_code로 필터">
+                </div>
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">정렬</label>
+                  <select class="form-select" id="devSort">
+                    <option value="id_desc" selected>ID 내림차순</option>
+                    <option value="id_asc">ID 오름차순</option>
+                    <option value="last_seen_desc">last_seen 내림차순</option>
+                    <option value="last_seen_asc">last_seen 오름차순</option>
+                    <option value="device_id_asc">device_id 오름차순</option>
+                    <option value="device_id_desc">device_id 내림차순</option>
+                  </select>
+                </div>
+
+                <div class="col-12 col-lg-2 px-1">
+                  <label class="form-label">옵션</label>
+                  <div class="d-flex gap-2 align-items-center">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="devOnlyUnbound">
+                      <label class="form-check-label" for="devOnlyUnbound">미연결만</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="small text-muted" id="devCountText">-</div>
+                <div class="d-flex gap-2 align-items-center">
+                  <button class="btn btn-outline-secondary btn-sm btn-soft" id="devPrevBtn" type="button">이전</button>
+                  <div class="small text-muted" id="devPageText">-</div>
+                  <button class="btn btn-outline-secondary btn-sm btn-soft" id="devNextBtn" type="button">다음</button>
+                </div>
+              </div>
+
+              <div class="table-wrap">
+                <table class="table table-sm align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th style="width:70px;">ID</th>
+                      <th>Company</th>
+                      <th>device_id</th>
+                      <th>device_name</th>
+                      <th>panel</th>
+                      <th>binding board_id</th>
+                      <th>board_code</th>
+                    </tr>
+                  </thead>
+                  <tbody id="devTbody">
+                    <tr><td colspan="7" class="text-muted">로딩...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="small text-muted mt-2">
+                * “미연결만”은 (board_code/board_name이 비어있는 항목) 기준으로 필터링.
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- =======================================================
+         TAB 4) Board <-> Device Binding (분리)
+         ======================================================= -->
+    <div class="tab-pane fade" id="pane-binding" role="tabpanel">
+
+      <div class="row g-3">
+
+        <!-- Bind form -->
+        <div class="col-12">
+          <div class="card card-soft">
+            <div class="card-header card-header-soft py-2 d-flex justify-content-between align-items-center">
+              <div class="fw-bold">게시판 ↔ 디바이스 연결 (Bind)</div>
+              <div class="small text-muted">디바이스는 “미연결”만 표시 · 선택 게시판 Active 바인딩 목록 페이징 15</div>
+            </div>
+
+            <div class="card-body">
+
+              <!-- board search (dropdown filter) -->
+              <div class="row g-2 align-items-end w-100 mx-0 mb-2">
+                <div class="col-12 col-lg-6 px-1">
+                  <label class="form-label">게시판 검색(드롭다운 필터)</label>
+                  <input class="form-control" id="bindBoardSearch" placeholder="board_code / 게시판명 검색">
+                </div>
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">게시판 정렬</label>
+                  <select class="form-select" id="bindBoardSort">
+                    <option value="code_asc" selected>board_code 오름차순</option>
+                    <option value="code_desc">board_code 내림차순</option>
+                    <option value="name_asc">게시판명 오름차순</option>
+                    <option value="name_desc">게시판명 내림차순</option>
+                    <option value="id_desc">ID 내림차순</option>
+                    <option value="id_asc">ID 오름차순</option>
+                  </select>
+                </div>
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">Active 목록 정렬</label>
+                  <select class="form-select" id="bindListSort">
+                    <option value="bound_desc" selected>bound_at 내림차순</option>
+                    <option value="bound_asc">bound_at 오름차순</option>
+                    <option value="id_desc">binding_id 내림차순</option>
+                    <option value="id_asc">binding_id 오름차순</option>
+                    <option value="device_asc">device_id 오름차순</option>
+                    <option value="device_desc">device_id 내림차순</option>
+                  </select>
+                </div>
+              </div>
+
+              <form method="post" action="{{ url_for('assign.bind_register_post') }}"
+                    class="row g-2 align-items-end w-100 mx-0" id="bindForm">
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">회사 선택</label>
+                  <select class="form-select" id="bindCompanySelect" name="company_id" required>
+                    <option value="">-- 선택 --</option>
+                    {% for c in companies %}
+                      <option value="{{ c.id }}" data-code="{{ c.code or '' }}">{{ c.name }}{% if c.code %} ({{ c.code }}){% endif %}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+
+                <div class="col-12 col-lg-5 px-1">
+                  <label class="form-label">게시판 선택</label>
+                  <select class="form-select" name="board_id" id="bindBoardSelect" disabled required>
+                    <option value="">회사 먼저 선택</option>
+                  </select>
+                </div>
+
+                <div class="col-12 col-lg-3 px-1">
+                  <label class="form-label">디바이스 선택</label>
+                  <select class="form-select" name="device_id" id="bindDeviceSelect" disabled required>
+                    <option value="">회사/게시판 먼저 선택</option>
+                  </select>
+                  <div class="form-text">※ dropdown에는 device_name 표시 안 함</div>
+                </div>
+
+                <div class="col-12 col-lg-1 d-grid px-1">
+                  <button class="btn btn-success btn-soft" id="btnBindSubmit" type="submit">Bind</button>
+                </div>
+
+                <div class="col-12 px-1">
+                  <div id="bindHelp" class="small text-danger mt-1"></div>
+                </div>
+
+                <input type="hidden" name="bound_by_user_no" value="{{ current_user.no }}">
+              </form>
+
+              <!-- Active bindings list (selected board) with search + paging 15 -->
+              <div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="fw-semibold">선택 게시판의 Active 연결 목록</div>
+                  <div class="small text-muted" id="activeBindingsCount">-</div>
+                </div>
+
+                <div class="row g-2 align-items-end w-100 mx-0 mt-1">
+                  <div class="col-12 col-lg-6 px-1">
+                    <label class="form-label">Active 목록 검색</label>
+                    <input class="form-control" id="bindListSearch"
+                           placeholder="binding_id / device_id / device_name / panel / reason">
+                  </div>
+
+                  <div class="col-12 col-lg-6 px-1 d-flex justify-content-end align-items-end gap-2">
+                    <button class="btn btn-outline-secondary btn-sm btn-soft" id="bindPrevBtn" type="button">이전</button>
+                    <div class="small text-muted" id="bindPageText">-</div>
+                    <button class="btn btn-outline-secondary btn-sm btn-soft" id="bindNextBtn" type="button">다음</button>
+                  </div>
+                </div>
+
+                <div class="table-wrap mt-2">
+                  <table class="table table-sm align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th style="width:110px;">binding_id</th>
+                        <th>device_id</th>
+                        <th>device_name</th>
+                        <th>panel</th>
+                        <th>board</th>
+                        <th>bound_at</th>
+                        <th>reason</th>
+                      </tr>
+                    </thead>
+                    <tbody id="activeBindingsTbody">
+                      <tr><td colspan="7" class="text-muted">게시판을 선택하면 표시됨</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <hr class="my-3">
+
+              <!-- Unbind (board 기준) -->
+              <form method="post" action="{{ url_for('assign.unbind_register_post') }}"
+                    class="row g-2 align-items-end w-100 mx-0" id="unbindForm">
+                <div class="col-12 col-lg-6 px-1">
+                  <label class="form-label">연결 해제할 Board 선택</label>
+                  <select class="form-select" name="board_id" id="unbindBoardSelect" required>
+                    <option value="">-- 선택 --</option>
+                    {% for b in boards %}
+                      <option value="{{ b.id }}">{{ b.board_code }} / {{ b.name }}</option>
+                    {% endfor %}
+                  </select>
+                  <div class="form-text">active 연결만 해제(서버에서 검증 권장)</div>
+                </div>
+
+                <div class="col-12 col-lg-4 px-1">
+                  <label class="form-label">해제 사유(선택)</label>
+                  <input name="reason" class="form-control" placeholder="예: 철거/이동" maxlength="128">
+                </div>
+
+                <div class="col-12 col-lg-2 d-grid px-1">
+                  <button class="btn btn-outline-danger btn-soft">Unbind</button>
+                </div>
+              </form>
+
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<style>
+  .assign-page{
+    --card-border: rgba(15,23,42,.08);
+    --shadow: 0 10px 28px rgba(15,23,42,.06);
+  }
+
+  .assign-page .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    letter-spacing: .2px;
+  }
+
+  .assign-page .card-soft{
+    border: 1px solid var(--card-border);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .assign-page .card-header-soft{
+    background: linear-gradient(180deg, rgba(13,110,253,.06), rgba(13,110,253,0));
+    border-bottom: 1px solid rgba(15,23,42,.06);
+  }
+
+  .assign-page .btn-soft{
+    border-radius: 12px;
+    font-weight: 700;
+    letter-spacing: .2px;
+  }
+
+  .assign-page .form-control,
+  .assign-page .form-select{
+    border-radius: 12px;
+    border-color: rgba(15,23,42,.12);
+  }
+
+  .assign-page .form-control:focus,
+  .assign-page .form-select:focus{
+    box-shadow: 0 0 0 .25rem rgba(13,110,253,.12);
+    border-color: rgba(13,110,253,.55);
+  }
+
+  .assign-page .nav-tabs.assign-tabs .nav-link{
+    border-radius: 12px 12px 0 0;
+    font-weight: 800;
+    color: rgba(15,23,42,.75);
+  }
+  .assign-page .nav-tabs.assign-tabs .nav-link.active{
+    color: #0d6efd;
+    background: #fff;
+    border-bottom-color: transparent;
+  }
+
+  .assign-page .table-wrap { overflow-x:auto; }
+  .assign-page .table thead th{
+    font-size: .82rem;
+    color: rgba(15,23,42,.70);
+    white-space: nowrap;
+  }
+  .assign-page .table td{
+    font-size: .90rem;
+    vertical-align: middle;
+  }
+  .assign-page .form-text{
+    font-size: .78rem;
+    color: rgba(15,23,42,.55);
+  }
+
+  /* card-body 가로 제약 방지 */
+  #pane-company-building .card-body,
+  #pane-board .card-body,
+  #pane-device-register .card-body,
+  #pane-binding .card-body{
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+  #pane-company-building form,
+  #pane-board form,
+  #pane-device-register form,
+  #pane-binding form{
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  @media (min-width: 992px){
+    #boardForm .form-label { white-space: nowrap; }
+    #boardForm .input-group .btn { white-space: nowrap; }
+  }
+</style>
+
+<script>
+/* ============================================================
+   Shared helpers
+============================================================ */
+function _safeStr(v){ return (v === null || v === undefined) ? "" : String(v); }
+function _norm(v){ return _safeStr(v).toLowerCase().trim(); }
+function _includes(hay, needle){
+  hay = _norm(hay); needle = _norm(needle);
+  return needle ? hay.includes(needle) : true;
+}
+function _cmpStr(a,b){ return _safeStr(a).localeCompare(_safeStr(b)); }
+function _cmpNum(a,b){ return (Number(a)||0) - (Number(b)||0); }
+
+/* ============================================================
+   TAB1: building_code trim guard
+============================================================ */
+(function(){
+  const f = document.getElementById("buildingForm");
+  if(!f) return;
+  f.addEventListener("submit", (e)=>{
+    const input = f.querySelector('input[name="building_code"]');
+    if(!input) return;
+    const v = (input.value || "").trim();
+    input.value = v;
+    if(!v){
+      e.preventDefault();
+      e.stopPropagation();
+      input.focus();
+    }
+  });
+})();
+
+/* ============================================================
+   TAB2: Board code preview + codes required
+============================================================ */
+(function(){
+  const companySelect = document.getElementById("companySelect2");
+  const buildingSelect = document.getElementById("buildingSelect2");
+  if(!companySelect || !buildingSelect) return;
+
+  const siteCode = document.getElementById("siteCode2");
+  const buildingCode = document.getElementById("buildingCode2");
+  const floorType = document.getElementById("floorType2");
+  const floorNumber = document.getElementById("floorNumber2");
+  const floorNoHidden = document.getElementById("floorNoHidden2");
+
+  const boardNo = document.getElementById("boardNo2");
+  const autoBoardNo = document.getElementById("autoBoardNo2");
+
+  const boardCode = document.getElementById("boardCode2");
+  const btnSubmit = document.getElementById("btnBoardSubmit2");
+  const help = document.getElementById("boardSubmitHelp2");
+
+  function pad(n,w){ return String(n).padStart(w,"0"); }
+  function norm(s){ return (s||"").toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,10); }
+
+  function setSubmitEnabled(ok, msg){
+    if(btnSubmit) btnSubmit.disabled = !ok;
+    if(help) help.textContent = msg || "";
+  }
+
+  function calcFloorNo(){
+    const t = floorType.value;
+    let n = parseInt(floorNumber.value || "1", 10);
+
+    if(t === "G"){
+      n = Math.max(1, Math.min(99, n));
+      floorNumber.min = 1; floorNumber.max = 99;
+      floorNoHidden.value = String(n);
+    }else if(t === "B"){
+      n = Math.max(1, Math.min(10, n));
+      floorNumber.min = 1; floorNumber.max = 10;
+      floorNoHidden.value = String(-n);
+    }else{
+      floorNumber.value = "0";
+      floorNoHidden.value = "9999";
+    }
+  }
+
+  function floorToken(){
+    const f = parseInt(floorNoHidden.value || "1", 10);
+    if(f === 9999) return "O00";
+    if(f >= 1) return "F" + pad(f,2);
+    return "B" + pad(Math.abs(f),2);
+  }
+
+  function updateBoardCodePreview(){
+    const cc = norm(companySelect.selectedOptions?.[0]?.dataset?.code || "") || "COMP";
+    const sc = norm(siteCode.value) || "HQ";
+    const bc = norm(buildingCode.value) || "B00";
+    const ft = floorToken();
+    const bt = (autoBoardNo.checked || !boardNo.value) ? "___" : pad(parseInt(boardNo.value,10),3);
+    boardCode.value = [cc, sc, bc, ft, bt].join("-");
+  }
+
+  function lockBuildings(msg){
+    buildingSelect.disabled = true;
+    buildingSelect.innerHTML = `<option value="">${msg}</option>`;
+    buildingCode.value = "";
+  }
+
+  function checkCodesAndEnable(){
+    const companyCodeValue = (companySelect.selectedOptions?.[0]?.dataset?.code || "").trim();
+    const buildingCodeValue = (buildingSelect.selectedOptions?.[0]?.dataset?.code || "").trim();
+
+    if(!companySelect.value){
+      lockBuildings("회사 먼저 선택");
+      setSubmitEnabled(false, "회사/건물 선택 후 진행");
+      boardCode.value = "";
+      return false;
+    }
+    if(!companyCodeValue){
+      lockBuildings("회사코드 없음 (회사 탭에서 코드 입력)");
+      setSubmitEnabled(false, "선택한 회사에 회사코드가 없어 등록 불가");
+      boardCode.value = "";
+      return false;
+    }
+    if(!buildingSelect.value){
+      setSubmitEnabled(false, "건물 선택 필요");
+      boardCode.value = "";
+      return false;
+    }
+    if(!buildingCodeValue){
+      setSubmitEnabled(false, "선택한 건물에 건물코드가 없어 등록 불가");
+      boardCode.value = "";
+      return false;
+    }
+    setSubmitEnabled(true, "");
+    return true;
+  }
+
+  async function loadBuildings(companyId){
+    buildingSelect.innerHTML = "";
+    if(!companyId){
+      lockBuildings("회사 먼저 선택");
+      return;
+    }
+
+    buildingSelect.disabled = false;
+    buildingSelect.innerHTML = `<option value="">-- 선택 --</option>`;
+
+    const res = await fetch(`{{ url_for('assign.api_buildings') }}?company_id=${encodeURIComponent(companyId)}`);
+    const data = await res.json();
+
+    (data.buildings || []).forEach(b => {
+      const opt = document.createElement("option");
+      opt.value = b.id;
+      opt.textContent = b.name + (b.code ? ` (${b.code})` : "");
+      opt.dataset.code = b.code || "";
+      buildingSelect.appendChild(opt);
+    });
+  }
+
+  document.getElementById("boardForm")?.addEventListener("submit", (e) => {
+    updateBoardCodePreview();
+    if(!checkCodesAndEnable()){
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+
+  companySelect.addEventListener("change", async ()=>{
+    const companyCodeValue = (companySelect.selectedOptions?.[0]?.dataset?.code || "").trim();
+
+    if(!companySelect.value){
+      lockBuildings("회사 먼저 선택");
+      updateBoardCodePreview();
+      checkCodesAndEnable();
+      return;
+    }
+    if(!companyCodeValue){
+      lockBuildings("회사코드 없음 (회사 탭에서 코드 입력)");
+      updateBoardCodePreview();
+      checkCodesAndEnable();
+      return;
+    }
+
+    await loadBuildings(companySelect.value || "");
+    buildingCode.value = "";
+    updateBoardCodePreview();
+    checkCodesAndEnable();
+  });
+
+  buildingSelect.addEventListener("change", ()=>{
+    const bc = (buildingSelect.selectedOptions?.[0]?.dataset?.code || "").trim();
+    buildingCode.value = bc || "";
+    updateBoardCodePreview();
+    checkCodesAndEnable();
+  });
+
+  [siteCode, boardNo].forEach(el => el?.addEventListener("input", () => {
+    updateBoardCodePreview();
+    checkCodesAndEnable();
+  }));
+
+  autoBoardNo.addEventListener("change", ()=>{
+    boardNo.disabled = autoBoardNo.checked;
+    if(autoBoardNo.checked) boardNo.value = "";
+    updateBoardCodePreview();
+    checkCodesAndEnable();
+  });
+
+  floorType.addEventListener("change", ()=>{ calcFloorNo(); updateBoardCodePreview(); checkCodesAndEnable(); });
+  floorNumber.addEventListener("input", ()=>{ calcFloorNo(); updateBoardCodePreview(); checkCodesAndEnable(); });
+
+  // init
+  boardNo.disabled = true;
+  calcFloorNo();
+  updateBoardCodePreview();
+  setSubmitEnabled(false, "회사/건물 선택 후 진행");
+  boardCode.value = "";
+})();
+
+/* ============================================================
+   TAB3: Device list paging(15) + search/sort + unbound only
+   - board info는 “(device의 현재 바인딩이 있으면 Board 표시)”로 가정
+   - 서버에서 devices 목록은 최근 50개이지만, 여기서는 그 범위 내에서 paging
+============================================================ */
+(function(){
+  const tbody = document.getElementById("devTbody");
+  const countText = document.getElementById("devCountText");
+  const pageText = document.getElementById("devPageText");
+  const prevBtn = document.getElementById("devPrevBtn");
+  const nextBtn = document.getElementById("devNextBtn");
+
+  const searchText = document.getElementById("devSearchText");
+  const searchBoard = document.getElementById("devSearchBoard");
+  const sortSel = document.getElementById("devSort");
+  const onlyUnbound = document.getElementById("devOnlyUnbound");
+
+  if(!tbody || !searchText || !sortSel || !prevBtn || !nextBtn) return;
+
+  const PAGE_SIZE = 15;
+  let page = 1;
+
+  // boards lookup (id -> {code,name})
+  const BOARDS = [
+    {% for b in boards %}
+    {
+      id: Number("{{ b.id }}"),
+      code: "{{ b.board_code }}",
+      name: "{{ b.name }}",
+      company_id: Number("{{ (b.building.company.id if b.building and b.building.company else 0) }}")
+    },
+    {% endfor %}
+  ];
+
+  // device rows (board info는 "없음"으로 두고, 검색 필터는 그 값이 있으면 적용)
+  // ※ 형이 server에서 device->active binding board 정보를 제공하는 구조면 여기에 심어도 됨
+  const DEVICES = [
+    {% for d in devices %}
+    {
+      id: Number("{{ d.id }}"),
+      company: "{{ d.company.name if d.company else (d.company_id or '-') }}",
+      company_id: Number("{{ d.company_id or 0 }}"),
+      device_id: "{{ d.device_id }}",
+      device_name: "{{ d.device_name or '' }}",
+      panel_res: "{{ d.panel_res }}",
+      last_seen: "{{ d.last_seen or '' }}",
+
+      // 아래 두 값은 “서버에서 주입 가능” 영역.
+      // 지금은 비워두고, 미연결 필터는 board_code 빈값 기준으로 동작.
+      board_code: "{{ (d.active_board_code if d.active_board_code is defined else '') }}",
+      board_name: "{{ (d.active_board_name if d.active_board_name is defined else '') }}",
+      binding_board_id: "{{ (d.binding_board_id if d.binding_board_id is defined else '') }}"
+
+    },
+    {% endfor %}
+  ];
+
+  function sortDevices(arr){
+    const v = sortSel.value;
+    const copy = [...arr];
+
+    const getSeen = (x)=> _safeStr(x.last_seen);
+
+    if(v === "id_asc") copy.sort((a,b)=> _cmpNum(a.id,b.id));
+    else if(v === "id_desc") copy.sort((a,b)=> _cmpNum(b.id,a.id));
+    else if(v === "last_seen_asc") copy.sort((a,b)=> _cmpStr(getSeen(a), getSeen(b)));
+    else if(v === "last_seen_desc") copy.sort((a,b)=> _cmpStr(getSeen(b), getSeen(a)));
+    else if(v === "device_id_asc") copy.sort((a,b)=> _cmpStr(a.device_id,b.device_id));
+    else if(v === "device_id_desc") copy.sort((a,b)=> _cmpStr(b.device_id,a.device_id));
+    else copy.sort((a,b)=> _cmpNum(b.id,a.id));
+
+    return copy;
+  }
+
+  function filterDevices(){
+    const q = _norm(searchText.value);
+    const qb = _norm(searchBoard?.value || "");
+    const unboundOnly = !!onlyUnbound?.checked;
+
+    let arr = DEVICES.filter(x=>{
+      const boardText = `${x.board_code||""} ${x.board_name||""}`;
+      if(unboundOnly && (x.board_code || x.board_name)) return false;
+
+      const okQ =
+        _includes(x.device_id, q) ||
+        _includes(x.device_name, q) ||
+        _includes(x.panel_res, q) ||
+        _includes(x.company, q) ||
+        _includes(boardText, q);
+
+      if(q && !okQ) return false;
+
+      if(qb){
+        if(!_includes(boardText, qb)) return false;
+      }
+      return true;
+    });
+
+    arr = sortDevices(arr);
+    return arr;
+  }
+
+  function render(){
+    const arr = filterDevices();
+    const total = arr.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    page = Math.min(page, totalPages);
+    page = Math.max(1, page);
+
+    const start = (page - 1) * PAGE_SIZE;
+    const items = arr.slice(start, start + PAGE_SIZE);
+
+    if(countText) countText.textContent = `총 ${total}개 · 페이지당 ${PAGE_SIZE}개`;
+    if(pageText) pageText.textContent = `${page} / ${totalPages}`;
+
+    prevBtn.disabled = (page <= 1);
+    nextBtn.disabled = (page >= totalPages);
+
+    if(items.length === 0){
+      tbody.innerHTML = `<tr><td colspan="7" class="text-muted">검색 결과 없음</td></tr>`;
+      return;
+    }
+
+    const BOARD_MAP = new Map(
+        BOARDS.map(b => [Number(b.id), { code: b.code, name: b.name }])
+    );
+
+
+
+    tbody.innerHTML = items.map(x => {
+      const bid = Number(x.binding_board_id || x.active_board_id || 0);
+      const binfo = BOARD_MAP.get(bid);
+
+      const boardIdCell = bid ? `<span class="mono">${bid}</span>` : `<span class="text-muted">-</span>`;
+      const boardCodeCell = (binfo && binfo.code)
+        ? `<span class="mono">${_safeStr(binfo.code)}</span>`
+        : `<span class="text-muted">-</span>`;
+
+      return `
+        <tr>
+          <td class="text-muted">${x.id}</td>
+          <td>${_safeStr(x.company)}</td>
+          <td class="mono">${_safeStr(x.device_id)}</td>
+          <td>${_safeStr(x.device_name)}</td>
+          <td class="mono">${_safeStr(x.panel_res)}</td>         
+          <td>${boardIdCell}</td>
+          <td>${boardCodeCell}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function resetAndRender(){ page = 1; render(); }
+
+  searchText.addEventListener("input", resetAndRender);
+  searchBoard?.addEventListener("input", resetAndRender);
+  sortSel.addEventListener("change", resetAndRender);
+  onlyUnbound?.addEventListener("change", resetAndRender);
+
+  prevBtn.addEventListener("click", ()=>{ page -= 1; render(); });
+  nextBtn.addEventListener("click", ()=>{ page += 1; render(); });
+
+  render();
+})();
+
+/* ============================================================
+   TAB4: Binding UX (API 기반) + Active 목록 paging(15) + 게시판 검색/정렬
+   - /assign/api/devices?company_id= : unbound devices (company)
+   - /assign/api/board-bindings?board_id= : active bindings (selected board)
+============================================================ */
+
+(function(){
+  const bindCompanySelect = document.getElementById("bindCompanySelect");
+  const bindBoardSelect = document.getElementById("bindBoardSelect");
+  const bindDeviceSelect = document.getElementById("bindDeviceSelect");
+  const btnBindSubmit = document.getElementById("btnBindSubmit");
+  const bindHelp = document.getElementById("bindHelp");
+
+  const boardSearch = document.getElementById("bindBoardSearch");
+  const boardSort = document.getElementById("bindBoardSort");
+
+  const listSearch = document.getElementById("bindListSearch");
+  const listSort = document.getElementById("bindListSort");
+  const prevBtn = document.getElementById("bindPrevBtn");
+  const nextBtn = document.getElementById("bindNextBtn");
+  const pageText = document.getElementById("bindPageText");
+
+  const activeTbody = document.getElementById("activeBindingsTbody");
+  const activeCount = document.getElementById("activeBindingsCount");
+
+  if(!bindCompanySelect || !bindBoardSelect || !bindDeviceSelect) return;
+
+  const PAGE_SIZE = 15;
+  let page = 1;
+
+  let currentCompanyId = "";
+  let currentBoardId = "";
+  let cachedUnboundDevices = [];
+  let cachedActiveBindings = [];
+
+  function companyHasCode(){
+    const code = (bindCompanySelect.selectedOptions?.[0]?.dataset?.code || "").trim();
+    return !!code;
+  }
+
+  function setBindEnabled(ok, msg){
+    btnBindSubmit.disabled = !ok;
+    if(bindHelp) bindHelp.textContent = msg || "";
+  }
+
+  function lockBindSelects(msg){
+    bindBoardSelect.disabled = true;
+    bindDeviceSelect.disabled = true;
+    bindBoardSelect.innerHTML = `<option value="">${msg}</option>`;
+    bindDeviceSelect.innerHTML = `<option value="">${msg}</option>`;
+  }
+
+  const BOARDS = [
+    {% for b in boards %}
+    {
+      id: Number("{{ b.id }}"),
+      company_id: Number("{{ (b.building.company.id if b.building and b.building.company else 0) }}"),
+      board_code: "{{ b.board_code }}",
+      board_name: "{{ b.name }}",
+      text: "{{ b.board_code }} / {{ b.name }}"
+    },
+    {% endfor %}
+  ];
+
+  // ✅ TAB4 안에서 BOARD_MAP 생성 (board_id → {code,name})
+  const BOARD_MAP = new Map(BOARDS.map(b => [Number(b.id), { code: b.board_code, name: b.board_name }]));
+
+  function getFilteredBoards(companyId){
+    let arr = BOARDS.filter(x => String(x.company_id) === String(companyId));
+    const q = _norm(boardSearch?.value || "");
+    if(q){
+      arr = arr.filter(x => _includes(x.board_code, q) || _includes(x.board_name, q) || _includes(x.text, q));
+    }
+
+    const s = boardSort?.value || "code_asc";
+    if(s === "code_asc") arr.sort((a,b)=> _cmpStr(a.board_code, b.board_code));
+    else if(s === "code_desc") arr.sort((a,b)=> _cmpStr(b.board_code, a.board_code));
+    else if(s === "name_asc") arr.sort((a,b)=> _cmpStr(a.board_name, b.board_name));
+    else if(s === "name_desc") arr.sort((a,b)=> _cmpStr(b.board_name, a.board_name));
+    else if(s === "id_asc") arr.sort((a,b)=> _cmpNum(a.id,b.id));
+    else if(s === "id_desc") arr.sort((a,b)=> _cmpNum(b.id,a.id));
+    return arr;
+  }
+
+  function fillBoardsByCompany(companyId){
+    const arr = getFilteredBoards(companyId);
+    bindBoardSelect.innerHTML = `<option value="">-- 선택 --</option>`;
+    arr.forEach(x=>{
+      const o = document.createElement("option");
+      o.value = x.id;
+      o.textContent = x.text;
+      bindBoardSelect.appendChild(o);
+    });
+  }
+
+  function fillDeviceSelect(){
+    bindDeviceSelect.innerHTML = `<option value="">-- 선택 --</option>`;
+    (cachedUnboundDevices || []).forEach(d => {
+      const o = document.createElement("option");
+      o.value = d.id;
+      o.textContent = `${d.device_id || ""} (${d.panel_res || ""})`;
+      bindDeviceSelect.appendChild(o);
+    });
+  }
+
+  async function fetchUnboundDevices(companyId){
+    cachedUnboundDevices = [];
+    if(!companyId) return;
+    const url = `{{ url_for('assign.api_devices') }}?company_id=${encodeURIComponent(companyId)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    cachedUnboundDevices = data.devices || [];
+  }
+
+  async function fetchBoardBindings(boardId){
+    cachedActiveBindings = [];
+    if(!boardId) return;
+    const url = `{{ url_for('assign.api_board_bindings') }}?board_id=${encodeURIComponent(boardId)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    cachedActiveBindings = data.bindings || [];
+  }
+
+  function sortActive(arr){
+    const s = listSort?.value || "bound_desc";
+    const copy = [...arr];
+
+    const getBound = (x)=> _safeStr(x.bound_at);
+    const getId = (x)=> Number(x.binding_id || 0);
+    const getDev = (x)=> _safeStr(x.device_id);
+
+    if(s === "bound_asc") copy.sort((a,b)=> _cmpStr(getBound(a), getBound(b)));
+    else if(s === "bound_desc") copy.sort((a,b)=> _cmpStr(getBound(b), getBound(a)));
+    else if(s === "id_asc") copy.sort((a,b)=> _cmpNum(getId(a), getId(b)));
+    else if(s === "id_desc") copy.sort((a,b)=> _cmpNum(getId(b), getId(a)));
+    else if(s === "device_asc") copy.sort((a,b)=> _cmpStr(getDev(a), getDev(b)));
+    else if(s === "device_desc") copy.sort((a,b)=> _cmpStr(getDev(b), getDev(a)));
+    return copy;
+  }
+
+  function filterActive(){
+    let arr = cachedActiveBindings || [];
+    const q = _norm(listSearch?.value || "");
+    if(q){
+      arr = arr.filter(x=>{
+        return _includes(x.binding_id, q) ||
+               _includes(x.device_id, q) ||
+               _includes(x.device_name, q) ||
+               _includes(x.panel_res, q) ||
+               _includes(x.reason, q) ||
+               _includes(x.bound_at, q);
+      });
+    }
+    return sortActive(arr);
+  }
+
+  function renderActive(){
+    const arr = filterActive();
+    const total = arr.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    page = Math.min(page, totalPages);
+    page = Math.max(1, page);
+
+    const start = (page - 1) * PAGE_SIZE;
+    const items = arr.slice(start, start + PAGE_SIZE);
+
+    if(activeCount) activeCount.textContent = `${total}개 (페이지당 ${PAGE_SIZE})`;
+    if(pageText) pageText.textContent = `${page} / ${totalPages}`;
+    if(prevBtn) prevBtn.disabled = (page <= 1);
+    if(nextBtn) nextBtn.disabled = (page >= totalPages);
+
+    if(!activeTbody) return;
+
+    if(!currentBoardId){
+      activeTbody.innerHTML = `<tr><td colspan="7" class="text-muted">게시판을 선택하면 표시됨</td></tr>`;
+      return;
+    }
+
+    if(items.length === 0){
+      activeTbody.innerHTML = `<tr><td colspan="7" class="text-muted">Active 연결 없음(또는 검색 결과 없음)</td></tr>`;
+      return;
+    }
+
+    const currentBoardInfo = (() => {
+      const bid = Number(currentBoardId || 0);
+      return BOARD_MAP.get(bid) || { code: "", name: "" };
+    })();
+
+    activeTbody.innerHTML = items.map(r => `
+      <tr>
+        <td class="text-muted">${_safeStr(r.binding_id)}</td>
+        <td class="mono">${_safeStr(r.device_id)}</td>
+        <td>${_safeStr(r.device_name)}</td>
+        <td class="mono">${_safeStr(r.panel_res)}</td>
+        <td>
+          <span class="mono">${_safeStr(currentBoardInfo.code)}</span>
+          <span class="text-muted">/</span>
+          ${_safeStr(currentBoardInfo.name)}
+        </td>
+        <td class="text-muted">${_safeStr(r.bound_at)}</td>
+        <td class="text-muted">${_safeStr(r.reason)}</td>
+      </tr>
+    `).join("");
+  } // ✅ 여기 닫는 괄호가 반드시 있어야 함!
+
+  function validateBind(){
+    if(!bindCompanySelect.value){
+      setBindEnabled(false, "회사 선택 필요");
+      return false;
+    }
+    if(!companyHasCode()){
+      lockBindSelects("회사코드 없음");
+      setBindEnabled(false, "회사코드가 있어야 연결 가능");
+      return false;
+    }
+    if(!bindBoardSelect.value){
+      setBindEnabled(false, "게시판 선택 필요");
+      return false;
+    }
+    if(!bindDeviceSelect.value){
+      setBindEnabled(false, "디바이스 선택 필요");
+      return false;
+    }
+    setBindEnabled(true, "");
+    return true;
+  }
+
+  // Events
+  bindCompanySelect.addEventListener("change", async ()=>{
+    currentCompanyId = bindCompanySelect.value || "";
+    currentBoardId = "";
+    page = 1;
+
+    if(!currentCompanyId){
+      lockBindSelects("회사 먼저 선택");
+      cachedUnboundDevices = [];
+      cachedActiveBindings = [];
+      renderActive();
+      setBindEnabled(false, "회사 선택 후 진행");
+      return;
+    }
+    if(!companyHasCode()){
+      lockBindSelects("회사코드 없음");
+      cachedUnboundDevices = [];
+      cachedActiveBindings = [];
+      renderActive();
+      setBindEnabled(false, "회사코드가 있어야 연결 가능");
+      return;
+    }
+
+    bindBoardSelect.disabled = false;
+    fillBoardsByCompany(currentCompanyId);
+
+    bindDeviceSelect.disabled = true;
+    bindDeviceSelect.innerHTML = `<option value="">게시판 먼저 선택</option>`;
+
+    cachedUnboundDevices = [];
+    cachedActiveBindings = [];
+    renderActive();
+
+    await fetchUnboundDevices(currentCompanyId);
+    validateBind();
+  });
+
+  boardSearch?.addEventListener("input", ()=>{
+    if(!currentCompanyId) return;
+    const keep = bindBoardSelect.value;
+    fillBoardsByCompany(currentCompanyId);
+    // 기존 선택 유지 시도
+    if(keep){
+      const opt = Array.from(bindBoardSelect.options).find(o => o.value === keep);
+      if(opt) bindBoardSelect.value = keep;
+    }
+  });
+  boardSort?.addEventListener("change", ()=>{
+    if(!currentCompanyId) return;
+    const keep = bindBoardSelect.value;
+    fillBoardsByCompany(currentCompanyId);
+    if(keep){
+      const opt = Array.from(bindBoardSelect.options).find(o => o.value === keep);
+      if(opt) bindBoardSelect.value = keep;
+    }
+  });
+
+  bindBoardSelect.addEventListener("change", async ()=>{
+    currentBoardId = bindBoardSelect.value || "";
+    page = 1;
+
+    cachedActiveBindings = [];
+    renderActive();
+
+    if(!currentBoardId){
+      bindDeviceSelect.disabled = true;
+      bindDeviceSelect.innerHTML = `<option value="">게시판 먼저 선택</option>`;
+      validateBind();
+      return;
+    }
+
+    await fetchBoardBindings(currentBoardId);
+    renderActive();
+
+    // device list: unbound devices (already cached)
+    bindDeviceSelect.disabled = false;
+    fillDeviceSelect();
+
+    validateBind();
+  });
+
+  bindDeviceSelect.addEventListener("change", validateBind);
+
+  listSearch?.addEventListener("input", ()=>{ page = 1; renderActive(); });
+  listSort?.addEventListener("change", ()=>{ page = 1; renderActive(); });
+
+  prevBtn?.addEventListener("click", ()=>{ page -= 1; renderActive(); });
+  nextBtn?.addEventListener("click", ()=>{ page += 1; renderActive(); });
+
+  document.getElementById("bindForm")?.addEventListener("submit", (e)=>{
+    if(!validateBind()){
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  });
+
+  // init
+  lockBindSelects("회사 먼저 선택");
+  cachedUnboundDevices = [];
+  cachedActiveBindings = [];
+  renderActive();
+  setBindEnabled(false, "회사 선택 후 진행");
+})();
+</script>
+
+{% endblock %}
