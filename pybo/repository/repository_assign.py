@@ -18,14 +18,6 @@ class RepositoryAssign:
     # ============================================================
     # Utils
     # ============================================================
-    @staticmethod
-    def _norm_code(s: str, max_len: int = 10) -> str:
-        s = (s or "").strip().upper()
-        out = []
-        for ch in s:
-            if ("A" <= ch <= "Z") or ("0" <= ch <= "9"):
-                out.append(ch)
-        return "".join(out)[:max_len]
 
     @staticmethod
     def _safe_device_id(raw: str, max_len: int = 64) -> str:
@@ -36,8 +28,22 @@ class RepositoryAssign:
                 out.append(ch)
         return "".join(out)[:max_len]
 
+
+    @staticmethod
+    def _norm_code(s: str, max_len: int = 10) -> str:
+        s = (s or "").strip().upper()
+        out = []
+        for ch in s:
+            if ("A" <= ch <= "Z") or ("0" <= ch <= "9"):
+                out.append(ch)
+        return "".join(out)[:max_len]
+
     @staticmethod
     def _floor_token(floor_no: int) -> str:
+        # 정책:
+        #  - 지상: 1..99 => F01..F99
+        #  - 지하: -1..-10 => B01..B10
+        #  - 옥외/미정: 9999 => O00
         if floor_no == 9999:
             return "O00"
         if floor_no >= 1:
@@ -51,16 +57,206 @@ class RepositoryAssign:
     @staticmethod
     def make_board_code(company_code: str, site_code: str, building_code: str,
                         floor_no: int, board_no: int) -> str:
+        # ✅ Board 등록 정책: company/building 코드는 필수
         cc = RepositoryAssign._norm_code(company_code, 8)
         bc = RepositoryAssign._norm_code(building_code, 10)
         sc = RepositoryAssign._norm_code(site_code, 10) or "HQ"
+
         if not cc:
             raise ValueError("company_code가 비어있어 board_code 생성 불가")
         if not bc:
             raise ValueError("building_code가 비어있어 board_code 생성 불가")
+
         ft = RepositoryAssign._floor_token(floor_no)
         bt = RepositoryAssign._board_token(board_no)
         return f"{cc}-{sc}-{bc}-{ft}-{bt}"
+
+    # --------------------------
+    # Company / Building (등록 탭 전용)
+    # --------------------------
+    @staticmethod
+    def create_company(name: str, code: str) -> EInkCompany:
+        name = (name or "").strip()
+        code = RepositoryAssign._norm_code(code, 8)
+
+        if not name:
+            raise ValueError("company_name required")
+        if not code:
+            raise ValueError("company_code required")
+
+        # 1) code가 이미 있으면 그 레코드 반환(이름 다르면 충돌)
+        by_code = EInkCompany.query.filter(EInkCompany.code == code).first()
+        if by_code:
+            if by_code.name != name:
+                raise ValueError(f"회사코드({code})는 이미 '{by_code.name}'에 사용 중")
+            return by_code
+
+        # 2) name이 이미 있으면 코드 보강 또는 충돌
+        by_name = EInkCompany.query.filter(EInkCompany.name == name).first()
+        if by_name:
+            if by_name.code and by_name.code != code:
+                raise ValueError(f"회사명({name})은 이미 코드 '{by_name.code}'로 등록됨")
+            if not by_name.code:
+                by_name.code = code
+                db.session.add(by_name)
+                db.session.commit()
+            return by_name
+
+        c = EInkCompany(name=name, code=code)
+        db.session.add(c)
+        db.session.commit()
+        return c
+
+    @staticmethod
+    def create_building(company_id: int, name: str, code: str, address: str) -> EInkBuilding:
+        name = (name or "").strip()
+        code = RepositoryAssign._norm_code(code, 10)
+
+        if not company_id:
+            raise ValueError("company_id required")
+        if not name:
+            raise ValueError("building_name required")
+        if not code:
+            raise ValueError("building_code required")
+
+        company = EInkCompany.query.get(company_id)
+        if not company:
+            raise ValueError("존재하지 않는 company_id")
+
+        # 같은 회사 내 building_code 중복 방지(앱 레벨)
+        by_code = (
+            EInkBuilding.query
+            .filter(EInkBuilding.company_id == company_id, EInkBuilding.code == code)
+            .first()
+        )
+        if by_code and by_code.name != name:
+            raise ValueError(f"건물코드({code})는 이미 '{by_code.name}'에 사용 중")
+
+        # (company_id, name) unique
+        by_name = (
+            EInkBuilding.query
+            .filter(EInkBuilding.company_id == company_id, EInkBuilding.name == name)
+            .first()
+        )
+        if by_name:
+            if by_name.code and by_name.code != code:
+                raise ValueError(f"건물명({name})은 이미 코드 '{by_name.code}'로 등록됨")
+            if not by_name.code:
+                by_name.code = code
+            if address and not by_name.address:
+                by_name.address = address.strip()
+            db.session.add(by_name)
+            db.session.commit()
+            return by_name
+
+        b = EInkBuilding(
+            company_id=company_id,
+            name=name,
+            code=code,
+            address=(address or "").strip() or None
+        )
+        db.session.add(b)
+        db.session.commit()
+        return b
+
+    # --------------------------
+    # Board (선택 기반 등록 탭 전용)
+    # --------------------------
+    @staticmethod
+    def _validate_floor_no(floor_no: int) -> None:
+        if floor_no == 9999:
+            return
+        if 1 <= floor_no <= 99:
+            return
+        if -10 <= floor_no <= -1:
+            return
+        raise ValueError("floor_no 범위 오류 (지상 1~99, 지하 -1~-10, 미정 9999)")
+
+    @staticmethod
+    def _validate_board_no(board_no: int) -> None:
+        if not (1 <= board_no <= 999):
+            raise ValueError("board_no 범위 오류 (1~999)")
+
+    @staticmethod
+    def next_board_no(building_id: int, floor_no: int) -> int:
+        m = (
+            db.session.query(func.max(EInkBoard.board_no))
+            .filter(EInkBoard.building_id == building_id, EInkBoard.floor_no == floor_no)
+            .scalar()
+        )
+        return (int(m) if m is not None else 0) + 1
+
+    @staticmethod
+    def create_board_by_selection(
+        company_id: int,
+        building_id: int,
+        site_code: str,
+        floor_no: int,
+        board_no: Optional[int],
+        name: str,
+        location_desc: str,
+        max_retries: int = 5
+    ) -> EInkBoard:
+        company = EInkCompany.query.get(company_id)
+        if not company:
+            raise ValueError("존재하지 않는 company_id")
+
+        building = EInkBuilding.query.get(building_id)
+        if not building:
+            raise ValueError("존재하지 않는 building_id")
+
+        # ✅ building이 선택한 company에 속하는지 검증
+        if building.company_id != company.id:
+            raise ValueError("선택한 건물이 선택한 회사에 속하지 않아")
+
+        # ✅ Board 등록 정책: 회사/건물 코드는 반드시 존재해야 함
+        if not (company.code or "").strip():
+            raise ValueError("회사코드(company.code)가 없어 게시판 등록 불가")
+        if not (building.code or "").strip():
+            raise ValueError("건물코드(building.code)가 없어 게시판 등록 불가")
+
+        RepositoryAssign._validate_floor_no(floor_no)
+
+        auto = (board_no is None)
+        last_err = None
+
+        for _ in range(max_retries):
+            try:
+                bn = board_no if not auto else RepositoryAssign.next_board_no(building.id, floor_no)
+                RepositoryAssign._validate_board_no(bn)
+
+                code = RepositoryAssign.make_board_code(
+                    company_code=company.code,
+                    site_code=site_code,
+                    building_code=building.code,
+                    floor_no=floor_no,
+                    board_no=bn
+                )
+
+                board = EInkBoard(
+                    building_id=building.id,
+                    floor_no=floor_no,
+                    board_no=bn,
+                    board_code=code,
+                    name=(name or "").strip(),
+                    location_desc=(location_desc or "").strip() or None
+                )
+
+                if not board.name:
+                    raise ValueError("게시판 name은 필수")
+
+                db.session.add(board)
+                db.session.commit()
+                return board
+
+            except IntegrityError as e:
+                db.session.rollback()
+                last_err = e
+                if auto:
+                    continue
+                raise
+
+        raise last_err or RuntimeError("board_no 자동할당 재시도 실패")
 
     # ============================================================
     # TAB3: Device
@@ -105,7 +301,7 @@ class RepositoryAssign:
             raise ValueError("bpp 범위 오류(1~8)")
 
         cap = (cap or "BWR").strip() or "BWR"
-
+ 
         dev = EInkDevice(
             company_id=company_id,
             user_no=user_no,
