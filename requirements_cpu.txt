@@ -182,12 +182,13 @@ tensorboardX==2.6.2.2
 threadpoolctl==3.5.0
 tiktoken==0.8.0
 toml==0.10.2
-torch==2.5.1+cu118
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.5.1
 torch-audiomentations==0.11.2
 torch_pitch_shift==1.2.5
-torchaudio==2.5.1+cu118
+torchaudio==2.5.1
 torchmetrics==1.6.1
-torchvision==0.20.1+cu118
+torchvision==0.20.1
 tornado==6.4.2
 tqdm==4.67.1
 trio==0.25.0
