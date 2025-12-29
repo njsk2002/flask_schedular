@@ -259,38 +259,80 @@ class RepositoryEDevice:
         auth_ok: bool = True,
         auth_mode: str = "none",
         device_fp: Optional[str] = None,
+        # ===== Additional (sensor/state) =====
+        battery_pct: Optional[int] = None,
+        battery_mv: Optional[int] = None,
+        temp_c_x10: Optional[int] = None,
+        rssi_dbm: Optional[int] = None,
+        wake_reason: Optional[str] = None,
+        # ===== Additional (time sync / sleep planning) =====
+        dev_mono_ms: Optional[int] = None,
+        dev_local_epoch_ms: Optional[int] = None,
+        offset_ms: Optional[int] = None,
+        server_epoch_ms: Optional[int] = None,
+        next_change_epoch_ms: Optional[int] = None,
+        sleep_planned_sec: Optional[int] = None,
+        fail_count: Optional[int] = None,
+        backoff_level: Optional[int] = None,
     ) -> None:
-        RepositoryEDevice._dbg("access:log",
-                               user_id=user_id, device_id=device_id, api=api,
-                               ok=ok, http_status=http_status,
-                               posting_id=posting_id, asset_id=asset_id,
-                               ver=ver, crc32=crc32, bytes_sent=bytes_sent,
-                               elapsed_ms=elapsed_ms, error_msg=error_msg)
+        """
+        Persist a device access log row.
+
+        Formal Notes:
+            - IP/User-Agent/Method/Path are extracted from Flask request context.
+              This ensures that callers do not need to pass these fields explicitly.
+            - All string fields are truncated to match column length constraints.
+            - Optional telemetry fields may be None when firmware has not implemented them.
+        """
 
         db.session.add(DeviceAccessLog(
             user_id=user_id,
             device_id=device_id,
             api=api,
+
+            # Request envelope
             method=(request.method or "")[:8],
             path=(request.path or "")[:128],
+
+            # Authentication information
             auth_ok=bool(auth_ok),
             auth_mode=(auth_mode or "")[:16],
             device_fp=(device_fp or "")[:64] if device_fp else None,
 
+            # Outcome
             ok=bool(ok),
             http_status=int(http_status) if http_status is not None else None,
             error_msg=(str(error_msg)[:255] if error_msg else None),
 
+            # Payload context
             posting_id=posting_id,
             asset_id=asset_id,
             ver=ver,
-            crc32=crc32,
+            crc32=(str(crc32)[:8] if crc32 else None),
             bytes_sent=bytes_sent,
 
+            # Client context
             ip=RepositoryEDevice.client_ip(),
             user_agent=RepositoryEDevice.user_agent(),
             elapsed_ms=elapsed_ms,
             created_at=RepositoryEDevice.kst_now_naive(),
+
+            # ===== Additional (sensor/state) =====
+            battery_pct=battery_pct,
+            battery_mv=battery_mv,
+            temp_c_x10=temp_c_x10,
+            rssi_dbm=rssi_dbm,
+            wake_reason=(wake_reason or "")[:16] if wake_reason else None,
+
+            # ===== Additional (time sync / sleep planning) =====
+            dev_mono_ms=dev_mono_ms,
+            dev_local_epoch_ms=dev_local_epoch_ms,
+            offset_ms=offset_ms,
+            server_epoch_ms=server_epoch_ms,
+            next_change_epoch_ms=next_change_epoch_ms,
+            sleep_planned_sec=sleep_planned_sec,
+            fail_count=fail_count,
+            backoff_level=backoff_level,
         ))
 
     @staticmethod
