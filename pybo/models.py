@@ -1147,7 +1147,6 @@ class DeviceAccessLog(db.Model):
         db.Index('idx_dalog_user_dev_time', 'user_id', 'device_id', 'created_at'),
         db.Index('idx_dalog_dev_api_time', 'device_id', 'api', 'created_at'),
         db.Index('idx_dalog_dev_ok_time', 'device_id', 'ok', 'created_at'),
-        # ✅ 최근접속/장애탐지용
         db.Index('idx_dalog_dev_time', 'device_id', 'created_at'),
         TABLE_ARGS,
     )
@@ -1156,16 +1155,13 @@ class DeviceAccessLog(db.Model):
     user_id   = db.Column(db.Integer, db.ForeignKey('user.no', ondelete='CASCADE'), nullable=False, index=True)
     device_id = db.Column(db.String(64), nullable=False, index=True)
 
-    api = db.Column(db.String(32), nullable=False)  # info/bmp/board 등
+    api = db.Column(db.String(32), nullable=False)
+    method = db.Column(db.String(8))
+    path   = db.Column(db.String(128))
 
-    # ✅ 요청 정보
-    method = db.Column(db.String(8))         # GET/POST
-    path   = db.Column(db.String(128))       # /edevice/info 등
-
-    # ✅ 인증 결과(나중 보안 적용 시 필수로 쓰임)
     auth_ok   = db.Column(db.Boolean, nullable=False, default=True)
-    auth_mode = db.Column(db.String(16))     # none/hmac/mtls
-    device_fp = db.Column(db.String(64))     # cert fp 또는 key id
+    auth_mode = db.Column(db.String(16))
+    device_fp = db.Column(db.String(64))
 
     ok          = db.Column(db.Boolean, nullable=False, default=True)
     http_status = db.Column(db.Integer)
@@ -1181,7 +1177,25 @@ class DeviceAccessLog(db.Model):
     user_agent = db.Column(db.String(255))
     elapsed_ms = db.Column(db.Integer)
 
+    # ===== 추가(센서/상태) =====
+    battery_pct = db.Column(db.SmallInteger)   # 0..100
+    battery_mv  = db.Column(db.Integer)        # e.g. 3720
+    temp_c_x10  = db.Column(db.SmallInteger)   # e.g. 253 => 25.3C
+    rssi_dbm    = db.Column(db.SmallInteger)   # e.g. -67
+    wake_reason = db.Column(db.String(16))     # timer/ext0/brownout/poweron
+
+    # ===== 추가(시간 동기/슬립 계획) =====
+    dev_mono_ms         = db.Column(db.BigInteger)  # esp_timer_get_time()/1000
+    dev_local_epoch_ms  = db.Column(db.BigInteger)  # optional
+    offset_ms           = db.Column(db.Integer)     # server_epoch - dev_local_epoch (or derived)
+    server_epoch_ms     = db.Column(db.BigInteger)  # server time returned
+    next_change_epoch_ms= db.Column(db.BigInteger)  # server instructed
+    sleep_planned_sec   = db.Column(db.Integer)     # final sleep chosen
+    fail_count          = db.Column(db.SmallInteger, default=0)
+    backoff_level       = db.Column(db.SmallInteger, default=0)
+
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+
 
 
 ######################################################################################

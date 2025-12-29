@@ -6,6 +6,8 @@ select * from document_approval_steps where status = 'pending';
 select * from document_versions;
 select * from documents;
 
+
+
 UPDATE document_infos
 SET stored_path = 'D:/eink_docs/njsk2002/approval_process/74',
     target_dir  = 'in_review',
@@ -67,6 +69,8 @@ select * from eink_board_binding;
 update eink_device set company_id = '2' where id between 1 and 6;
 update eink_device set user_no =1, user_userid = 'njsk2002' where id = 8;
 delete from eink_board_binding where id = 3;
+
+select * from device_access_logs order by id desc;
 
 
 
