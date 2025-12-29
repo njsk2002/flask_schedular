@@ -46,29 +46,13 @@ def _should_skip_schedulers(app) -> bool:
     if _running_migration_cmd():
         return True
 
-    # ✅ 3) WERKZEUG_RUN_MAIN 가드는 "개발서버 리로더 전용"이라 Apache에서 영구 스킵 원인이 될 수 있음
-    #    -> 여기서는 스킵 조건에서 제거(완화). 중복 실행은 DB 락으로 해결.
+    # 3) dev/test에서만 reloader parent 방지
+    if (app.debug or app.testing):
+        if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+            return True
+
     return False
 
-# ─────────────────────────────────────────────────────────────
-# MySQL 단일 실행 락 (Apache 멀티프로세스 대비)
-# ─────────────────────────────────────────────────────────────
-def _acquire_mysql_lock(lock_name: str, timeout: int = 0) -> bool:
-    try:
-        v = db.session.execute(
-            text("SELECT GET_LOCK(:n, :t)"),
-            {"n": lock_name, "t": timeout}
-        ).scalar()
-        return int(v or 0) == 1
-    except Exception:
-        return False
-
-def _release_mysql_lock(lock_name: str) -> None:
-    try:
-        db.session.execute(text("SELECT RELEASE_LOCK(:n)"), {"n": lock_name})
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
 
 def create_app():
     app = Flask(__name__)
@@ -178,10 +162,10 @@ def create_app():
     # ─────────────────────────────────────────────────────────
     # ✅ 스케줄러/백그라운드 작업
     #  - Apache 환경에서도 "시작/실행/예외"가 무조건 로그에 남게 함
-    #  - 중복 실행은 DB GET_LOCK으로 1개만
     # ─────────────────────────────────────────────────────────
-    app.logger.warning(
-        f"[BOOT] create_app pid={os.getpid()} "
+    # 1) 현재 프로세스/환경 로그 (원인 확정용)
+    app.logger.info(
+        f"[SCHEDDBG] pid={os.getpid()} ppid={os.getppid() if hasattr(os, 'getppid') else -1} "
         f"debug={app.debug} testing={app.testing} "
         f"WERKZEUG_RUN_MAIN={os.environ.get('WERKZEUG_RUN_MAIN')} "
         f"FLASK_SKIP_SCHEDULER={os.environ.get('FLASK_SKIP_SCHEDULER')} "
@@ -189,22 +173,14 @@ def create_app():
     )
 
     if _should_skip_schedulers(app):
-        app.logger.warning("[SCHEDULER] Skipped (migration/CLI/env)")
+        app.logger.info("[SCHEDULER] Skipped (migration/CLI/reloader/env)")
         return app
-
-    # ✅ app_context 내에서 DB 락을 잡아 단일 실행 보장
-    with app.app_context():
-        lock_name = "pybo_scheduler_lock"
-        got = _acquire_mysql_lock(lock_name, timeout=0)
-        if not got:
-            app.logger.warning(f"[SCHEDULER] Another process holds lock={lock_name}; skip starting scheduler")
-            return app
 
     # 2) cleanup thread도 시작 로그를 남김
     from .views.e_namecard_controller import cleanup_expired_qr_codes
 
     def _start_cleanup():
-        app.logger.warning("[CLEANUP] cleanup thread starting")
+        app.logger.info("[CLEANUP] cleanup thread starting")
         try:
             cleanup_expired_qr_codes(app)
         except Exception:
@@ -215,14 +191,8 @@ def create_app():
     # 3) APScheduler init + 시작 여부 로그
     try:
         sched = init_scheduler(app)
-        app.logger.warning(
-            f"[SCHEDULER] Scheduler initialized. running={getattr(sched, 'running', None)} "
-            f"pid={os.getpid()}"
-        )
+        app.logger.info(f"[SCHEDULER] Scheduler initialized. running={getattr(sched, 'running', None)}")
     except Exception:
-        # 락을 잡았는데 스케줄러가 실패하면 락도 풀어주는 게 좋음
-        with app.app_context():
-            _release_mysql_lock("pybo_scheduler_lock")
         app.logger.exception("[SCHEDULER] Scheduler init failed")
 
     return app
