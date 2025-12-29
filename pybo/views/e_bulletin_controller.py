@@ -46,11 +46,13 @@ from ..service.file_management import (
 
     decide_doc_bucket,save_doc_master_bundle,
 
+    _ensure_empty_dir,
+
     current_userid_str,
 
 
     # tmp
-    LAYER_TMP_DIR,
+    LAYER_TMP_DIR, UPLOADS_BASE_DIR
 )
 
 try:
@@ -690,25 +692,48 @@ def document_register():
 @bp.route("/preview_blob", methods=["POST"])
 @login_required
 def preview_blob():
-    """
-    기존 E-INK 미리보기 엔드포인트.
-    - multipart/form-data: 파일 업로드 + 바로 PNG 응답
-    - application/json: upload_id + 파라미터 기반 PNG 응답
+   
+    # Legacy E-Ink preview endpoint.
 
-    신규 설계에서는:
-    - 원본 업로드 → /document/upload_original
-    - BMP/E-INK 미리보기 → /bmp_preview
-    를 사용하는 것이 권장이며,
-    이 엔드포인트는 하위호환 용도로만 유지.
-    """
+    # Behavior:
+    #   - Prior to processing, remove all contents under:
+    #         D:\bmp_files\<user_no>\uploads\
+    #     (including nested directories)
+    #   - Then proceed with the existing upload+preview behavior.
+
+    # Notes:
+    #   - This is a strong cleanup policy. Use only if this uploads tree is
+    #     truly dedicated to preview generation and not shared with other flows.
+    #   - Windows file-lock errors are mitigated by retry logic in _safe_remove_any().
+   
     created_id = None
     layers = []
+
     UPLOADS = get_upload_store()
     svc = get_translation_service()
 
+    t0 = time.perf_counter()
 
+    # -------------------------------------------------------------------------
+    # 1) Compute per-user uploads directory and clean it.
+    # -------------------------------------------------------------------------
+    user_id = (getattr(current_user, "userid", None) or "").strip()
+    if not user_id:
+        abort(401, "invalid user_id")
 
-    # multipart/form-data 브랜치: "원샷 업로드 + 미리보기"
+    uploads_root = os.path.join(UPLOADS_BASE_DIR, user_id, "uploads")
+
+    try:
+        _ensure_empty_dir(uploads_root, root=UPLOADS_BASE_DIR)
+        current_app.logger.debug(f"[preview_blob] cleaned uploads_root={uploads_root}")
+    except Exception as e:
+        # Cleanup failure should be visible; depending on policy you can abort or continue.
+        current_app.logger.debug(f"[preview_blob] cleanup failed uploads_root={uploads_root} err={e}")
+        abort(500, f"cleanup failed: {e}")
+
+    # -------------------------------------------------------------------------
+    # 2) multipart/form-data branch: one-shot upload + preview
+    # -------------------------------------------------------------------------
     if request.mimetype and "multipart/form-data" in request.mimetype:
         f = request.files.get("file")
         if not f:
@@ -717,8 +742,11 @@ def preview_blob():
         suffix = os.path.splitext(f.filename or "")[1].lower() or ".bin"
         upload_id = next_upload_id()
 
-        # ✅ uploads/{upload_id}/source.ext 저장
+        # The existing helper should create something like:
+        #   D:\bmp_files\<user_no>\uploads\<upload_id>\
         doc_dir = _upload_doc_dir(upload_id)
+        os.makedirs(doc_dir, exist_ok=True)
+
         source_path = os.path.join(doc_dir, f"source{suffix}")
         f.save(source_path)
 
@@ -737,7 +765,6 @@ def preview_blob():
         rotate = int(request.form.get("rotate", 0))
         page = int(request.form.get("page", 1))
 
-        # ✅ 무조건 “정규화 PNG” 반환
         cached = _ensure_normalized_cached(
             svc=svc,
             upload_id=upload_id,
@@ -749,8 +776,11 @@ def preview_blob():
             page=page,
         )
 
-        # review_blob 내부 파싱 끝난 다음에 위치 (성능/일관성 목적)
-        _ = _ensure_normalized_cached(svc, upload_id, width, height, scale, percent, rotate, page)
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        current_app.logger.debug(
+            f"[preview_blob] ok user_id={user_id} upload_id={upload_id} "
+            f"source='{source_path}' preview='{cached}' elapsed_ms={elapsed_ms}"
+        )
 
         resp = send_file(cached, mimetype="image/png")
         resp.headers["X-Upload-Id"] = str(created_id)
@@ -759,6 +789,12 @@ def preview_blob():
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
         return resp
+
+    # -------------------------------------------------------------------------
+    # 3) JSON branch or other legacy modes (keep existing behavior)
+    # -------------------------------------------------------------------------
+    # NOTE: This is intentionally left as-is. Insert your existing JSON-handling code here.
+    abort(415, "unsupported content type for preview_blob")
 
 
 

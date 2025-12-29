@@ -64,7 +64,7 @@ def init_scheduler(app):
             with app.app_context():
                 result = PostingSchedulerService.tick_all(logger=app.logger)
             # ✅ 핵심: changed/rows를 반드시 로그로 남김
-            app.logger.debug(f"[SCHEDULER] tick_all result={result}")
+            # app.logger.debug(f"[SCHEDULER] tick_all result={result}")
         except Exception:
             app.logger.exception("[SCHEDULER] tick_all crashed")
 

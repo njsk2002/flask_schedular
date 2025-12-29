@@ -19,8 +19,8 @@ class PostingSchedulerService:
     def tick_device(*, user_id: int, device_id: str, logger=None):
         now = kst_now_naive()
 
-        if logger:
-            logger.debug(f"[TICK] device={device_id} now={now}")
+        # if logger:
+        #     logger.debug(f"[TICK] device={device_id} now={now}")
 
         changed = False
         promoted = False

@@ -12,6 +12,9 @@ from flask import current_app, request, g, session
 from PIL import Image, ImageDraw, ImageFont
 
 
+from pathlib import Path
+
+
 try:
     import qrcode
 except ImportError:
@@ -33,6 +36,8 @@ except Exception:
 _UPLOADS: dict = {}
 _LAYER_STORE: dict = {}
 _UPLOAD_SEQ = itertools.count(1)
+
+UPLOADS_BASE_DIR = r"D:\bmp_files"   # Per-user storage root on Windows
 
 
 def get_upload_store():
@@ -2548,3 +2553,73 @@ def inject_user_photo1_into_snapshot(layout_snapshot: dict) -> int:
 
     return changed_total
 
+
+
+
+
+
+# =============================================================================
+# Safe filesystem helpers
+# =============================================================================
+def _is_path_inside_root(target: str, root: str) -> bool:
+    """
+    Return True only if 'target' resolves to a path that is inside 'root'.
+    This prevents accidental deletion outside the intended storage tree.
+    """
+    root_p = Path(root).resolve()
+    target_p = Path(target).resolve()
+    return (root_p == target_p) or (root_p in target_p.parents)
+
+
+def _safe_remove_any(path: str, *, root: str, retries: int = 5, sleep_sec: float = 0.15) -> None:
+    """
+    Remove a file or directory safely.
+    - Only allow deletion inside 'root'.
+    - Retry for Windows file-lock conditions.
+    """
+    if not path:
+        return
+
+    if not _is_path_inside_root(path, root):
+        raise RuntimeError(f"Refuse to delete outside root: target={path}, root={root}")
+
+    p = Path(path)
+    if not p.exists():
+        return
+
+    last_err = None
+    for _ in range(max(1, int(retries))):
+        try:
+            if p.is_dir():
+                shutil.rmtree(str(p))
+            else:
+                p.unlink(missing_ok=True)
+            return
+        except Exception as e:
+            last_err = e
+            time.sleep(float(sleep_sec))
+
+    raise last_err
+
+
+def _ensure_empty_dir(dir_path: str, *, root: str) -> str:
+    """
+    Ensure the directory exists and is empty (delete all children).
+    The directory itself is preserved, only its contents are removed.
+    """
+    if not dir_path:
+        raise RuntimeError("dir_path is empty")
+
+    # Create directory first (safe to call repeatedly).
+    os.makedirs(dir_path, exist_ok=True)
+
+    # Enforce deletion scope under 'root'.
+    if not _is_path_inside_root(dir_path, root):
+        raise RuntimeError(f"Refuse to clean outside root: dir={dir_path}, root={root}")
+
+    # Remove all children (files and directories).
+    for name in os.listdir(dir_path):
+        child = os.path.join(dir_path, name)
+        _safe_remove_any(child, root=root)
+
+    return dir_path
