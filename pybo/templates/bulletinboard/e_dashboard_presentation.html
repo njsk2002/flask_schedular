@@ -50,16 +50,14 @@
     --panel-border: rgba(0,0,0,.08);
 
     /* ✅ 다음포스트(헤더+스트립) 컨트롤 */
-    --strip-bottom: 16px;       /* 바닥 여백(크면 패널이 위로 올라감) */
-    --strip-gap: 6px;           /* ✅ "다음포스트" 뱃지 ↔ 카드 간격(여기만 조절) */
+    --strip-bottom: 16px;
+    --strip-gap: 6px;
 
-    /* ✅ 중앙 60% 유지 */
-    --strip-width-vw: 100vw;     /* 60% 느낌 */
-    --strip-max-w: 1700px;      /* 너무 커지지 않게 */
-    --strip-min-w: 1100px;      /* 너무 작아지지 않게(큰 화면 기준) */
+    --strip-width-vw: 100vw;
+    --strip-max-w: 1700px;
+    --strip-min-w: 1100px;
 
-    /* ✅ 위(프리뷰)와 더 붙이기: 이 값이 클수록 위가 더 비워짐 */
-    --strip-reserve: 150px;     /* 140~170 사이에서 조절 추천 */
+    --strip-reserve: 150px;
   }
 
   html, body { height: 100%; }
@@ -67,11 +65,10 @@
     margin:0;
     background: var(--bg);
     color: var(--fg);
-    overflow: hidden; /* 기본: 전시 모드 */
+    overflow: hidden;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans KR", sans-serif;
   }
 
-  /* 상단 바 */
   .topbar{
     height: 56px;
     display:flex;
@@ -101,7 +98,6 @@
   }
   .btn-mini:hover{ filter: brightness(1.03); }
 
-  /* ✅ 배경색 컨트롤 */
   .bg-ctrl{
     display:flex;
     align-items:center;
@@ -127,7 +123,6 @@
     cursor: pointer;
   }
 
-  /* Wall */
   .wall{
     height: calc(100vh - 56px);
     padding: var(--pad);
@@ -138,7 +133,6 @@
     flex-wrap: nowrap;
   }
 
-  /* ✅ 반응형: 1개씩 크게 + 라벨 겹침 방지 */
   .wall.is-single{
     flex-direction: column;
     align-items: center;
@@ -151,7 +145,6 @@
     gap: calc(var(--label-h) + 22px);
   }
 
-  /* 타일 */
   .tile{
     width: var(--tile-w);
     height: var(--tile-h);
@@ -160,7 +153,6 @@
     position: relative;
   }
 
-  /* 액자 */
   .frame{
     width: 100%;
     height: 100%;
@@ -191,7 +183,6 @@
     display:block;
   }
 
-  /* 라벨 */
   .meta{
     position: absolute;
     top: -20px;
@@ -259,7 +250,6 @@
     flex: 0 0 auto;
   }
 
-  /* 로딩 표시 */
   .state{
     position:absolute;
     top: calc(var(--frame-pad) + 8px);
@@ -276,26 +266,18 @@
   }
   .tile.is-loading .state{ display:block; }
 
-  /* ────────────────────────────────────────────────────────────
-     ✅ 다음포스트: "wrap" 한 덩어리 (중앙 60% + 간격 제어)
-     ──────────────────────────────────────────────────────────── */
   .nextpost-wrap{
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
     bottom: var(--strip-bottom);
-
-    /* 중앙 60% 느낌 + 상한/하한 */
     width: clamp(var(--strip-min-w), var(--strip-width-vw), var(--strip-max-w));
-
     display: flex;
     flex-direction: column;
     gap: var(--strip-gap);
-
-    pointer-events: none; /* 전시 모드 */
+    pointer-events: none;
   }
 
-  /* "다음포스트" 헤더 */
   .strip-head{
     width: 100%;
     padding: 10px 14px;
@@ -339,7 +321,6 @@
     text-overflow: ellipsis;
   }
 
-  /* 하단 스케줄 패널 */
   .schedule-strip{
     width: 100%;
     padding: 8px 10px;
@@ -404,40 +385,31 @@
     text-overflow: ellipsis;
   }
 
-    /* ✅ 라벨 칸을 확 줄이고, 값 칸을 최대로 */
-    .s-grid{
-      display: grid;
-      grid-template-columns: 44px 1fr; /* 92px → 44px */
-      gap: 4px 8px;
-      font-size: .78rem;
-      line-height: 1.15;
-    }
+  .s-grid{
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 4px 8px;
+    font-size: .78rem;
+    line-height: 1.15;
+  }
 
-    /* 라벨(k): 최대한 짧고 작고 연하게 */
-    .s-grid .k{
-      font-size: .72rem;
-      font-weight: 700;
-      gap: 4px 8px;
-      color: var(--fg);
-      opacity: .85;
-      white-space: nowrap;
-    }
+  .s-grid .k{
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--fg);
+    opacity: .85;
+    white-space: nowrap;
+  }
 
-    /* 값(v): 날짜가 최대한 보이도록 */
-    .s-grid .v{
-      min-width: 0;
-      gap: 4px 8px;
-      color: var(--fg);
-      font-weight: 800;
-
-      /* ✅ 날짜 표현 최대 확보 */
-      white-space: nowrap;     /* 한 줄 유지 */
-      overflow: visible;       /* 가능하면 잘리지 않게 */
-      text-overflow: clip;
-      font-variant-numeric: tabular-nums; /* 숫자 가독성 */
-    }
-
-
+  .s-grid .v{
+    min-width: 0;
+    color: var(--fg);
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+    font-variant-numeric: tabular-nums;
+  }
 
   .s-preview{
     width: 84px;
@@ -464,16 +436,12 @@
     text-align:center;
   }
 
-  /* ✅ 위(프리뷰) ↔ 아래(다음포스트) 더 붙이기 */
   body.has-strip .wall{
     height: calc(100vh - 56px - var(--strip-reserve));
     padding-bottom: calc(var(--pad) + var(--strip-reserve));
-    align-items: flex-end; /* 타일을 아래로 붙여서 공백 감소 */
+    align-items: flex-end;
   }
 
-  /* ────────────────────────────────────────────────────────────
-     ✅ 반응형: 1700px 이하에서는 아래로 내려서 스크롤 UI
-     ──────────────────────────────────────────────────────────── */
   @media (max-width: 1700px){
     body{ overflow: auto; }
     .wall{ justify-content: flex-start; }
@@ -506,7 +474,6 @@
     </div>
 
     <div class="top-actions">
-      <!-- ✅ 배경만 변경 -->
       <div class="bg-ctrl" title="배경색 변경(배경만 선택)">
         <span class="lbl">BG</span>
         <input id="bgColor" type="color" value="#ffffff" />
@@ -521,7 +488,7 @@
   </div>
 
   <div class="wall" id="grid">
-    <!-- tiles (동일) -->
+    <!-- tiles -->
     <div class="tile" data-device-id="E01">
       <div class="meta">
         <div class="left">
@@ -608,106 +575,103 @@
     </div>
   </div>
 
-  <!-- ✅ 하단 패널 헤더 -->
   <div class="nextpost-wrap" id="nextpostWrap">
     <div class="strip-head" id="stripHead">
-    <div class="strip-head-title"><span class="dot"></span>다음포스트</div>
-    <div class="strip-head-sub">포스트일자 · 잔량시간 · 다음게시일자 · 다음게시물 미리보기</div>
-  </div>
-
-  <!-- ✅ 하단: 포스트일자/잔량/다음게시/다음미리보기 -->
-  <div class="schedule-strip" id="scheduleStrip" aria-label="device schedule strip">
-    <!-- 카드 5개 (JS로 채움) -->
-    <div class="s-card" data-device-id="E01">
-      <div class="s-left">
-        <div class="s-title">
-          <div class="s-badge">E01</div>
-          <div class="s-name">-</div>
-        </div>
-        <div class="s-grid">
-          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
-          <div class="k">잔량시간</div><div class="v v-remain">-</div>
-          <div class="k">다음게시</div><div class="v v-next-start">-</div>
-        </div>
-      </div>
-      <div class="s-preview">
-        <img class="img-next" src="" alt="next preview">
-        <div class="ph" style="display:none;">다음 없음</div>
-      </div>
+      <div class="strip-head-title"><span class="dot"></span>다음포스트</div>
+      <div class="strip-head-sub">포스트일자 · 잔량시간 · 다음게시일자 · 다음게시물 미리보기</div>
     </div>
 
-    <div class="s-card" data-device-id="E02">
-      <div class="s-left">
-        <div class="s-title">
-          <div class="s-badge">E02</div>
-          <div class="s-name">-</div>
+    <div class="schedule-strip" id="scheduleStrip" aria-label="device schedule strip">
+      <div class="s-card" data-device-id="E01">
+        <div class="s-left">
+          <div class="s-title">
+            <div class="s-badge">E01</div>
+            <div class="s-name">-</div>
+          </div>
+          <div class="s-grid">
+            <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+            <div class="k">잔량시간</div><div class="v v-remain">-</div>
+            <div class="k">다음게시</div><div class="v v-next-start">-</div>
+          </div>
         </div>
-        <div class="s-grid">
-          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
-          <div class="k">잔량시간</div><div class="v v-remain">-</div>
-          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        <div class="s-preview">
+          <img class="img-next" src="" alt="next preview">
+          <div class="ph" style="display:none;">다음 없음</div>
         </div>
       </div>
-      <div class="s-preview">
-        <img class="img-next" src="" alt="next preview">
-        <div class="ph" style="display:none;">다음 없음</div>
-      </div>
-    </div>
 
-    <div class="s-card" data-device-id="E03">
-      <div class="s-left">
-        <div class="s-title">
-          <div class="s-badge">E03</div>
-          <div class="s-name">-</div>
+      <div class="s-card" data-device-id="E02">
+        <div class="s-left">
+          <div class="s-title">
+            <div class="s-badge">E02</div>
+            <div class="s-name">-</div>
+          </div>
+          <div class="s-grid">
+            <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+            <div class="k">잔량시간</div><div class="v v-remain">-</div>
+            <div class="k">다음게시</div><div class="v v-next-start">-</div>
+          </div>
         </div>
-        <div class="s-grid">
-          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
-          <div class="k">잔량시간</div><div class="v v-remain">-</div>
-          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        <div class="s-preview">
+          <img class="img-next" src="" alt="next preview">
+          <div class="ph" style="display:none;">다음 없음</div>
         </div>
       </div>
-      <div class="s-preview">
-        <img class="img-next" src="" alt="next preview">
-        <div class="ph" style="display:none;">다음 없음</div>
-      </div>
-    </div>
 
-    <div class="s-card" data-device-id="E04">
-      <div class="s-left">
-        <div class="s-title">
-          <div class="s-badge">E04</div>
-          <div class="s-name">-</div>
+      <div class="s-card" data-device-id="E03">
+        <div class="s-left">
+          <div class="s-title">
+            <div class="s-badge">E03</div>
+            <div class="s-name">-</div>
+          </div>
+          <div class="s-grid">
+            <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+            <div class="k">잔량시간</div><div class="v v-remain">-</div>
+            <div class="k">다음게시</div><div class="v v-next-start">-</div>
+          </div>
         </div>
-        <div class="s-grid">
-          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
-          <div class="k">잔량시간</div><div class="v v-remain">-</div>
-          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        <div class="s-preview">
+          <img class="img-next" src="" alt="next preview">
+          <div class="ph" style="display:none;">다음 없음</div>
         </div>
       </div>
-      <div class="s-preview">
-        <img class="img-next" src="" alt="next preview">
-        <div class="ph" style="display:none;">다음 없음</div>
-      </div>
-    </div>
 
-    <div class="s-card" data-device-id="E05">
-      <div class="s-left">
-        <div class="s-title">
-          <div class="s-badge">E05</div>
-          <div class="s-name">-</div>
+      <div class="s-card" data-device-id="E04">
+        <div class="s-left">
+          <div class="s-title">
+            <div class="s-badge">E04</div>
+            <div class="s-name">-</div>
+          </div>
+          <div class="s-grid">
+            <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+            <div class="k">잔량시간</div><div class="v v-remain">-</div>
+            <div class="k">다음게시</div><div class="v v-next-start">-</div>
+          </div>
         </div>
-        <div class="s-grid">
-          <div class="k">게시일자</div><div class="v v-cur-start">-</div>
-          <div class="k">잔량시간</div><div class="v v-remain">-</div>
-          <div class="k">다음게시</div><div class="v v-next-start">-</div>
+        <div class="s-preview">
+          <img class="img-next" src="" alt="next preview">
+          <div class="ph" style="display:none;">다음 없음</div>
         </div>
       </div>
-      <div class="s-preview">
-        <img class="img-next" src="" alt="next preview">
-        <div class="ph" style="display:none;">다음 없음</div>
+
+      <div class="s-card" data-device-id="E05">
+        <div class="s-left">
+          <div class="s-title">
+            <div class="s-badge">E05</div>
+            <div class="s-name">-</div>
+          </div>
+          <div class="s-grid">
+            <div class="k">게시일자</div><div class="v v-cur-start">-</div>
+            <div class="k">잔량시간</div><div class="v v-remain">-</div>
+            <div class="k">다음게시</div><div class="v v-next-start">-</div>
+          </div>
+        </div>
+        <div class="s-preview">
+          <img class="img-next" src="" alt="next preview">
+          <div class="ph" style="display:none;">다음 없음</div>
+        </div>
       </div>
     </div>
-  </div>
   </div>
 
   <script>
@@ -723,15 +687,29 @@
 
     const strip = document.getElementById("scheduleStrip");
 
-    const ASPECT = 0.75; // width/height (1200/1600)
+    const ASPECT = 0.75;
     const GAP = 12;
     const PAD = 12;
 
     const BG_KEY = "eink_wall_bg";
     const BG_DEFAULT = "#ffffff";
 
+    // ✅ 갱신 주기(페이지 전체 reload 대신 refresh만)
+    const AUTO_REFRESH_MS = 60000; // 30s (원하면 60s~120s로 올리면 더 안정)
+
+    // ✅ API 타임아웃(서버 잠깐 버벅일 때 무한 대기 방지)
+    const API_TIMEOUT_MS = 8000;
+
+    // ✅ 이미지 로드 재시도
+    const IMG_RETRY_MAX = 2;
+    const IMG_RETRY_DELAY_BASE = 450; // ms (지수 백오프)
+
     // ✅ 하단 잔량 갱신용 캐시
     const remainCache = {}; // {E01:{expireMs:number|null}}
+
+    // ✅ refresh 중복 실행 방지 (페이지가 바쁠 때 겹치면 실패율 증가)
+    let refreshing = false;
+    let refreshQueued = false;
 
     function hexToRgb(hex){
       const h = (hex || "").replace("#","").trim();
@@ -794,10 +772,6 @@
       }
     }
 
-    function setImg(img, url){
-      img.src = url ? (url + (url.includes('?') ? '&' : '?') + 't=' + Date.now()) : '';
-    }
-
     function fmtTime(ts){
       if(!ts) return "-";
       try{
@@ -835,25 +809,77 @@
       return `${mm}m ${String(ss).padStart(2,'0')}s`;
     }
 
+    // ✅ fetch + timeout + no-store
     async function api(url){
-      const r = await fetch(url, { cache: "no-store" });
-      if(!r.ok) throw new Error(url + " -> " + r.status);
-      return r.json();
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+
+      try{
+        const r = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+        if(!r.ok) throw new Error(url + " -> " + r.status);
+        return await r.json();
+      }finally{
+        clearTimeout(to);
+      }
     }
 
-    // ✅ next 정보는 (1) /dashboard/board?device_id=.. 우선, (2) 없으면 /dashboard/schedule/list?device_id=.. 에서 첫 wait
+    // ✅ 이미지: 캐시버스터는 유지하되, 실패 시 재시도(지수백오프)
+    function setImgStable(img, url){
+      const holderTile = img.closest(".tile");
+      const stateEl = holderTile ? holderTile.querySelector(".state") : null;
+
+      const baseUrl = (url || "").trim();
+      if(!baseUrl){
+        img.removeAttribute("data-src-base");
+        img.src = "";
+        if(stateEl) stateEl.textContent = "no image";
+        return;
+      }
+
+      img.setAttribute("data-src-base", baseUrl);
+
+      const attemptLoad = (attempt) => {
+        // 로딩 상태 표시(너무 거슬리면 주석)
+        if(stateEl) stateEl.textContent = (attempt === 0 ? "loading…" : `retry ${attempt}/${IMG_RETRY_MAX}…`);
+
+        const bust = "t=" + Date.now();
+        const full = baseUrl + (baseUrl.includes("?") ? "&" : "?") + bust;
+
+        // error 핸들러는 1회성으로
+        img.onerror = () => {
+          img.onerror = null;
+          if(attempt < IMG_RETRY_MAX){
+            const delay = IMG_RETRY_DELAY_BASE * Math.pow(2, attempt); // 450, 900, ...
+            setTimeout(() => attemptLoad(attempt + 1), delay);
+          }else{
+            if(stateEl) stateEl.textContent = "img fail";
+            // 마지막 실패: src 비우지 말고 "마지막 정상 이미지"가 남도록 유지
+            // (빈칸 방지용)
+          }
+        };
+
+        img.onload = () => {
+          img.onload = null;
+          if(stateEl) stateEl.textContent = "";
+        };
+
+        img.src = full;
+      };
+
+      attemptLoad(0);
+    }
+
+    // ✅ next 정보는 (1) /dashboard/board 우선, (2) 없으면 /dashboard/schedule/list 첫 wait
     async function loadNextInfo(deviceId){
       let curStart = null, curExpire = null, nextStart = null, nextPreview = "";
       let curTitle = "-";
 
-      // 1) board (current/next)
       try{
         const b = await api(`/dashboard/board?device_id=${encodeURIComponent(deviceId)}`);
         const cur = b?.current || null;
         const nxt = b?.next || null;
 
         curTitle = cur?.title || cur?.orig_filename || cur?.filename || "-";
-
         curStart = cur?.start_time || cur?.expect_post_time || cur?.posted_at || null;
         curExpire = cur?.end_time || cur?.expire_time || cur?.expire_at || null;
 
@@ -863,7 +889,6 @@
         // ignore
       }
 
-      // 2) schedule list fallback
       if(!nextPreview || !nextStart){
         try{
           const s = await api(`/dashboard/schedule/list?device_id=${encodeURIComponent(deviceId)}`);
@@ -898,7 +923,8 @@
       const ph = card.querySelector(".ph");
 
       if(info.nextPreview){
-        setImg(img, info.nextPreview);
+        // next 미리보기도 재시도 적용(빈칸 방지)
+        setImgStable(img, info.nextPreview);
         img.style.display = "";
         ph.style.display = "none";
       }else{
@@ -916,50 +942,15 @@
         const exp = remainCache[did]?.expireMs ?? null;
         const v = card.querySelector(".v-remain");
         if(!v) return;
-        if(exp == null){
-          v.textContent = "-";
-        }else{
-          v.textContent = fmtRemain(exp - now);
-        }
+        v.textContent = (exp == null) ? "-" : fmtRemain(exp - now);
       });
-    }
-
-    async function refresh(){
-      const tiles = Array.from(grid.querySelectorAll(".tile[data-device-id]"));
-      tiles.forEach(t => t.classList.add("is-loading"));
-
-      // 기존: 현재 표시(preview) 유지
-      const data = await api("/dashboard/presentation_board");
-
-      // 타일 current render
-      tiles.forEach(tile => {
-        const did = tile.dataset.deviceId;
-        const cur = data.devices?.[did]?.current || null;
-
-        tile.querySelector(".cur").textContent = cur?.title || "-";
-        tile.querySelector(".crc").textContent = "CRC: " + (cur?.crc32 || "-");
-        tile.querySelector(".last").textContent = "Updated: " + fmtTime(cur?.updated_at || cur?.updatedAt || cur?.ts);
-
-        setImg(tile.querySelector(".img"), cur?.preview_url);
-        tile.classList.remove("is-loading");
-      });
-
-      // ✅ 하단 스트립: next 정보 병렬 조회
-      const deviceIds = tiles.map(t => t.dataset.deviceId);
-      const infos = await Promise.all(deviceIds.map(did => loadNextInfo(did).catch(()=>({
-        curTitle:"-", curStart:null, curExpire:null, nextStart:null, nextPreview:""
-      }))));
-
-      deviceIds.forEach((did, idx) => renderStripCard(did, infos[idx]));
-
-      // 잔량 즉시 갱신
-      tickRemain();
     }
 
     function layoutTiles(){
       const topH = document.querySelector('.topbar')?.getBoundingClientRect().height || 56;
       const stripH0 = document.getElementById('scheduleStrip')?.getBoundingClientRect().height || 0;
-      const stripH = Math.max(0, stripH0 - 30); // ✅ 30px 정도 덜 빼기(겹치지 않으면서 간격 감소)
+      const stripH = Math.max(0, stripH0 - 30);
+
       const vw = window.innerWidth;
       const vh = window.innerHeight;
 
@@ -976,6 +967,64 @@
 
       document.documentElement.style.setProperty('--tile-h', tileH + 'px');
       document.documentElement.style.setProperty('--tile-w', tileW + 'px');
+    }
+
+    async function refreshInternal(){
+      const tiles = Array.from(grid.querySelectorAll(".tile[data-device-id]"));
+      tiles.forEach(t => t.classList.add("is-loading"));
+
+      // 1) current 상태
+      const data = await api("/dashboard/presentation_board");
+
+      // 2) 타일 렌더 (current)
+      tiles.forEach(tile => {
+        const did = tile.dataset.deviceId;
+        const cur = data.devices?.[did]?.current || null;
+
+        tile.querySelector(".cur").textContent = cur?.title || "-";
+        tile.querySelector(".crc").textContent = "CRC: " + (cur?.crc32 || "-");
+        tile.querySelector(".last").textContent = "Updated: " + fmtTime(cur?.updated_at || cur?.updatedAt || cur?.ts);
+
+        const img = tile.querySelector(".img");
+        // ✅ 이미지 실패율 줄이는 핵심: 안정 로더 + 재시도
+        setImgStable(img, cur?.preview_url || "");
+
+        tile.classList.remove("is-loading");
+      });
+
+      // 3) 하단 스트립(next) - 병렬이지만, API 타임아웃 + refresh 중복방지로 안정화
+      const deviceIds = tiles.map(t => t.dataset.deviceId);
+      const infos = await Promise.all(
+        deviceIds.map(did => loadNextInfo(did).catch(() => ({
+          curTitle:"-", curStart:null, curExpire:null, nextStart:null, nextPreview:""
+        })))
+      );
+
+      deviceIds.forEach((did, idx) => renderStripCard(did, infos[idx]));
+      tickRemain();
+    }
+
+    // ✅ refresh 중복 실행 방지 (겹치면 이미지/API 실패율이 올라감)
+    async function refresh(){
+      if(refreshing){
+        refreshQueued = true;
+        return;
+      }
+      refreshing = true;
+
+      try{
+        await refreshInternal();
+      }catch(e){
+        // 실패해도 다음 주기에서 복구됨
+        // console.debug(e);
+      }finally{
+        refreshing = false;
+        if(refreshQueued){
+          refreshQueued = false;
+          // 연속 호출은 살짝 딜레이 주기
+          setTimeout(() => refresh(), 150);
+        }
+      }
     }
 
     // 키: b(배경 포커스), r(리프레시)
@@ -1006,10 +1055,8 @@
     // ✅ 잔량 1초 단위 갱신
     setInterval(tickRemain, 1000);
 
-    /* ✅ 30초마다 자동 리로드(페이지 전체 새로고침) */
-    setInterval(() => {
-      location.reload();
-    }, 30000);
+    // ✅ 자동 갱신: 페이지 reload가 아니라 refresh만
+    setInterval(() => refresh(), AUTO_REFRESH_MS);
 
   })();
   </script>
