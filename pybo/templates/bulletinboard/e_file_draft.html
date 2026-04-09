@@ -1,24 +1,60 @@
 {% extends 'e_base.html' %}
 
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_file_draft.css') }}"> 
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid py-3" id="draft-app">
 
-  <!-- 헤더 -->
-  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-    <div class="d-flex align-items-center gap-3">
-      <h3 class="mb-0">게시판 파일 작성</h3>
-      <span class="badge text-bg-secondary" id="device-badge">대상 장치 선택 전</span>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-      <button class="btn btn-outline-dark" id="btn-bmp-toggle">BMP확인</button>
-      <button class="btn btn-success" id="btn-send">전송/배포</button>
-    </div>
-  </div>
+  <!-- Header -->
+  <section class="draft-hero card border-0 shadow-sm mb-3">
+    <div class="card-body">
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+        <div>
+          <div class="draft-kicker">E-Ink 파일 작성</div>
+          <h3 class="mb-2">게시판 파일 작성</h3>
+          <p class="mb-0 text-secondary draft-hero-desc">
+            파일 업로드부터 결재/직인/QR/게시기간/메시지 레이어 구성까지 한 화면에서 처리합니다.
+          </p>
+        </div>
 
-  <!-- 토스트 -->
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-dark" id="btn-bmp-toggle">BMP 확인</button>
+          <button class="btn btn-success" id="btn-send">전송/배포</button>
+        </div>
+      </div>
+
+      <div class="draft-meta-grid mt-3">
+        <div class="meta-item">
+          <span class="meta-label">장치</span>
+          <span class="meta-value" id="device-badge">선택 전</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">파일</span>
+          <span class="meta-value" id="status-file">미선택</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">페이지</span>
+          <span class="meta-value" id="status-pages">0 / 0</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">레이어</span>
+          <span class="meta-value" id="status-layers">0</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">미리보기</span>
+          <span class="meta-value" id="status-preview">원본</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Toast -->
   <div id="toast-area" class="position-fixed top-0 end-0 p-3" style="z-index:1080;"></div>
 
-  <!-- ✅ Busy Modal -->
+  <!-- Busy Modal -->
   <div class="modal fade" id="busyModal" tabindex="-1" aria-hidden="true"
       data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-dialog-centered">
@@ -26,7 +62,7 @@
         <div class="modal-header">
           <div class="d-flex align-items-center gap-2">
             <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-            <h5 class="modal-title mb-0" id="busyTitle">현재 파일 생성중입니다</h5>
+            <h5 class="modal-title mb-0" id="busyTitle">파일 생성 중입니다</h5>
           </div>
         </div>
         <div class="modal-body">
@@ -38,332 +74,83 @@
           </div>
 
           <div class="d-flex justify-content-between mt-2">
-            <small class="text-muted" id="busyStep">준비중</small>
+            <small class="text-muted" id="busyStep">초기화 중</small>
             <small class="text-muted" id="busyPct">12%</small>
           </div>
 
           <div class="mt-3 p-2 rounded bg-light small" id="busyLog"
               style="max-height:140px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
-            · 요청을 처리하는 중입니다...
+            * 요청 대기 중...
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <style>
-    /* ===== Layout ===== */
-    #draft-app .left-panel{
-      position: sticky;
-      top: 12px;                 /* 헤더 아래로 살짝 띄우기 */
-      height: calc(100vh - 24px);/* 화면 거의 풀로 */
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding-right: 4px;
-    }
-    @media (max-width: 1199.98px){
-      #draft-app .left-panel{
-        position: static;
-        height: auto;
-        max-height: none;
-        overflow: visible;
-        padding-right: 0;
-      }
-    }
-
-    /* ===== canvas / layers ===== */
-    #draft-app .tool-btn { padding:.35rem .6rem; }
-
-    #draft-app .canvas-wrap {
-      background:#f8f9fa;
-      border:1px solid #dee2e6;
-      border-radius:.75rem;
-      position:relative;
-      overflow:hidden;
-      min-height: 520px;
-    }
-    @media (max-width: 576px){
-      #draft-app .canvas-wrap{ min-height: 360px; }
-    }
-
-    #draft-app .preview-img {
-      width:100%;
-      height:100%;
-      object-fit:contain;
-      display:block;
-      position:relative;
-      z-index:1;
-      pointer-events:none !important;
-      -webkit-user-drag:none;
-      user-select:none;
-    }
-
-    #draft-app .stage {
-      position:absolute;
-      inset:0;
-      z-index:3;
-      pointer-events:auto !important;
-      touch-action:none;
-    }
-
-    #draft-app .layer {
-      position:absolute;
-      border:1px dashed #0d6efd;
-      background:rgba(13,110,253,.04);
-      pointer-events:auto;
-      touch-action:none;
-      cursor:move;
-      z-index:4;
-      box-sizing:border-box;
-    }
-
-    #draft-app .layer .handle {
-      position:absolute;
-      right:-6px;
-      bottom:-6px;
-      width:12px;
-      height:12px;
-      background:#0d6efd;
-      border-radius:2px;
-      cursor:se-resize;
-      z-index:5;
-    }
-
-    #draft-app .layer .title {
-      position:absolute;
-      top:-18px;
-      left:0;
-      font-size:12px;
-      color:#0d6efd;
-      background:rgba(255,255,255,.85);
-      padding:0 .25rem;
-      border-radius:3px;
-      pointer-events:none;
-    }
-
-    #draft-app .layer.selected { outline:2px solid #198754; }
-
-    /* ===== Editor line ===== */
-    #draft-app #editor strong{ font-size: 1rem; }
-    #draft-app #editor .props{
-      background:#fff;
-      min-width: 280px;
-    }
-
-    /* ===== 결재 박스 ===== */
-    #draft-app .layer.approval-box {
-      border:1px solid #000;
-      background:#ffffff;
-    }
-
-    #draft-app .approval-grid {
-      position:absolute;
-      inset:0;
-      display:flex;
-      font-size:11px;
-      color:#000;
-      background:#fff;
-      box-sizing:border-box;
-    }
-
-    #draft-app .approval-side {
-      flex: var(--cols, 1) 1 0;
-      display:flex;
-      border-left:1px solid #000;
-    }
-    #draft-app .approval-side:first-child { border-left:0; }
-
-    #draft-app .approval-side .dept-col {
-      width:18%;
-      min-width:40px;
-      background:#e9ecef;
-      border-right:1px solid #000;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      box-sizing:border-box;
-    }
-    #draft-app .approval-side .dept-vert-text {
-      writing-mode:vertical-rl;
-      text-orientation:mixed;
-      font-weight:700;
-      letter-spacing:1px;
-    }
-
-    #draft-app .approval-side .cols-wrap {
-      flex:1;
-      display:flex;
-      flex-direction:column;
-      box-sizing:border-box;
-    }
-
-    #draft-app .approval-side .header-row,
-    #draft-app .approval-side .stamp-row,
-    #draft-app .approval-side .name-row { display:flex; }
-
-    #draft-app .approval-side .header-row {
-      flex: 1 1 0;
-      border-bottom:1px solid #000;
-      background:#f1f3f5;
-    }
-    #draft-app .approval-side .stamp-row {
-      flex: 3 1 0;
-      border-bottom:1px solid #000;
-      background:#ffffff;
-    }
-    #draft-app .approval-side .name-row {
-      flex: 1 1 0;
-      background:#ffffff;
-    }
-
-    #draft-app .approval-side .cell {
-      flex:1 1 0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      border-right:1px solid #000;
-      box-sizing:border-box;
-      padding:0 2px;
-      text-align:center;
-      word-break:keep-all;
-    }
-    #draft-app .approval-side .header-row .cell { font-weight:700; background:#f8f9fa; }
-    #draft-app .approval-side .name-row .cell { font-size:10px; }
-    #draft-app .approval-side .header-row .cell:last-child,
-    #draft-app .approval-side .stamp-row .cell:last-child,
-    #draft-app .approval-side .name-row .cell:last-child { border-right:0; }
-
-    #draft-app .approval-sign-img{
-      max-width: 92%;
-      max-height: 92%;
-      object-fit: contain;
-      display:block;
-    }
-    #draft-app .approval-done-text{
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    /* 직인/QR/기간/메세지용 박스 */
-    #draft-app .layer.stamp-box,
-    #draft-app .layer.qr-box,
-    #draft-app .layer.period-box,
-    #draft-app .layer.message-box {
-      border: 1px solid #000;
-      background: #ffffff;
-    }
-
-    #draft-app .meta-content {
-      font-size: 11px;
-      padding: 2px 4px;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      box-sizing: border-box;
-      word-break: keep-all;
-    }
-
-    /* 직인 strip */
-    #stamp-list.stamp-strip{
-      display:flex;
-      gap:8px;
-      overflow-x:auto;
-      padding:6px 4px;
-      border:1px solid #e9ecef;
-      border-radius:12px;
-      background:#fafafa;
-      -webkit-overflow-scrolling:touch;
-    }
-    #stamp-list .stamp-card{
-      flex:0 0 auto;
-      width:120px;
-      border:1px solid #dee2e6;
-      border-radius:12px;
-      background:#fff;
-      padding:8px;
-      cursor:pointer;
-      text-align:center;
-      transition: transform .08s ease;
-    }
-    #stamp-list .stamp-card:hover{ transform: translateY(-1px); }
-    #stamp-list .stamp-card.selected{
-      outline:2px solid #198754;
-      border-color:#86efac;
-    }
-    #stamp-list .stamp-card img{
-      width:100%;
-      height:80px;
-      object-fit:contain;
-      display:block;
-    }
-    #stamp-list .stamp-name{
-      margin-top:6px;
-      font-size:.8rem;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-    }
-  </style>
-
   <div class="row g-3">
 
-    <!-- 설정 영역 -->
-    <div class="col-12 col-xl-4 order-2 order-xl-1 left-panel">
+    <!-- Left control panel -->
+    <aside class="col-12 col-xl-4 order-2 order-xl-1 left-panel">
 
       <!-- 1) 파일 -->
-      <div class="card shadow-sm">
+      <section class="card shadow-sm draft-card">
         <div class="card-header"><strong>파일</strong></div>
         <div class="card-body d-flex flex-column gap-2">
           <div class="d-flex align-items-center gap-2">
             <input type="file" id="file-input" class="form-control"
                    accept=".pdf,.png,.jpg,.jpeg,.bmp,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.csv,.txt">
           </div>
+
           <div class="row g-2">
-            <div class="col-8">
-              <input type="text" class="form-control" id="input-filename" placeholder="파일명(표시용)" readonly>
+            <div class="col-12 col-sm-8">
+              <input type="text" class="form-control" id="input-filename" placeholder="파일명" readonly>
             </div>
-            <div class="col-4">
+            <div class="col-12 col-sm-4">
               <select id="select-device" class="form-select" disabled>
-                <option value="">대상 장치(E01~E06)</option>
-                <option value="E01">E01</option>
-                <option value="E02">E02</option>
-                <option value="E03">E03</option>
-                <option value="E04">E04</option>
-                <option value="E05">E05</option>
-                <option value="E06">E06</option>
+                <option value="">대상 장치</option>
+                {% if devices %}
+                  {% for d in devices %}
+                    {% set _device_id = d.device_id if d.device_id is defined else d.id if d.id is defined else d %}
+                    <option value="{{ _device_id }}">{{ _device_id }}</option>
+                  {% endfor %}
+                {% else %}
+                  <option value="E01">E01</option>
+                  <option value="E02">E02</option>
+                  <option value="E03">E03</option>
+                  <option value="E04">E04</option>
+                  <option value="E05">E05</option>
+                  <option value="E06">E06</option>
+                {% endif %}
               </select>
             </div>
           </div>
-          <!-- <input type="text" id="input-memo" class="form-control" placeholder="메모(옵션)" disabled> -->
+
+          <input type="text" id="input-memo" class="form-control" placeholder="메모(선택)" disabled>
         </div>
-      </div>
+      </section>
 
       <!-- 2) 옵션 -->
-      <div class="card shadow-sm mt-3">
+      <section class="card shadow-sm draft-card mt-3">
         <div class="card-header"><strong>옵션</strong></div>
         <div class="card-body d-flex flex-column gap-2">
           <div class="row g-2">
-            <!-- <div class="col-6">
+            <div class="col-6 d-none">
               <label class="form-label mb-1 small">해상도</label>
               <select class="form-select" id="select-res">
-                <option value="480x800">480×800</option>
-                <option value="800x480">800×480</option>
-                <option value="1200x1600" selected>1200×1600</option>
+                <option value="1200x1600" selected>1200x1600</option>
               </select>
             </div>
-            <div class="col-6">
+
+            <div class="col-6 d-none">
               <label class="form-label mb-1 small">컬러/팔레트</label>
               <select class="form-select" id="select-mode" disabled>
                 <option value="BWRYBG" selected>6색 (BWRYBG)</option>
                 <option value="BWRY">3색 (BWRY)</option>
                 <option value="BW">흑백 (BW)</option>
               </select>
-            </div> -->
+            </div>
 
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1 small">스케일</label>
               <select class="form-select" id="select-scale">
                 <option value="fit" selected>FIT</option>
@@ -372,33 +159,26 @@
               </select>
             </div>
 
-            <div class="col-6 percent-wrap d-none">
+            <div class="col-12 col-sm-6 percent-wrap d-none">
               <label class="form-label mb-1 small">배율(%)</label>
               <input type="range" min="50" max="200" value="100" id="range-percent" class="form-range">
             </div>
 
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1 small">회전</label>
               <select class="form-select" id="select-rotate">
-                <option value="0" selected>0°</option>
-                <option value="90">90°</option>
-                <option value="180">180°</option>
-                <option value="270">270°</option>
+                <option value="0" selected>0도</option>
+                <option value="90">90도</option>
+                <option value="180">180도</option>
+                <option value="270">270도</option>
               </select>
             </div>
-
-            <!-- <div class="col-6 d-flex align-items-end">
-              <div class="small text-muted">
-                · 스케일/회전 변경 시 BMP 프리뷰 자동 갱신<br>
-                · “BMP확인” 버튼으로 원본/변환 토글
-              </div>
-            </div> -->
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- 3) 결재기능 -->
-      <div class="card shadow-sm mt-3">
+      <section class="card shadow-sm draft-card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
           <strong>결재기능</strong>
           <div class="form-check form-switch m-0">
@@ -408,30 +188,28 @@
         </div>
 
         <div class="card-body small" id="approval-body">
-
-          <!-- 작성부서 -->
           <div class="mb-3 border rounded p-2">
             <div class="fw-bold mb-1">작성부서</div>
             <div class="row g-2 align-items-end">
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label class="form-label mb-1">부서</label>
                 <select id="sel-draft-dept" class="form-select form-select-sm" disabled>
-                  <option value="">(작성부서 선택)</option>
+                  <option value="">(선택)</option>
                 </select>
               </div>
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label class="form-label mb-1">역할</label>
                 <select id="sel-draft-role" class="form-select form-select-sm" disabled>
                   <option value="">(선택)</option>
                   <option value="작성">작성</option>
                   <option value="검토">검토</option>
-                  <option value="승인">승인</option>
+                  <option value="확인">확인</option>
                 </select>
               </div>
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label class="form-label mb-1">담당자</label>
                 <select id="sel-draft-user" class="form-select form-select-sm" disabled>
-                  <option value="">(담당자 선택)</option>
+                  <option value="">(선택)</option>
                 </select>
               </div>
             </div>
@@ -442,33 +220,32 @@
               </button>
             </div>
             <div class="form-text">
-              · “작성”은 로그인한 사용자가 자동으로 들어갑니다.<br>
-              · “검토/승인”은 담당자를 선택한 후 추가하세요.
+              * 작성 단계는 로그인 사용자가 자동 반영됩니다.<br>
+              * 검토/확인 역할은 담당자를 먼저 선택하세요.
             </div>
           </div>
 
-          <!-- 확인부서 -->
           <div class="mb-3 border rounded p-2">
             <div class="fw-bold mb-1">확인부서</div>
             <div class="row g-2 align-items-end">
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label class="form-label mb-1">부서</label>
                 <select id="sel-check-dept" class="form-select form-select-sm" disabled>
-                  <option value="">(확인부서 선택)</option>
+                  <option value="">(선택)</option>
                 </select>
               </div>
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label class="form-label mb-1">역할</label>
                 <select id="sel-check-role" class="form-select form-select-sm" disabled>
                   <option value="">(선택)</option>
                   <option value="검토">검토</option>
-                  <option value="승인">승인</option>
+                  <option value="확인">확인</option>
                 </select>
               </div>
-              <div class="col-4">
+              <div class="col-12 col-sm-4">
                 <label class="form-label mb-1">담당자</label>
                 <select id="sel-check-user" class="form-select form-select-sm" disabled>
-                  <option value="">(담당자 선택)</option>
+                  <option value="">(선택)</option>
                 </select>
               </div>
             </div>
@@ -480,29 +257,21 @@
             </div>
           </div>
 
-          <!-- 결재 열 구성 -->
           <div class="mb-2">
             <div class="fw-bold mb-1">결재 열 구성</div>
             <ul class="list-group list-group-flush small" id="approval-cols-list"></ul>
-            <div class="form-text">
-              · 왼쪽부터 [작성부서: 작성/검토/승인…] → [확인부서: 검토/승인…] 순서로 정렬됩니다.
-            </div>
+            <div class="form-text">* 좌측은 작성부서, 우측은 확인부서 순서로 구성됩니다.</div>
           </div>
 
           <div class="d-flex justify-content-between gap-2 mt-2">
-            <button class="btn btn-outline-danger btn-sm flex-fill" id="btn-approval-clear">
-              초기화
-            </button>
-            <button class="btn btn-primary btn-sm flex-fill" id="btn-approval-build">
-              결재 LAY 추가
-            </button>
+            <button class="btn btn-outline-danger btn-sm flex-fill" id="btn-approval-clear">초기화</button>
+            <button class="btn btn-primary btn-sm flex-fill" id="btn-approval-build">결재 LAY 추가</button>
           </div>
-
         </div>
-      </div>
+      </section>
 
       <!-- 4) 직인 -->
-      <div class="card shadow-sm mt-3">
+      <section class="card shadow-sm draft-card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
           <strong>직인</strong>
           <div class="form-check form-switch m-0">
@@ -511,133 +280,114 @@
           </div>
         </div>
         <div class="card-body small">
-          <!-- <div class="mb-2">
+          <div class="d-none">
             <label class="form-label mb-1">직인 종류</label>
             <select id="sel-stamp-type" class="form-select form-select-sm">
               <option value="">(선택)</option>
-              <option value="company">회사 직인</option>
-              <option value="dept">부서 직인</option>
+              <option value="company">회사</option>
+              <option value="dept">부서</option>
             </select>
-          </div> -->
+          </div>
 
           <div class="row g-2 mt-2">
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">직인 크기(px)</label>
-              <input type="number" id="input-stamp-size"
-                     class="form-control form-control-sm"
-                     value="80" min="40" max="400">
+              <input type="number" id="input-stamp-size" class="form-control form-control-sm" value="80" min="40" max="400">
             </div>
-            <div class="col-6 d-flex align-items-end">
-              <button class="btn btn-outline-primary btn-sm w-100" id="btn-stamp-add">
-                직인 LAY 추가
-              </button>
+            <div class="col-12 col-sm-6 d-flex align-items-end">
+              <button class="btn btn-outline-primary btn-sm w-100" id="btn-stamp-add">직인 LAY 추가</button>
             </div>
           </div>
 
           <div id="stamp-list" class="stamp-strip mt-2"></div>
-          <div class="form-text">
-            · 항목을 클릭한 뒤 “직인 LAY 추가”를 누르면 우측에 추가됩니다.
-          </div>
+          <div class="form-text">* 항목을 선택한 뒤 직인 레이어를 추가하세요.</div>
         </div>
-      </div>
+      </section>
 
       <!-- 5) QR 코드 -->
-      <div class="card shadow-sm mt-3">
+      <section class="card shadow-sm draft-card mt-3">
         <div class="card-header"><strong>QR 코드</strong></div>
         <div class="card-body small">
           <label class="form-label mb-1">QR 내용 (URL 또는 텍스트)</label>
-          <input type="text" id="input-qrcode-text" class="form-control form-control-sm"
-                 placeholder="예: http://www.icetech.co.kr">
+          <input type="text" id="input-qrcode-text" class="form-control form-control-sm" placeholder="예) https://www.icetech.co.kr">
 
           <div class="row g-2 mt-2">
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">QR 크기(px)</label>
-              <input type="number" id="input-qrcode-size"
-                     class="form-control form-control-sm"
-                     value="120" min="60" max="400">
+              <input type="number" id="input-qrcode-size" class="form-control form-control-sm" value="120" min="60" max="400">
             </div>
-            <div class="col-6 d-flex align-items-end">
-              <button class="btn btn-outline-primary btn-sm w-100" id="btn-qrcode-add">
-                QR LAY 추가
-              </button>
+            <div class="col-12 col-sm-6 d-flex align-items-end">
+              <button class="btn btn-outline-primary btn-sm w-100" id="btn-qrcode-add">QR LAY 추가</button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- 6) 게시기간 -->
-      <div class="card shadow-sm mt-3">
+      <section class="card shadow-sm draft-card mt-3">
         <div class="card-header"><strong>게시기간</strong></div>
         <div class="card-body small">
           <div class="row g-2 mb-2">
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">시작일</label>
               <input type="date" id="input-period-from" class="form-control form-control-sm">
             </div>
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">종료일</label>
               <input type="date" id="input-period-to" class="form-control form-control-sm">
             </div>
           </div>
           <div class="row g-2">
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">시작 시간</label>
               <input type="time" id="input-period-from-time" class="form-control form-control-sm">
             </div>
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">종료 시간</label>
               <input type="time" id="input-period-to-time" class="form-control form-control-sm">
             </div>
           </div>
           <div class="row g-2 mt-3">
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">글자 크기(px)</label>
-              <input type="number" id="input-period-font"
-                     class="form-control form-control-sm"
-                     value="18" min="10" max="48">
+              <input type="number" id="input-period-font" class="form-control form-control-sm" value="18" min="10" max="48">
             </div>
-            <div class="col-6 d-flex align-items-end">
-              <button class="btn btn-outline-primary btn-sm w-100" id="btn-period-add">
-                게시기간 LAY 추가
-              </button>
+            <div class="col-12 col-sm-6 d-flex align-items-end">
+              <button class="btn btn-outline-primary btn-sm w-100" id="btn-period-add">게시기간 LAY 추가</button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- 7) 메세지 -->
-      <div class="card shadow-sm mt-3 mb-3">
-        <div class="card-header"><strong>메세지 (100자 이내)</strong></div>
+      <!-- 7) 메시지 -->
+      <section class="card shadow-sm draft-card mt-3 mb-3">
+        <div class="card-header"><strong>메시지 (100자 이내)</strong></div>
         <div class="card-body small">
           <textarea id="input-message" class="form-control" rows="2" maxlength="100"
-                    placeholder="게시판 하단 등에서 사용할 간단 안내 메세지 (최대 100자)"></textarea>
+                    placeholder="화면에 표시할 안내 메시지"></textarea>
 
           <div class="row g-2 mt-2">
-            <div class="col-6">
+            <div class="col-12 col-sm-6">
               <label class="form-label mb-1">글자 크기(px)</label>
-              <input type="number" id="input-message-font"
-                     class="form-control form-control-sm"
-                     value="18" min="10" max="48">
+              <input type="number" id="input-message-font" class="form-control form-control-sm" value="18" min="10" max="48">
             </div>
-            <div class="col-6 d-flex align-items-end">
-              <button class="btn btn-outline-primary btn-sm w-100" id="btn-message-add">
-                메세지 LAY 추가
-              </button>
+            <div class="col-12 col-sm-6 d-flex align-items-end">
+              <button class="btn btn-outline-primary btn-sm w-100" id="btn-message-add">메시지 LAY 추가</button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-    </div><!-- /설정 col -->
+    </aside>
 
-    <!-- ✅ 에디터/프리뷰 영역 (요청대로 최소 UI) -->
-    <div class="col-12 col-xl-8 order-1 order-xl-2">
-      <div class="card shadow-sm h-100">
+    <!-- 미리보기 / 편집 영역 -->
+    <section class="col-12 col-xl-8 order-1 order-xl-2">
+      <div class="card shadow-sm h-100 preview-panel">
         <div class="card-body d-flex flex-column gap-2">
 
           <div id="editor" class="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <strong>미리보기 &amp; 편집</strong>
-            <button class="btn btn-outline-danger btn-sm tool-btn" id="btn-del" title="선택 삭제">삭제</button>
+            <button class="btn btn-outline-danger btn-sm tool-btn" id="btn-del" title="선택 레이어 삭제">삭제</button>
 
             <div class="props small border rounded p-2 ms-auto">
               <div class="d-flex gap-3 flex-wrap">
@@ -656,9 +406,9 @@
 
         </div>
       </div>
-    </div><!-- /에디터 col -->
+    </section>
 
-  </div><!-- /row -->
+  </div>
 </div>
 {% endblock %}
 
@@ -810,10 +560,35 @@ const $msgInput   = document.getElementById('input-message');
 const $msgFont    = document.getElementById('input-message-font');
 const $btnMsgAdd  = document.getElementById('btn-message-add');
 
+const $statusFile   = document.getElementById('status-file');
+const $statusPages  = document.getElementById('status-pages');
+const $statusLayers = document.getElementById('status-layers');
+const $statusPreview= document.getElementById('status-preview');
+
 /* -------------------- UI helpers -------------------- */
 function redrawHeader(){
   if ($fn) $fn.value = state.file_name || '';
-  if ($devBadge) $devBadge.textContent = state.device_id ? `대상: ${state.device_id}` : '대상 장치 선택 전';
+  if ($devBadge) $devBadge.textContent = state.device_id ? state.device_id : '선택 전';
+  updateStatusCards();
+}
+
+function updateStatusCards(){
+  if ($statusFile) {
+    $statusFile.textContent = state.file_name || '미선택';
+    $statusFile.title = state.file_name || '';
+  }
+
+  const page = state.upload_id ? (state.page || 1) : 0;
+  const pages = state.upload_id ? (state.pages || 1) : 0;
+  if ($statusPages) $statusPages.textContent = `${page} / ${pages}`;
+
+  if ($statusLayers) $statusLayers.textContent = `${state.layers.length}`;
+
+  if ($statusPreview) {
+    const modeText = state.preview.mode === 'bmp' ? 'BMP' : '원본';
+    const dirtyText = state.preview.dirty ? ' (변경됨)' : '';
+    $statusPreview.textContent = `${modeText}${dirtyText}`;
+  }
 }
 
 function updatePercentRow(){
@@ -969,6 +744,7 @@ async function previewOriginalOnce(file){
   state.preview.dirty = false;
   if ($img) $img.src = url + '#t=' + Date.now();
   if ($btnBmpToggle) $btnBmpToggle.textContent = 'BMP확인';
+  updateStatusCards();
 
   // BMP 캐시 폐기
   if (state.preview.bmpUrl) URL.revokeObjectURL(state.preview.bmpUrl);
@@ -1001,6 +777,7 @@ async function refreshOriginalByUpload(){
   if (state.preview.originalUrl) URL.revokeObjectURL(state.preview.originalUrl);
   state.preview.originalUrl = url;
   state.preview.dirty = false;
+  updateStatusCards();
 }
 
 /* -------------------- BMP preview -------------------- */
@@ -1046,9 +823,13 @@ async function buildBmpPreview(){
   state.preview.dirty = false;
   if ($img) $img.src = url + '#t=' + Date.now();
   if ($btnBmpToggle) $btnBmpToggle.textContent = '원본확인';
+  updateStatusCards();
 }
 
-function markPreviewDirty(){ state.preview.dirty = true; }
+function markPreviewDirty(){
+  state.preview.dirty = true;
+  updateStatusCards();
+}
 
 /* BMP 토글 */
 on($btnBmpToggle, 'click', async ()=>{
@@ -1083,6 +864,7 @@ on($btnBmpToggle, 'click', async ()=>{
     state.preview.mode = 'original';
     if ($img) $img.src = state.preview.originalUrl + '#t=' + Date.now();
     if ($btnBmpToggle) $btnBmpToggle.textContent = 'BMP확인';
+    updateStatusCards();
     toast('원본 프리뷰로 전환했습니다.','info');
   }catch(e){
     toast('원본 프리뷰 갱신 실패','danger');
@@ -1143,6 +925,7 @@ function selectLayerByEl(el){
     n.classList.toggle('selected', n === el);
   });
   updatePropPanel();
+  updateStatusCards();
 }
 
 function renderLayers(){
@@ -1318,6 +1101,7 @@ function renderLayers(){
   });
 
   updatePropPanel();
+  updateStatusCards();
 }
 
 function removeLayerByType(type){
@@ -1778,11 +1562,28 @@ on($file, 'change', async (ev)=>{
   const f=ev.target.files?.[0];
   if(!f) return;
 
+  if ($dev) {
+    $dev.disabled = false;
+  }
+  if ($memo) {
+    $memo.disabled = false;
+  }
+
   // reset
   state.file_name = f.name;
   state.page=1; state.pages=1;
   state.layers = []; state.selected = null;
   state.approvalCols = []; state.approvalUse = false;
+  state.preview.mode = 'original';
+  state.preview.dirty = false;
+  if ($dev && !state.device_id) {
+    const firstDevice = Array.from($dev.options || []).find(opt => !!opt.value);
+    if (firstDevice) {
+      $dev.value = firstDevice.value;
+      state.device_id = firstDevice.value;
+    }
+  }
+  redrawHeader();
   if ($ckApproval) $ckApproval.checked = false;
   renderApprovalCols();
 
@@ -1957,6 +1758,7 @@ async function applyTransformAndRefreshPreview(reasonText){
 (async function init(){
   updatePercentRow();
   redrawHeader();
+  updateStatusCards();
   renderApprovalCols();
   renderLayers();
   await fetchStampList();

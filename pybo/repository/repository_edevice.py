@@ -993,10 +993,12 @@ class RepositoryEDevice:
 
             changed = 0
             for p in q.all():
+                prev_status = getattr(p, "status", "")
                 p.status = "expired"
-                # active였다면, “즉시” 만료되도록 end_time도 now로 고정(원치 않으면 제거)
-                if getattr(p, "status", "") == "active":
+
+                if prev_status == "active":
                     p.end_time = now
+
                 changed += 1
 
             db.session.commit()

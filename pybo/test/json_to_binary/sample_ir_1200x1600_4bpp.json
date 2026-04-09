@@ -1,0 +1,129 @@
+{
+  "meta": {
+    "doc_id": "ftms_notice_20260123_001",
+    "version": 1,
+    "created_at": "2026-01-23T12:00:00+09:00"
+  },
+  "canvas": {
+    "width": 1200,
+    "height": 1600,
+    "bpp": 4,
+    "rotation": 0,
+    "background": "#FFFFFF"
+  },
+  "palette": {
+    "0": "#FFFFFF",
+    "1": "#000000",
+    "2": "#FF0000",
+    "3": "#FFFF00",
+    "4": "#0000FF",
+    "5": "#00AA00"
+  },
+  "data": {
+    "title": "발전소 운전 공지 (FTMS / ICMS 연동)",
+    "subtitle": "점검/운전제안/알림 요약 — 2026-01-23",
+    "site": "Dangjin Unit #9",
+    "operator": "운전팀",
+    "status": {
+      "network": "OK",
+      "opc": "CONNECTED",
+      "ftms": "RUNNING",
+      "alarm": "NORMAL"
+    },
+    "bullets": [
+      "14:00~16:00 SH 구역 점검(센서 교정) 예정",
+      "OPC 태그 업데이트: MW, Coal, Air, O2, NOx, NH3",
+      "이상 탐지 이벤트 발생 시 ±30분 Heatmap 자동 추출",
+      "변경 내용은 승인 스냅샷과 함께 보관됨"
+    ],
+    "events": [
+      {"time": "09:12:03", "type": "INFO", "msg": "OPC 연결 재시도 성공 (Latency 120ms)"},
+      {"time": "09:35:18", "type": "WARN", "msg": "FT_XT_35 변동폭 증가 (ΔT=+32)"},
+      {"time": "10:02:44", "type": "INFO", "msg": "SH Heatmap 저장 완료 (20260123_1000)"},
+      {"time": "10:18:01", "type": "INFO", "msg": "RH Heatmap 저장 완료 (20260123_1000)"},
+      {"time": "10:41:20", "type": "INFO", "msg": "예측 모델 로드 완료 (stage1, LGBM)"},
+      {"time": "11:06:55", "type": "WARN", "msg": "공연비 추정치 편차 증가 (RMSE=11.2)"},
+      {"time": "11:28:32", "type": "INFO", "msg": "자동 백업 성공 (temperature_data)"},
+      {"time": "11:52:09", "type": "INFO", "msg": "대시보드 동기화 완료 (Client Pull)"}
+    ],
+    "table": {
+      "headers": ["태그", "값", "단위", "상태", "비고"],
+      "rows": [
+        ["MW", "503.2", "MW", "OK", "실측 발전출력"],
+        ["COAL_FEED", "182.7", "t/h", "OK", "투입량"],
+        ["AIR_FLOW", "103.1", "%", "OK", "과잉공기율"],
+        ["O2", "2.8", "%", "OK", "배가스 O2"],
+        ["NOx", "92", "ppm", "WARN", "상승 추세"],
+        ["NH3", "14", "ppm", "OK", "SCR 분사"],
+        ["FURNACE_MAX", "1362", "°C", "WARN", "국부 과열 의심"],
+        ["SH_AVG", "965", "°C", "OK", "평균"],
+        ["RH_AVG", "892", "°C", "OK", "평균"],
+        ["SLAG_INDEX", "0.71", "-", "WARN", "슬래깅 위험"]
+      ]
+    },
+    "footer": "※ 본 화면은 E-Ink 스냅샷(불변)으로 저장되며, 변경 이력은 서버에서 검증됩니다."
+  },
+  "style": {
+    "font_path": "C:\\\\Windows\\\\Fonts\\\\malgun.ttf",
+    "font_size": 28,
+    "title_size": 54,
+    "subtitle_size": 32,
+    "line_height": 44,
+    "padding": 40
+  },
+  "constraints": {
+    "truncate_ellipsis": true,
+    "max_lines_default": 1
+  },
+  "blocks": [
+    { "type": "rect", "x": 30, "y": 30, "w": 1140, "h": 180, "fill": "#FFFFFF", "outline": "#000000", "stroke": 3 },
+
+    { "type": "text", "x": 60, "y": 55, "text": "{{title}}", "font_size": 54, "color": "#000000", "max_width": 1080, "max_lines": 1 },
+    { "type": "text", "x": 60, "y": 125, "text": "{{subtitle}}", "font_size": 32, "color": "#000000", "max_width": 1080, "max_lines": 1 },
+
+    { "type": "rect", "x": 30, "y": 230, "w": 540, "h": 330, "fill": "#FFFFFF", "outline": "#000000", "stroke": 3 },
+    { "type": "text", "x": 60, "y": 255, "text": "SITE : {{site}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 1 },
+    { "type": "text", "x": 60, "y": 305, "text": "OPERATOR : {{operator}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 1 },
+
+    { "type": "rect", "x": 30, "y": 585, "w": 540, "h": 520, "fill": "#FFFFFF", "outline": "#000000", "stroke": 3 },
+    { "type": "text", "x": 60, "y": 610, "text": "STATUS", "font_size": 34, "color": "#000000", "max_width": 480, "max_lines": 1 },
+
+    { "type": "text", "x": 60, "y": 675, "text": "NETWORK : {{status.network}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 1 },
+    { "type": "text", "x": 60, "y": 725, "text": "OPC      : {{status.opc}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 1 },
+    { "type": "text", "x": 60, "y": 775, "text": "FTMS     : {{status.ftms}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 1 },
+    { "type": "text", "x": 60, "y": 825, "text": "ALARM    : {{status.alarm}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 1 },
+
+    { "type": "rect", "x": 30, "y": 1130, "w": 540, "h": 420, "fill": "#FFFFFF", "outline": "#000000", "stroke": 3 },
+    { "type": "text", "x": 60, "y": 1155, "text": "공지 요약", "font_size": 34, "color": "#000000", "max_width": 480, "max_lines": 1 },
+
+    { "type": "text", "x": 60, "y": 1225, "text": "• {{bullets[0]}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 2 },
+    { "type": "text", "x": 60, "y": 1315, "text": "• {{bullets[1]}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 2 },
+    { "type": "text", "x": 60, "y": 1405, "text": "• {{bullets[2]}}", "font_size": 28, "color": "#000000", "max_width": 480, "max_lines": 2 },
+
+    { "type": "rect", "x": 600, "y": 230, "w": 570, "h": 620, "fill": "#FFFFFF", "outline": "#000000", "stroke": 3 },
+    { "type": "text", "x": 630, "y": 255, "text": "실시간 태그 요약", "font_size": 34, "color": "#000000", "max_width": 510, "max_lines": 1 },
+
+    { "type": "table", "x": 630, "y": 320, "w": 510, "h": 500,
+      "headers": "{{table.headers}}",
+      "rows": "{{table.rows}}",
+      "font_size": 24,
+      "header_fill": "#FFFF00",
+      "grid": "#000000",
+      "row_height": 44,
+      "col_widths": [160, 90, 80, 90, 90]
+    },
+
+    { "type": "rect", "x": 600, "y": 880, "w": 570, "h": 670, "fill": "#FFFFFF", "outline": "#000000", "stroke": 3 },
+    { "type": "text", "x": 630, "y": 905, "text": "이벤트 로그", "font_size": 34, "color": "#000000", "max_width": 510, "max_lines": 1 },
+
+    { "type": "list", "x": 630, "y": 975, "w": 510, "h": 520,
+      "items": "{{events}}",
+      "item_template": "[{{time}}] ({{type}}) {{msg}}",
+      "font_size": 24,
+      "line_height": 36,
+      "max_items": 14
+    },
+
+    { "type": "text", "x": 30, "y": 1555, "text": "{{footer}}", "font_size": 24, "color": "#000000", "max_width": 1140, "max_lines": 1 }
+  ]
+}

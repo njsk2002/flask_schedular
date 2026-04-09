@@ -1,11 +1,19 @@
 {# templates/bulletinboard/e_file_table.html #}
 {% extends "e_base.html" %}
 
-{% block content %}
-<div class="container-fluid py-3">
+{% block extra_css %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='e_css/e_file_table.css') }}">
+{% endblock %}
 
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h4 class="mb-0">전자결재 문서함</h4>
+{% block content %}
+<div class="container-fluid py-3" id="file-table-app">
+
+  <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0">전자결재 문서함</h4>
+      <p class="mb-0 text-muted small">상태별로 문서를 확인하고 검색 후 상세 화면으로 이동할 수 있습니다.</p>
+    </div>
   </div>
 
   <style>
@@ -222,7 +230,7 @@
   {% if tab == 'author' %}
   <div class="card bb-card">
     <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
+      <div class="table-responsive bb-table-wrap"><table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
@@ -281,7 +289,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
 
       {% if pager and pager.pages > 1 %}
       <nav class="mt-2">
@@ -313,7 +321,7 @@
   {% if tab == 'pending' %}
   <div class="card bb-card">
     <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
+      <div class="table-responsive bb-table-wrap"><table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
@@ -385,7 +393,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
 
       {% if pager and pager.pages > 1 %}
       <nav class="mt-2">
@@ -417,7 +425,7 @@
   {% if tab == 'progress' %}
   <div class="card bb-card">
     <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
+      <div class="table-responsive bb-table-wrap"><table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
@@ -474,7 +482,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
 
       {% if pager and pager.pages > 1 %}
       <nav class="mt-2">
@@ -506,7 +514,7 @@
   {% if tab == 'completed' %}
   <div class="card bb-card">
     <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
+      <div class="table-responsive bb-table-wrap"><table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
@@ -548,7 +556,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
 
       {% if pager and pager.pages > 1 %}
       <nav class="mt-2">
@@ -581,7 +589,7 @@
   {% set docs_bf = docs_bulletin_files|default([]) %}
   <div class="card bb-card">
     <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
+      <div class="table-responsive bb-table-wrap"><table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
@@ -610,7 +618,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
 
       {% if pager and pager.pages > 1 %}
       <nav class="mt-2">
@@ -643,7 +651,7 @@
   {% set docs_rj = docs_rejected|default([]) %}
   <div class="card bb-card">
     <div class="card-body p-2">
-      <table class="table table-sm table-hover align-middle mb-0">
+      <div class="table-responsive bb-table-wrap"><table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th style="width: 70px;">번호</th>
@@ -688,7 +696,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
 
       {% if pager and pager.pages > 1 %}
       <nav class="mt-2">

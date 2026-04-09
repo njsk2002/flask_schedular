@@ -2,7 +2,7 @@
 import struct
 import zlib
 import numpy as np
-from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+from PIL import Image, ImageOps  # ← ImageOps 추가
 from flask import current_app
 
 
@@ -14,26 +14,31 @@ class ImageToBytes:
         ----
         - BW(1bpp):
             흰=1, 검=0, MSB-first (8픽셀=1바이트)
-            → 가로 8px 패딩(흰=1)
+            → 가로 8px 패딩(흰=1)  # 2025-09-11: 주석 명확화
 
         - BWRY(2bpp):
             2bit/pixel (W=00, Y=01, R=10, K=11)
             바이트 = (p0<<6)|(p1<<4)|(p2<<2)|p3  (좌→우, 상→하)
             → 가로 4px 패딩(흰=W 코드)
 
-        - BWRYBG(4bpp):
+        - BWRYBG(4bpp)  # 2025-09-11: NEW (기본)
             4bit/pixel (Spectra 6: W=1, Y=2, R=3, B=5, G=6, K=0)
             2픽셀=1바이트: 상위 nibble=왼쪽 픽셀, 하위 nibble=오른쪽 픽셀
             → 가로 픽셀 수가 홀수면 마지막 1픽셀 'W'로 패딩
+            → 하드웨어 정합을 위해 행 바이트 순서를 기본적으로 오른쪽→왼쪽(rtl=True)로 생성  # 2025-09-11
 
-        - BWRYBG3(3bpp):
+        - BWRYBG3(3bpp)  # 2025-09-11: NEW (옵션 경로, 혹시 필요할 때 사용)
             3bit/pixel (W=000, Y=001, R=010, B=011, G=100, K=101)
             8픽셀(24비트) → 3바이트로 패킹, 가로 8px 패딩(흰)
     """
 
     # ---------- 매핑 테이블 ----------
+    # (기존) 4색 2bpp 매핑
     MAPPING_DEVICE = {"W": 0b00, "Y": 0b01, "R": 0b10, "K": 0b11}
 
+    # 2025-09-11: NEW - 6색 4bpp nibble 매핑 (GDEP133C02 샘플/매크로와 일치)
+    # #define BLACK 0x00 / WHITE 0x11 / YELLOW 0x22 / RED 0x33 / BLUE 0x55 / GREEN 0x66
+    # → 실제 nibble 값: K=0x0, W=0x1, Y=0x2, R=0x3, B=0x5, G=0x6
     MAPPING_DEVICE_6_4BPP = {
         "K": 0x0,  # Black
         "W": 0x1,  # White
@@ -43,6 +48,7 @@ class ImageToBytes:
         "G": 0x6,  # Green
     }
 
+    # 2025-09-11: KEEP - 6색 3bpp 기본 매핑 (옵션 경로용, 기본 사용 안 함)
     MAPPING_DEVICE_6_3BPP = {
         "W": 0b000,
         "Y": 0b001,
@@ -52,32 +58,9 @@ class ImageToBytes:
         "K": 0b101,
     }
 
-    # ------------------------------
-    # [NEW] 오프화이트 화이트(디자인/미리보기 기준)
-    # 기본은 체감 밝은 #F5F4EF
-    # 필요하면 #F2F2EE, #EFEFEA로 바꿔도 됨
-    # ------------------------------
-    WHITE_RGB = (245, 244, 239)  # #F5F4EF
-
-    # [NEW] 6색 팔레트(quantize용) - 순서 중요(인덱스 0~5)
-    # idx 0=W, 1=K, 2=Y, 3=R, 4=B, 5=G
-    PALETTE6_RGB = [
-        WHITE_RGB,          # W
-        (0, 0, 0),          # K
-        (255, 255, 0),      # Y
-        (255, 0, 0),        # R
-        (0, 0, 255),        # B
-        (0, 255, 0),        # G
-    ]
-
-    # 근접색 판별용 레퍼런스 RGB (6색 공통)
-    # (기존 #FFFFFF도 남겨 두되, 오프화이트도 포함)
+    # 근접색 판별용 레퍼런스 RGB (6색 공통)  # 2025-09-11: 주석 정리
     COLOR_REF_6 = {
         (255, 255, 255): "W",
-        (242, 242, 238): "W",  # #F2F2EE
-        (239, 239, 234): "W",  # #EFEFEA
-        (245, 244, 239): "W",  # #F5F4EF
-
         (255, 255,   0): "Y",
         (255,   0,   0): "R",
         (0,     0,   0): "K",
@@ -85,163 +68,50 @@ class ImageToBytes:
         (0,     0, 255): "B",
     }
 
+    # (기존) 4색 RGB→2bpp 매핑 기준 컬러
     COLOR_REF_4 = {
-        (255, 255, 255): 0b00,
-        (242, 242, 238): 0b00,
-        (239, 239, 234): 0b00,
-        (245, 244, 239): 0b00,
-
-        (255, 255,   0): 0b01,
-        (255,   0,   0): 0b10,
-        (0,     0,   0): 0b11,
+        (255, 255, 255): 0b00,  # White
+        (255, 255,   0): 0b01,  # Yellow
+        (255,   0,   0): 0b10,  # Red
+        (0,     0,   0): 0b11,  # Black
     }
-
     # ---------- 내부 유틸 ----------
     @staticmethod
     def _ensure_rgb(img: Image.Image) -> Image.Image:
         return img if img.mode == "RGB" else img.convert("RGB")
 
-    # ------------------------------
-    # [NEW] 팔레트 이미지 생성 (PIL quantize용)
-    # ------------------------------
     @staticmethod
-    def _make_palette_image(palette_rgb: list[tuple[int, int, int]]) -> Image.Image:
-        pal = Image.new("P", (1, 1))
-        flat = []
-        for (r, g, b) in palette_rgb:
-            flat += [int(r), int(g), int(b)]
-        flat += [0] * (768 - len(flat))  # 256*3
-        pal.putpalette(flat)
-        return pal
-
-    # ------------------------------
-    # [NEW] 로고/텍스트 판별(가벼운 휴리스틱)
-    # - 색 종류가 적고(단색 위주), 경계가 뚜렷한 경우 로고로 판단
-    # ------------------------------
-    @staticmethod
-    def _is_logo_like(img_rgb: Image.Image) -> bool:
-        # 너무 큰 이미지 그대로 분석하면 무거우니 축소
-        small = img_rgb
-        if max(img_rgb.size) > 320:
-            ratio = 320 / max(img_rgb.size)
-            w = max(1, int(img_rgb.size[0] * ratio))
-            h = max(1, int(img_rgb.size[1] * ratio))
-            # 로고 판별은 경계가 중요 → BILINEAR 정도가 안정적
-            small = img_rgb.resize((w, h), Image.BILINEAR)
-
-        arr = np.array(small, dtype=np.uint8).reshape(-1, 3)
-
-        # 너무 정확한 unique는 비쌀 수 있어서 샘플링
-        if arr.shape[0] > 50000:
-            idx = np.random.choice(arr.shape[0], 50000, replace=False)
-            arr = arr[idx]
-
-        # 색 종류 대략 추정 (양자화해서 unique 수)
-        # 0~255를 0~31로 줄여(5bit) 대략적인 색 카운트
-        q = (arr // 8).astype(np.uint8)
-        uniq = np.unique(q.view(np.dtype((np.void, q.dtype.itemsize * q.shape[1])))).shape[0]
-
-        # 색 종류가 적으면(대략 64 이하) 로고 가능성 높음
-        return uniq <= 64
-
-    # ------------------------------
-    # [NEW] 6색 팔레트로 디더링 없이 강제 퀀타이즈
-    # -> "단색 영역 점(디더링)" 생성 방지
-    # ------------------------------
-    @staticmethod
-    def _quantize_to_palette_no_dither(img_rgb: Image.Image,
-                                       palette_rgb: list[tuple[int, int, int]]) -> Image.Image:
-        pal = ImageToBytes._make_palette_image(palette_rgb)
-        return img_rgb.quantize(palette=pal, dither=Image.Dither.NONE)  # mode='P'
-
-    # ------------------------------
-    # [NEW] 3x3 다수결 필터로 고립 점 제거(로고에만 적용 권장)
-    # threshold=5면 주변 9픽셀 중 5픽셀 이상 같은 색이면 그 색으로 교체
-    # ------------------------------
-    @staticmethod
-    def _majority_filter_idx(idx: np.ndarray, num_classes: int, threshold: int = 5) -> np.ndarray:
-        H, W = idx.shape
-        p = np.pad(idx, ((1, 1), (1, 1)), mode="edge")
-
-        neigh = np.stack([
-            p[0:H,   0:W],   p[0:H,   1:W+1], p[0:H,   2:W+2],
-            p[1:H+1, 0:W],   p[1:H+1, 1:W+1], p[1:H+1, 2:W+2],
-            p[2:H+2, 0:W],   p[2:H+2, 1:W+1], p[2:H+2, 2:W+2],
-        ], axis=0)  # (9,H,W)
-
-        counts = []
-        for c in range(num_classes):
-            counts.append((neigh == c).sum(axis=0))
-        counts = np.stack(counts, axis=0)  # (C,H,W)
-
-        best_c = counts.argmax(axis=0).astype(np.uint8)
-        best_n = counts.max(axis=0)
-
-        out = idx.copy()
-        m = best_n >= threshold
-        out[m] = best_c[m]
-        return out
-
-    # ------------------------------
-    # [NEW] 팔레트 인덱스를 팔레트 RGB로 복원
-    # ------------------------------
-    @staticmethod
-    def _idx_to_rgb_image(idx: np.ndarray, palette_rgb: list[tuple[int, int, int]]) -> Image.Image:
-        H, W = idx.shape
-        rgb = np.zeros((H, W, 3), dtype=np.uint8)
-        for i, (r, g, b) in enumerate(palette_rgb):
-            m = (idx == i)
-            rgb[m, 0] = r
-            rgb[m, 1] = g
-            rgb[m, 2] = b
-        return Image.fromarray(rgb, mode="RGB")
-
-    # ------------------------------
-    # [NEW] BWRYBG(6색) 전용 전처리:
-    #  - 로고/텍스트: 디더링 OFF 퀀타이즈 + 점 제거(다수결)
-    #  - 사진: 디더링 OFF 퀀타이즈(점 제거는 생략) + 약한 선명도 보정
-    # ------------------------------
-    @staticmethod
-    def _preprocess_for_color6(img: Image.Image, is_logo: bool) -> Image.Image:
-        img_rgb = ImageToBytes._ensure_rgb(img)
-
-        # 사진일 때는 선명도 체감 보정(과하면 계단/노이즈 생김 → 약하게)
-        if not is_logo:
-            try:
-                img_rgb = ImageEnhance.Contrast(img_rgb).enhance(1.08)
-                img_rgb = img_rgb.filter(ImageFilter.UnsharpMask(radius=1, percent=120, threshold=3))
-            except Exception:
-                pass
-
-        q = ImageToBytes._quantize_to_palette_no_dither(img_rgb, ImageToBytes.PALETTE6_RGB)
-        idx = np.array(q, dtype=np.uint8)  # 0~(팔레트-1)
-
-        # 로고/텍스트면 고립 점 제거(흰점/잡점 크게 줄어듦)
-        if is_logo:
-            idx = ImageToBytes._majority_filter_idx(idx, num_classes=len(ImageToBytes.PALETTE6_RGB), threshold=5)
-
-        return ImageToBytes._idx_to_rgb_image(idx, ImageToBytes.PALETTE6_RGB)
+    def _maybe_resize(img: Image.Image, size: tuple[int, int] | None) -> Image.Image:
+        if not size:
+            return img
+        w, h = size
+        return img if img.size == (w, h) else img.resize((w, h), Image.LANCZOS)
 
     # ---------- BW: 1bpp ----------
     @staticmethod
     def _pack_bw_1bpp(img: Image.Image, threshold: int | None = None) -> bytes:
+        """
+        - img.mode == '1' 이면: 바로 패킹
+        - 그 외('L' 등) 이면: threshold 필요 → 임계 후 패킹
+        """
         current_app.logger.info(f"[BW] input mode={img.mode}")
         if img.mode == "1":
             arr = np.array(img, dtype=np.uint8)     # 0 or 255
-            bits = (arr != 0).astype(np.uint8)      # 흰=1, 검=0
+            bits = (arr != 0).astype(np.uint8)      # 흰=1, 검=0  # 2025-09-11: 주석 정리
         else:
             if threshold is None:
                 raise ValueError("threshold is required when img.mode != '1'")
             g = img.convert("L")
             arr = np.array(g, dtype=np.uint8)
-            bits = (arr >= threshold).astype(np.uint8)  # 흰=1, 검=0
+            bits = (arr >= threshold).astype(np.uint8)  # 흰=1, 검=0  # 2025-09-11: CHANGED(의도 일관)
 
         H, W = bits.shape
         pad = (-W) % 8
         if pad:
-            bits = np.pad(bits, ((0, 0), (0, pad)), constant_values=1)  # 흰 패딩
+            bits = np.pad(bits, ((0, 0), (0, pad)), constant_values=1)  # 흰으로 패딩  # 2025-09-11
             W += pad
 
+        # MSB-first 패킹 (좌→우 8비트)
         chunks = bits.reshape(H, W // 8, 8)
         weights = np.array([128, 64, 32, 16, 8, 4, 2, 1], dtype=np.uint8)
         packed = (chunks * weights).sum(axis=2).astype(np.uint8)
@@ -253,6 +123,7 @@ class ImageToBytes:
     # ---------- BWRY: 2bpp ----------
     @staticmethod
     def _map_color_4(rgb):
+        """RGB → 4색 2bpp 코드 (overflow 방지 승격)  # 2025-09-11"""
         r = int(rgb[0]); g = int(rgb[1]); b = int(rgb[2])
         diffs = {}
         for (rr, gg, bb), code in ImageToBytes.COLOR_REF_4.items():
@@ -289,6 +160,7 @@ class ImageToBytes:
         lut[2] = mapping["Y"]
         lut[3] = mapping["W"]
         codes = lut[idx]
+        # 4픽셀=1바이트
         H, W = codes.shape
         pad = (-W) % 4
         if pad:
@@ -301,15 +173,12 @@ class ImageToBytes:
                      (groups[:, :, 3]))
         return byte_vals.astype(np.uint8).tobytes()
 
-    # ---------- BWRYBG: 6색 ----------
+
+    # ---------- BWRYBG: 6색 (공통 유틸) ----------
     @staticmethod
     def _nearest_label_6(rgb) -> str:
-        # [선택] 밝고 채도 낮은 픽셀은 W로 고정(화이트 점 줄이고 배경을 더 깔끔하게)
-        # 로고/문서에서 유리. 필요 없으면 아래 if 블록을 주석 처리해도 됨.
+        """RGB → 가장 가까운 6색 라벨('W','Y','R','B','G','K')  # 2025-09-11 (overflow fix)"""
         r = int(rgb[0]); g = int(rgb[1]); b = int(rgb[2])
-        if r >= 235 and g >= 235 and b >= 225:
-            return "W"
-
         best = None; best_d = None
         for (rr, gg, bb), label in ImageToBytes.COLOR_REF_6.items():
             dr = r - rr; dg = g - gg; db = b - bb
@@ -318,13 +187,25 @@ class ImageToBytes:
                 best_d, best = d2, label
         return best
 
+    # --- 4bpp 직패킹 (기본)  # 2025-09-11: NEW ---
+        # --- 4bpp 직패킹 (기본)  # 2025-09-11: NEW + 2025-09-17: 옵션 확장 ---
     @staticmethod
     def _pack_bwrybg_4bpp_direct(img: Image.Image,
                                  mapping_nibble: dict[str, int] | None = None,
-                                 rtl: bool = False,
-                                 swap_nibbles: bool = False,
-                                 flip_x: bool = False,
-                                 flip_y: bool = False) -> bytes:
+                                rtl: bool = False,            # ← 기본 LTR
+                                swap_nibbles: bool = False,   # ← 기본: 좌=상위, 우=하위
+                                flip_x: bool = False,
+                                flip_y: bool = False) -> bytes:
+        """
+        6색을 4bpp nibble로 패킹 (2픽셀=1바이트).
+
+        바이트 구성(기본): 상위 nibble=왼쪽 픽셀, 하위 nibble=오른쪽 픽셀.
+        - swap_nibbles=True 이면 바이트 내부 닙블도 좌↔우 교환.
+        - rtl=True 이면 행의 바이트 순서를 오른쪽→왼쪽으로 반전.
+        - flip_x / flip_y 는 픽셀 좌표계 자체를 미리 뒤집어서 생성.
+
+        가로 픽셀 수가 홀수면 마지막 1픽셀은 'W'로 패딩.
+        """
         img = img.convert("RGB")
         if flip_x:
             img = ImageOps.mirror(img)
@@ -342,9 +223,10 @@ class ImageToBytes:
             wi = 0
             x = 0
             while x < W:
+                # 왼쪽 픽셀
                 lab0 = ImageToBytes._nearest_label_6(arr[y, x])
                 n0 = mp[lab0] & 0x0F
-
+                # 오른쪽 픽셀 (없으면 W로 패딩)
                 if x + 1 < W:
                     lab1 = ImageToBytes._nearest_label_6(arr[y, x + 1])
                     n1 = mp[lab1] & 0x0F
@@ -367,16 +249,19 @@ class ImageToBytes:
 
         return bytes(out)
 
-    # --- 3bpp (옵션) ---
+
+
+    # --- 3bpp 직패킹 (옵션 경로)  # 2025-09-11: KEEP ---
     @staticmethod
     def _pack_codes_3bpp(codes_2d: np.ndarray, white_code: int = 0) -> bytes:
+        """3bpp: 가로 8픽셀 그룹 → 24비트(3바이트) 패킹. 가로 8px 패딩(흰)."""
         H, W = codes_2d.shape
         pad = (-W) % 8
         if pad:
             codes_2d = np.pad(codes_2d, ((0, 0), (0, pad)), constant_values=white_code)
             W += pad
 
-        groups = codes_2d.reshape(H, W // 8, 8).astype(np.uint8)
+        groups = codes_2d.reshape(H, W // 8, 8).astype(np.uint8)  # (H, G, 8)
         c0 = groups[:, :, 0]; c1 = groups[:, :, 1]; c2 = groups[:, :, 2]; c3 = groups[:, :, 3]
         c4 = groups[:, :, 4]; c5 = groups[:, :, 5]; c6 = groups[:, :, 6]; c7 = groups[:, :, 7]
 
@@ -384,18 +269,20 @@ class ImageToBytes:
         b1 = ((((c2 & 0x1) << 7) | (c3 << 4) | (c4 << 1) | (c5 >> 2))) & 0xFF
         b2 = ((((c5 & 0x3) << 6) | (c6 << 3) | c7)) & 0xFF
 
-        out = np.stack([b0, b1, b2], axis=2).astype(np.uint8)
+        out = np.stack([b0, b1, b2], axis=2).astype(np.uint8)   # (H, G, 3)
         return out.reshape(-1).tobytes()
 
     @staticmethod
     def _pack_bwrybg_3bpp_direct(img: Image.Image) -> bytes:
+        """RGB 이미지를 6색(3bpp)으로 근접 매핑 후 패킹 (옵션 경로)"""
         img = img.convert("RGB")
-        arr = np.array(img, dtype=np.uint8)
+        arr = np.array(img, dtype=np.uint8)  # (H,W,3)
         H, W, _ = arr.shape
         codes = np.empty((H, W), dtype=np.uint8)
         for y in range(H):
             row = arr[y]
             for x in range(W):
+                # 3bpp용 코드표로 직접 기록
                 label = ImageToBytes._nearest_label_6(row[x])
                 codes[y, x] = ImageToBytes.MAPPING_DEVICE_6_3BPP[label]
         return ImageToBytes._pack_codes_3bpp(
@@ -408,52 +295,43 @@ class ImageToBytes:
                          mode: str,
                          size: tuple[int, int] | None = None,
                          mapping: dict[str, int] | None = None,
-                         white_thresh: int = 235,   # [CHANGED] 오프화이트 안정 인식(기본 240->235)
+                         white_thresh: int = 240,
                          sat_thresh: float = 0.25) -> bytes:
         """
         입력 이미지를 모드에 맞게 패킹한 RAW + CRC32(LE) 4바이트를 반환
+        - rotate는 라우트 단계에서 처리한다고 가정  # 2025-09-11: 주석 명확화
         """
+        if size and img.size != size:
+            img = img.resize(size, Image.LANCZOS)
 
         mode_up = (mode or "BW").upper()
-
-        # [CHANGED] BWRYBG는 "로고/사진 판별" 후 리사이즈 보간법도 분기
-        if size and img.size != size:
-            if mode_up in ("BWRYBG", "SPECTRA6", "COLOR6"):
-                tmp_rgb = ImageToBytes._ensure_rgb(img)
-                is_logo = ImageToBytes._is_logo_like(tmp_rgb)
-                resample = Image.NEAREST if is_logo else Image.LANCZOS
-                img = img.resize(size, resample)
-            else:
-                img = img.resize(size, Image.LANCZOS)
 
         if mode_up == "BW":
             raw = ImageToBytes._pack_bw_1bpp(img, threshold=white_thresh)
             current_app.logger.info(f"[BW] payload len={len(raw)}")
 
         elif mode_up == "BWRY":
+            # 'P' 팔레트면 인덱스 기반, 아니면 RGB 근접색 기반
             if img.mode == "P":
                 raw = ImageToBytes._pack_bwry_2bpp_from_P(img, mapping or ImageToBytes.MAPPING_DEVICE)
             else:
                 raw = ImageToBytes._pack_bwry_2bpp_direct(img)
             current_app.logger.info(f"[BWRY] payload len={len(raw)}")
 
-        elif mode_up in ("BWRYBG", "SPECTRA6", "COLOR6"):
-            # [NEW] 6색 전처리(디더링 OFF + 로고면 점 제거)
-            img_rgb = ImageToBytes._ensure_rgb(img)
-            is_logo = ImageToBytes._is_logo_like(img_rgb)
-            img_clean = ImageToBytes._preprocess_for_color6(img_rgb, is_logo=is_logo)
-
+        elif mode_up in ("BWRYBG", "SPECTRA6", "COLOR6"):  # 2025-09-11: 기본 4bpp
+            # GDEP133C02 데모 .h 기준: 행 반전 + 닙블 스왑이 맞는 경우가 대부분
             raw = ImageToBytes._pack_bwrybg_4bpp_direct(
-                img_clean,
-                mapping_nibble=(mapping or ImageToBytes.MAPPING_DEVICE_6_4BPP),
-                rtl=False,
-                swap_nibbles=False,
-                flip_x=False,
-                flip_y=False,
-            )
-            current_app.logger.info(f"[BWRYBG-4bpp] logo_like={is_logo} payload len={len(raw)}")
+                    img,
+                    mapping_nibble=(mapping or ImageToBytes.MAPPING_DEVICE_6_4BPP),
+                    rtl=False,           # ← 행을 뒤집지 않음 (좌→우)
+                    swap_nibbles=False,  # ← 바이트 내 닙블 순서 유지(상위=왼쪽, 하위=오른쪽)
+                    flip_x=False,
+                    flip_y=False,
+                )
+            current_app.logger.info(f"[BWRYBG-4bpp] payload len={len(raw)}")
 
-        elif mode_up in ("BWRYBG3", "SPECTRA6_3BPP"):
+
+        elif mode_up in ("BWRYBG3", "SPECTRA6_3BPP"):      # 2025-09-11: 옵션 3bpp 경로
             raw = ImageToBytes._pack_bwrybg_3bpp_direct(img)
             current_app.logger.info(f"[BWRYBG-3bpp] payload len={len(raw)}")
 
@@ -468,7 +346,7 @@ class ImageToBytes:
                               mode: str,
                               size: tuple[int, int] | None = None,
                               mapping: dict[str, int] | None = None,
-                              white_thresh: int = 235,
+                              white_thresh: int = 240,
                               sat_thresh: float = 0.25) -> bytes:
         with Image.open(fp) as im:
             if im.mode != "P":

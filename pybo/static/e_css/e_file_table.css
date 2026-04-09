@@ -1,0 +1,104 @@
+﻿/* Document table dashboard responsive refinements */
+
+#file-table-app {
+  font-family: "Pretendard", "SUIT", "Noto Sans KR", "Segoe UI", sans-serif;
+  color: #122033;
+}
+
+#file-table-app .bb-filter .form-control,
+#file-table-app .bb-filter .form-select,
+#file-table-app .bb-filter .btn {
+  min-height: 42px;
+}
+
+#file-table-app .bb-tabs-row {
+  gap: 0.75rem;
+}
+
+#file-table-app .bb-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  padding-bottom: 0.1rem;
+}
+
+#file-table-app .bb-tabs .nav-link {
+  white-space: nowrap;
+}
+
+#file-table-app .bb-compose {
+  min-height: 40px;
+}
+
+#file-table-app .bb-card {
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(18, 32, 51, 0.08);
+}
+
+#file-table-app .bb-table-wrap {
+  border-radius: 12px;
+}
+
+#file-table-app .bb-table-wrap table {
+  min-width: 920px;
+}
+
+#file-table-app .bb-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f3f6fb;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+}
+
+#file-table-app .status-badge {
+  border-radius: 999px;
+  padding: 0.34rem 0.58rem;
+}
+
+#file-table-app .approval-chip {
+  line-height: 1.4;
+}
+
+#file-table-app .pagination .page-link {
+  border-radius: 10px;
+  margin-right: 4px;
+}
+
+@media (max-width: 991.98px) {
+  #file-table-app .bb-tabs-row {
+    align-items: stretch;
+  }
+
+  #file-table-app .bb-compose {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767.98px) {
+  #file-table-app {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  #file-table-app .bb-filter .col-md-4,
+  #file-table-app .bb-filter .col-md-3,
+  #file-table-app .bb-filter .col-md-2 {
+    width: 100%;
+    flex: 0 0 auto;
+  }
+
+  #file-table-app .bb-tabs {
+    width: 100%;
+  }
+
+  #file-table-app .bb-table-wrap table {
+    min-width: 780px;
+  }
+
+  #file-table-app .status-badge,
+  #file-table-app .approval-chip {
+    font-size: 0.7rem;
+  }
+}

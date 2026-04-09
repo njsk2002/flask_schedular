@@ -1,8 +1,73 @@
-__pycache__/
-*.pyc
-*.pyc
-__pycache__/
+# Python cache
 *.pyc
 __pycache__/
 
-migrations/versions/*.py
+# Build artifacts
+build/
+dist/
+*.obj
+*.lib
+*.exp
+*.pyd
+
+# Flask / Alembic
+migrations/
+
+# Server entry files
+server.wsgi
+
+# Local config (DB, SECRET_KEY, etc)
+config.py
+
+# Python cache
+*.pyc
+__pycache__/
+
+# Build artifacts
+build/
+dist/
+*.obj
+*.lib
+*.exp
+*.pyd
+
+# Flask / Alembic
+migrations/
+
+# Server entry files
+server.wsgi
+
+# Local config (DB, SECRET_KEY, etc)
+config.py
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.webp
+
+# Videos
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.mkv
+*.flv
+*.webm
+*.mpeg
+*.mpg
+*.m4v
+
+# Audio
+*.mp3
+*.wav
+*.aac
+*.flac
+
+# Optional media/data folders
+media/
+uploads/
+static/uploads/

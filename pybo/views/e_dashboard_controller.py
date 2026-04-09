@@ -835,10 +835,16 @@ def upload_select_doc():
 
     return jsonify({
         "ok": True,
+        "message": "게시물이 등록되었습니다.",
         "asset_id": asset.id,
         "posting_id": p.id,
+        "schedule_id": p.id,
         "expect_post_time": _fmt_dt(expect),
         "expire_time": _fmt_dt(expire),
+        "device_id": device_id,
+        "doc_id": doc_id,
+        "schedule": _build_schedule_snapshot(device_id),
+        "reload": True,
     })
 
 
@@ -893,22 +899,210 @@ def api_board_devices():
 
 
 
+
+
+def _schedule_preview_url_for_asset(asset: EInkAsset) -> Optional[str]:
+    if not asset:
+        return None
+    doc_id = getattr(asset, "document_info_id", None)
+    if doc_id:
+        return f"/dashboard/preview/doc/{int(doc_id)}"
+    return f"/dashboard/preview/asset/{int(asset.id)}"
+
+
+def _posting_period_seconds(posting: EInkPosting, asset: Optional[EInkAsset]) -> int:
+    start_time = getattr(posting, "start_time", None)
+    end_time = getattr(posting, "end_time", None)
+    if start_time and end_time:
+        try:
+            sec = int((end_time - start_time).total_seconds())
+            if sec > 0:
+                return sec
+        except Exception:
+            pass
+    sec = getattr(asset, "posting_period_sec", None) if asset is not None else None
+    try:
+        sec = int(sec or 0)
+    except Exception:
+        sec = 0
+    return max(0, sec)
+
+
+def _serialize_schedule_posting(posting: EInkPosting) -> Optional[dict]:
+    if not posting:
+        return None
+    asset = getattr(posting, "asset", None)
+    if not asset:
+        return None
+
+    doc = None
+    doc_id = getattr(asset, "document_info_id", None)
+    if doc_id:
+        doc = (
+            DocumentInfo.query
+            .filter(DocumentInfo.id == doc_id, DocumentInfo.user_id == current_user.no)
+            .first()
+        )
+
+    orig_filename = (
+        (getattr(doc, "orig_filename", None) if doc else None)
+        or (getattr(doc, "original_filename", None) if doc else None)
+        or getattr(asset, "title", None)
+        or f"asset#{asset.id}"
+    )
+
+    preview_url = _schedule_preview_url_for_asset(asset)
+    period_sec = _posting_period_seconds(posting, asset)
+
+    return {
+        "id": int(posting.id),
+        "posting_id": int(posting.id),
+        "schedule_id": int(posting.id),
+        "asset_id": int(asset.id),
+        "doc_id": int(doc_id) if doc_id else None,
+        "orig_filename": orig_filename,
+        "preview_url": preview_url,
+        "preview_png_url": preview_url,
+        "status": getattr(posting, "status", None),
+        "expect_post_time": _fmt_dt(getattr(posting, "start_time", None)),
+        "posting_period_time": period_sec,
+        "expire_time": _fmt_dt(getattr(posting, "end_time", None)),
+        "selected_at": _fmt_dt(getattr(posting, "created_at", None)),
+        "reason": getattr(posting, "reason", None),
+    }
+
+
+def _build_schedule_snapshot(device_id: str) -> dict:
+    rows = (
+        EInkPosting.query
+        .filter_by(user_id=current_user.no, device_id=device_id)
+        .order_by(
+            case((EInkPosting.start_time.is_(None), 1), else_=0).asc(),
+            EInkPosting.start_time.asc(),
+            EInkPosting.id.asc(),
+        )
+        .all()
+    )
+
+    items = []
+    active_expire = None
+    for posting in rows:
+        item = _serialize_schedule_posting(posting)
+        if not item:
+            continue
+        items.append(item)
+        if item["status"] == "active" and item["expire_time"]:
+            dt = parse_dt = getattr(posting, "end_time", None)
+            if dt and (active_expire is None or dt > active_expire):
+                active_expire = dt
+
+    return {
+        "device_id": device_id,
+        "active_expire_time": _fmt_dt(active_expire),
+        "items": items,
+        "count": len(items),
+    }
+
+
+def _resolve_posting_from_payload(device_id: str, raw: dict):
+    """
+    삭제/상태변경 payload에서 posting 1건을 안정적으로 찾는다.
+
+    허용 키 우선순위:
+    1) posting_id
+    2) schedule_id
+    3) id
+    4) asset_id
+
+    주의:
+    - posting_id / schedule_id / id 는 EInkPosting.id 로 해석
+    - asset_id 는 같은 device/user 범위에서 가장 최근 posting 1건을 찾는다
+    """
+    if not isinstance(raw, dict):
+        return None
+
+    def _to_int(v):
+        try:
+            if v is None or v == "":
+                return None
+            return int(v)
+        except Exception:
+            return None
+
+    user_no = current_user.no
+
+    posting_id = _to_int(raw.get("posting_id"))
+    schedule_id = _to_int(raw.get("schedule_id"))
+    plain_id = _to_int(raw.get("id"))
+    asset_id = _to_int(raw.get("asset_id"))
+
+    # 1) posting_id 우선
+    if posting_id is not None:
+        return (
+            EInkPosting.query
+            .filter(
+                EInkPosting.id == posting_id,
+                EInkPosting.user_id == user_no,
+                EInkPosting.device_id == device_id,
+            )
+            .first()
+        )
+
+    # 2) schedule_id
+    if schedule_id is not None:
+        return (
+            EInkPosting.query
+            .filter(
+                EInkPosting.id == schedule_id,
+                EInkPosting.user_id == user_no,
+                EInkPosting.device_id == device_id,
+            )
+            .first()
+        )
+
+    # 3) 일반 id
+    if plain_id is not None:
+        return (
+            EInkPosting.query
+            .filter(
+                EInkPosting.id == plain_id,
+                EInkPosting.user_id == user_no,
+                EInkPosting.device_id == device_id,
+            )
+            .first()
+        )
+
+    # 4) asset_id fallback
+    if asset_id is not None:
+        return (
+            EInkPosting.query
+            .filter(
+                EInkPosting.asset_id == asset_id,
+                EInkPosting.user_id == user_no,
+                EInkPosting.device_id == device_id,
+            )
+            .order_by(EInkPosting.id.desc())
+            .first()
+        )
+
+    return None
+
 @bp.get("/schedule/list")
 @login_required
 def api_schedule_list():
     """
     GET /dashboard/schedule/list?device_id=...
-    -> {active_expire_time, items:[...]}
+    -> {device_id, active_expire_time, items:[...], count}
     """
     t0 = time.perf_counter()
     device_id = _safe_device_id((request.args.get("device_id") or "").strip())
     if not device_id:
-        return jsonify({"active_expire_time": None, "items": []})
+        return jsonify({"device_id": "", "active_expire_time": None, "items": [], "count": 0})
 
-    out = R.schedule_list(user_id=current_user.no, device_id=device_id)
+    out = _build_schedule_snapshot(device_id)
 
     try:
-        R.log_access(   
+        R.log_access(
             user_id=current_user.no,
             device_id=device_id,
             api="dashboard.schedule_list",
@@ -928,26 +1122,63 @@ def api_schedule_list():
 def api_schedule_reorder():
     """
     POST /dashboard/schedule/reorder
-    body: {device_id, items:[{asset_id, expect_post_time, posting_period_time}]}
-    -> {device_id, items:[...]}
+    body: {device_id, items:[{posting_id|schedule_id|id|asset_id, expect_post_time, posting_period_time}]}
+    -> {ok, message, device_id, changed_count, schedule, result, reload}
     """
     t0 = time.perf_counter()
     data = request.get_json(silent=True) or {}
     device_id = _safe_device_id((data.get("device_id") or "").strip())
     items = data.get("items") or []
     if not device_id or not isinstance(items, list):
-        return jsonify({"ok": False, "reason": "bad_request"}), 400
-    
-    current_app.logger.debug(f"리오더: {items}")
+        return jsonify({"ok": False, "reason": "bad_request", "message": "device_id와 items를 확인해 주세요."}), 400
+
+    normalized_items = []
+    skipped = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            skipped.append({"input": raw, "reason": "item_not_dict"})
+            continue
+        posting = _resolve_posting_from_payload(device_id, raw)
+        if not posting:
+            skipped.append({"input": raw, "reason": "posting_not_found"})
+            continue
+        normalized_items.append({
+            "posting_id": int(posting.id),
+            "asset_id": int(posting.asset_id),
+            "expect_post_time": raw.get("expect_post_time"),
+            "posting_period_time": raw.get("posting_period_time"),
+        })
+
+    if not normalized_items:
+        return jsonify({
+            "ok": False,
+            "reason": "no_valid_items",
+            "message": "변경할 스케줄 식별값을 찾지 못했습니다.",
+            "device_id": device_id,
+            "changed_count": 0,
+            "skipped": skipped,
+            "schedule": _build_schedule_snapshot(device_id),
+            "reload": False,
+        }), 400
+
+    repo_items = [
+        {
+            "asset_id": item["asset_id"],
+            "expect_post_time": item["expect_post_time"],
+            "posting_period_time": item["posting_period_time"],
+        }
+        for item in normalized_items
+    ]
 
     out = R.schedule_reorder(
         user_id=current_user.no,
         device_id=device_id,
-        items=items,
+        items=repo_items,
     )
+    schedule = _build_schedule_snapshot(device_id)
 
     try:
-        R.log_access(   
+        R.log_access(
             user_id=current_user.no,
             device_id=device_id,
             api="dashboard.schedule_reorder",
@@ -959,14 +1190,22 @@ def api_schedule_reorder():
     except Exception:
         pass
 
-    return jsonify(out)
+    return jsonify({
+        "ok": True,
+        "message": f"스케줄 순서/시간 변경이 완료되었습니다. ({len(normalized_items)}건)",
+        "device_id": device_id,
+        "changed_count": len(normalized_items),
+        "skipped": skipped,
+        "result": out,
+        "schedule": schedule,
+        "reload": True,
+    })
 
 
 @bp.route("/schedule/status", methods=["POST"])
 @login_required
 def schedule_status_patch():
     """
-    (요구사항 2)
     wait/active 상태의 posting을 expired로 변경(배치 지원)
 
     요청:
@@ -978,37 +1217,127 @@ def schedule_status_patch():
       ]
     }
     """
+    t0 = time.perf_counter()
     body = request.get_json(silent=True) or {}
-    device_id = (body.get("device_id") or "").strip()
+    device_id = _safe_device_id((body.get("device_id") or "").strip())
     items = body.get("items") or []
-    if not device_id:
-        return jsonify({"ok": False, "reason": "device_id required"}), 400
 
-    # status는 현재는 expired만 허용(요구사항)
+    if not device_id:
+        return jsonify({
+            "ok": False,
+            "reason": "device_id_required",
+            "message": "device_id가 필요합니다."
+        }), 400
+
+    if not isinstance(items, list):
+        return jsonify({
+            "ok": False,
+            "reason": "bad_items",
+            "message": "items는 배열이어야 합니다."
+        }), 400
+
+    # 이전 정상 버전 방식:
+    # status=expired 이고 asset_id가 있는 항목만 모아서 repository에 위임
     changes = []
+    skipped = []
+
     for it in items:
         if not isinstance(it, dict):
+            skipped.append({"input": it, "reason": "item_not_dict"})
             continue
+
         asset_id = it.get("asset_id")
         stt = (it.get("status") or "").strip().lower()
+
+        try:
+            asset_id = int(asset_id) if asset_id is not None else None
+        except Exception:
+            asset_id = None
+
         if not asset_id:
+            skipped.append({"input": it, "reason": "asset_id_required"})
             continue
+
         if stt != "expired":
+            skipped.append({"input": it, "reason": "status_not_supported"})
             continue
-        changes.append(int(asset_id))
+
+        changes.append(asset_id)
 
     if not changes:
-        return jsonify({"ok": True, "changed": 0})
+        return jsonify({
+            "ok": True,
+            "message": "변경할 항목이 없습니다.",
+            "device_id": device_id,
+            "changed": 0,
+            "changed_items": [],
+            "skipped": skipped,
+            "schedule": _build_schedule_snapshot(device_id),
+            "reload": False,
+        })
 
- 
-    # current_app.logger.debug(f"user_id ={current_user.no}, device_id= { device_id}, asset_ids= {changes}")
-    out = R.schedule_set_expired(
-        user_id=current_user.no,
-        device_id=device_id,
-        asset_ids=changes,
-        now=_kst_now_naive()
-    )
-    return jsonify(out)
+    try:
+        out = R.schedule_set_expired(
+            user_id=current_user.no,
+            device_id=device_id,
+            asset_ids=changes,
+            now=_kst_now_naive(),
+        )
+
+        schedule = _build_schedule_snapshot(device_id)
+
+        try:
+            R.log_access(
+                user_id=current_user.no,
+                device_id=device_id,
+                api="dashboard.schedule_status",
+                ok=True,
+                http_status=200,
+                elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                error_msg=None,
+            )
+        except Exception:
+            pass
+
+        changed_count = int(out.get("changed", 0)) if isinstance(out, dict) else 0
+
+        return jsonify({
+            "ok": True,
+            "message": f"삭제(만료 처리)가 완료되었습니다. ({changed_count}건)",
+            "device_id": device_id,
+            "changed": changed_count,
+            "changed_items": [],
+            "skipped": skipped,
+            "result": out,
+            "schedule": schedule,
+            "reload": True,
+        })
+
+    except Exception as e:
+        try:
+            R.log_access(
+                user_id=current_user.no,
+                device_id=device_id,
+                api="dashboard.schedule_status",
+                ok=False,
+                http_status=500,
+                elapsed_ms=int((time.perf_counter() - t0) * 1000),
+                error_msg=str(e),
+            )
+        except Exception:
+            pass
+
+        return jsonify({
+            "ok": False,
+            "reason": "schedule_status_failed",
+            "message": "삭제(만료 처리) 중 오류가 발생했습니다.",
+            "detail": str(e),
+            "device_id": device_id,
+            "changed": 0,
+            "changed_items": [],
+            "skipped": skipped,
+            "reload": False,
+        }), 500
 
 @bp.post("/device/log")
 @login_required
