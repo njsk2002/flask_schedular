@@ -63,3 +63,10 @@ CLIENT_BACKUP_DIR = os.getenv('CLIENT_BACKUP_DIR', cfg.get('BACKUP', 'CLIENT_BAC
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', cfg.get('JWT', 'JWT_SECRET_KEY', fallback='default-secret-key'))
 JWT_ACCESS_TOKEN_EXPIRES = int(cfg.get('JWT', 'JWT_ACCESS_TOKEN_EXPIRES', fallback=3600))
 JWT_REFRESH_TOKEN_EXPIRES = int(cfg.get('JWT', 'JWT_REFRESH_TOKEN_EXPIRES', fallback=86400))
+
+
+# -------------------- GROUPWARE 설정 --------------------
+GROUPWARE_CI = os.getenv('GROUPWARE_CI', cfg.get('GROUPWARE', 'GROUPWARE_CI', fallback="icetech11"))
+GROUPWARE_UI = os.getenv('GROUPWARE_UI', cfg.get('GROUPWARE', 'GROUPWARE_UI', fallback="davidjung"))
+GROUPWARE_PW = os.getenv('GROUPWARE_PW', cfg.get('GROUPWARE', 'GROUPWARE_PW', fallback="promise2015@"))
+GROUPWARE_XCN = os.getenv('GROUPWARE_XCN', cfg.get('GROUPWARE', 'GROUPWARE_XCN', fallback="(주)아이스기술"))

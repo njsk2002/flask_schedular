@@ -2547,3 +2547,330 @@ def reject_file(doc_id: int):
     return jsonify(r)
 
 
+
+
+def _serialize_auto_job(job) -> dict:
+    from ..models import BulletinAutoJobKeyword, BulletinAutoJobSchedule, BulletinRenderHistory
+
+    schedules = (
+        BulletinAutoJobSchedule.query
+        .filter(BulletinAutoJobSchedule.job_id == int(job.id))
+        .order_by(BulletinAutoJobSchedule.sort_order.asc(), BulletinAutoJobSchedule.run_time.asc())
+        .all()
+    )
+
+    keywords = (
+        BulletinAutoJobKeyword.query
+        .filter(BulletinAutoJobKeyword.job_id == int(job.id))
+        .order_by(BulletinAutoJobKeyword.sort_order.asc(), BulletinAutoJobKeyword.id.asc())
+        .all()
+    )
+
+    latest_history = (
+        BulletinRenderHistory.query
+        .filter(BulletinRenderHistory.job_id == int(job.id))
+        .order_by(BulletinRenderHistory.id.desc())
+        .first()
+    )
+
+    return {
+        "id": int(job.id),
+        "job_name": job.job_name,
+        "job_type": job.job_type,
+        "is_enabled": bool(job.is_enabled),
+        "target_device_id": job.target_device_id,
+        "template_code": job.template_code,
+        "article_count": int(job.article_count or 3),
+        "summary_length": int(job.summary_length or 200),
+        "priority": int(job.priority or 10),
+        "upcoming_start_date": job.upcoming_start_date.strftime("%Y-%m-%d") if getattr(job, "upcoming_start_date", None) else None,
+        "upcoming_end_date": job.upcoming_end_date.strftime("%Y-%m-%d") if getattr(job, "upcoming_end_date", None) else None,
+        "auto_post_enabled": bool(job.auto_post_enabled),
+        "lock_manual_upload": bool(job.lock_manual_upload),
+        "last_run_at": job.last_run_at.strftime("%Y-%m-%d %H:%M:%S") if getattr(job, "last_run_at", None) else None,
+        "last_success_at": job.last_success_at.strftime("%Y-%m-%d %H:%M:%S") if getattr(job, "last_success_at", None) else None,
+        "schedules": [
+            {
+                "id": int(s.id),
+                "run_time": s.run_time,
+                "keyword_text": (s.keyword_text or ""),
+                "is_enabled": bool(s.is_enabled),
+                "sort_order": int(s.sort_order or 0),
+            }
+            for s in schedules
+        ],
+        "keywords": [
+            {
+                "id": int(k.id),
+                "schedule_id": (int(k.schedule_id) if k.schedule_id else None),
+                "keyword_group_name": k.keyword_group_name,
+                "keyword_text": k.keyword_text,
+                "sort_order": int(k.sort_order or 0),
+                "is_enabled": bool(k.is_enabled),
+            }
+            for k in keywords
+        ],
+        "latest_history": (
+            {
+                "id": int(latest_history.id),
+                "render_date": latest_history.render_date.strftime("%Y-%m-%d"),
+                "send_status": latest_history.send_status,
+                "revision_name": latest_history.revision_name,
+            }
+            if latest_history
+            else None
+        ),
+    }
+
+
+@bp.route("/scheduler/status", methods=["GET"])
+@login_required
+def scheduler_status():
+    from ..repository.repository_scheduler_cache import RepositorySchedulerCache
+
+    return jsonify(
+        {
+            "ok": True,
+            "runs": RepositorySchedulerCache.get_all_runs(),
+        }
+    )
+
+
+@bp.route("/scheduler/run/groupware", methods=["POST"])
+@login_required
+def scheduler_run_groupware():
+    from ..service.groupware_service import GroupwareService
+
+    body = request.get_json(silent=True) or {}
+    raw_force = body.get("force", True)
+    if isinstance(raw_force, str):
+        force = raw_force.strip().lower() in ("1", "true", "y", "yes", "on")
+    else:
+        force = bool(raw_force)
+    result = GroupwareService(device_id="E06").run(force=force)
+    status = 200 if result.get("ok") else 500
+    return jsonify(result), status
+
+
+@bp.route("/scheduler/run/news", methods=["POST"])
+@login_required
+def scheduler_run_news():
+    from ..service.news_service import NewsService
+
+    body = request.get_json(silent=True) or {}
+    raw_force = body.get("force", True)
+    if isinstance(raw_force, str):
+        force = raw_force.strip().lower() in ("1", "true", "y", "yes", "on")
+    else:
+        force = bool(raw_force)
+    slot = (body.get("slot") or "").strip() or None
+    result = NewsService(device_id="E07").run(force=force, slot_label=slot)
+    status = 200 if result.get("ok") else 500
+    return jsonify(result), status
+
+
+@bp.route("/auto-jobs", methods=["GET"])
+@login_required
+def auto_job_manage_page():
+    from ..repository.bulletin_auto_job_repository import BulletinAutoJobRepository
+
+    jobs = BulletinAutoJobRepository.get_manage_jobs(owner_user_no=current_user.no)
+    rows = [_serialize_auto_job(j) for j in jobs]
+    return render_template("bulletinboard/e_auto_job_manage.html", jobs=rows)
+
+
+@bp.route("/auto-jobs/<int:job_id>", methods=["GET"])
+@login_required
+def auto_job_detail_page(job_id: int):
+    from ..repository.bulletin_auto_job_repository import BulletinAutoJobRepository
+
+    if int(job_id) == 0:
+        return render_template("bulletinboard/e_auto_job_detail.html", job=None)
+
+    job = BulletinAutoJobRepository.get_job(job_id)
+    if not job:
+        abort(404)
+
+    return render_template("bulletinboard/e_auto_job_detail.html", job=_serialize_auto_job(job))
+
+
+@bp.route("/auto-jobs/api/list", methods=["GET"])
+@login_required
+def api_auto_job_list():
+    from ..repository.bulletin_auto_job_repository import BulletinAutoJobRepository
+
+    jobs = BulletinAutoJobRepository.get_manage_jobs(owner_user_no=current_user.no)
+    return jsonify({"ok": True, "items": [_serialize_auto_job(j) for j in jobs]})
+
+
+@bp.route("/auto-jobs/api/detail/<int:job_id>", methods=["GET"])
+@login_required
+def api_auto_job_detail(job_id: int):
+    from ..repository.bulletin_auto_job_repository import BulletinAutoJobRepository
+
+    job = BulletinAutoJobRepository.get_job(job_id)
+    if not job:
+        return jsonify({"ok": False, "reason": "job_not_found"}), 404
+    return jsonify({"ok": True, "item": _serialize_auto_job(job)})
+
+
+@bp.route("/auto-jobs/api/save", methods=["POST"])
+@login_required
+def api_auto_job_save():
+    from ..repository.bulletin_auto_job_repository import BulletinAutoJobRepository
+    from ..repository.bulletin_device_lock_repository import BulletinDeviceLockRepository
+
+    body = request.get_json(silent=True) or {}
+
+    try:
+        job_type = str(body.get("job_type") or "groupware").strip().lower()
+        if job_type not in ("groupware", "news"):
+            raise ValueError("job_type must be groupware or news")
+
+        raw_schedules = body.get("schedules") or []
+        if not isinstance(raw_schedules, list):
+            raise ValueError("schedules must be a list")
+        if len(raw_schedules) == 0:
+            raise ValueError("최소 1개의 실행 시간이 필요합니다.")
+        if len(raw_schedules) > 7:
+            raise ValueError("실행 시간은 최대 7개까지 등록할 수 있습니다.")
+
+        job_name = str(body.get("job_name") or "").strip()
+        target_device_id = str(body.get("target_device_id") or "").strip()
+        template_code = str(body.get("template_code") or "").strip()
+
+        if not job_name:
+            raise ValueError("Job 이름을 입력해 주세요.")
+        if not target_device_id:
+            raise ValueError("디바이스 ID를 입력해 주세요.")
+        if not template_code:
+            raise ValueError("템플릿 코드를 입력해 주세요.")
+
+        normalized_rows = []
+        seen_times = set()
+
+        for idx, item in enumerate(raw_schedules):
+            if isinstance(item, str):
+                run_time = item
+                keyword_text = None
+            elif isinstance(item, dict):
+                run_time = item.get("run_time") or item.get("time") or ""
+                keyword_text = item.get("keyword_text")
+            else:
+                continue
+
+            hhmm = BulletinAutoJobRepository._normalize_run_time(str(run_time))
+            if hhmm in seen_times:
+                raise ValueError(f"중복 실행 시간입니다: {hhmm}")
+            seen_times.add(hhmm)
+
+            if job_type == "news":
+                kw = str(keyword_text or "").strip()
+                if not kw:
+                    raise ValueError(f"news job은 키워드가 필수입니다. ({hhmm})")
+            else:
+                kw = None
+
+            normalized_rows.append(
+                {
+                    "run_time": hhmm,
+                    "keyword_text": kw,
+                    "sort_order": idx,
+                }
+            )
+
+        if not normalized_rows:
+            raise ValueError("저장할 실행 시간이 없습니다.")
+
+        article_count = int(body.get("article_count", 3) or 3)
+        summary_length = int(body.get("summary_length", 200) or 200)
+        priority = int(body.get("priority", 10) or 10)
+
+        if job_type == "news":
+            if article_count < 1:
+                article_count = 1
+            if article_count > 10:
+                article_count = 10
+
+            if summary_length < 50:
+                summary_length = 50
+            if summary_length > 500:
+                summary_length = 500
+        else:
+            article_count = 3
+            summary_length = 200
+
+        upcoming_start = None
+        upcoming_end = None
+        if job_type == "groupware":
+            upcoming_start = str(body.get("upcoming_start_date") or "").strip()
+            upcoming_end = str(body.get("upcoming_end_date") or "").strip()
+
+            if not upcoming_start or not upcoming_end:
+                raise ValueError("groupware job은 Upcoming Schedule 시작/종료 날짜가 필요합니다.")
+            if upcoming_start > upcoming_end:
+                raise ValueError("Upcoming 시작 날짜는 종료 날짜보다 늦을 수 없습니다.")
+
+        job_payload = {
+            "id": body.get("id"),
+            "job_name": job_name,
+            "job_type": job_type,
+            "is_enabled": body.get("is_enabled", True),
+            "target_device_id": target_device_id,
+            "template_code": template_code,
+            "article_count": article_count,
+            "summary_length": summary_length,
+            "priority": priority,
+            "auto_post_enabled": body.get("auto_post_enabled", True),
+            "lock_manual_upload": body.get("lock_manual_upload", True),
+            "upcoming_start_date": upcoming_start,
+            "upcoming_end_date": upcoming_end,
+        }
+
+        job = BulletinAutoJobRepository.save_job(job_payload, owner_user_no=current_user.no)
+
+        BulletinAutoJobRepository.replace_schedules(
+            int(job.id),
+            normalized_rows,
+            job_type=job_type,
+        )
+
+        # 현재 구조에서는 schedule 테이블의 keyword_text를 직접 사용하므로
+        # 별도 keyword 테이블은 비워 둔다.
+        BulletinAutoJobRepository.replace_keywords(int(job.id), [])
+
+        BulletinDeviceLockRepository.sync_from_jobs(
+            BulletinAutoJobRepository.list_active_jobs()
+        )
+
+        db.session.commit()
+        return jsonify({"ok": True, "item": _serialize_auto_job(job)})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "reason": str(e)}), 400
+
+
+@bp.route("/auto-jobs/api/delete/<int:job_id>", methods=["POST"])
+@login_required
+def api_auto_job_delete(job_id: int):
+    from ..repository.bulletin_auto_job_repository import BulletinAutoJobRepository
+    from ..repository.bulletin_device_lock_repository import BulletinDeviceLockRepository
+
+    try:
+        ok = BulletinAutoJobRepository.delete_job(job_id)
+
+        BulletinDeviceLockRepository.sync_from_jobs(
+            BulletinAutoJobRepository.list_active_jobs()
+        )
+
+        db.session.commit()
+
+        if not ok:
+            return jsonify({"ok": False, "reason": "job_not_found"}), 404
+
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"ok": False, "reason": str(e)}), 400

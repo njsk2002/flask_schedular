@@ -23,6 +23,7 @@ from pybo.models import (
 
 # 기존 RepositoryEDevice는 device pull 쪽(/edevice)에서 계속 쓸 수 있음
 from pybo.repository.repository_edevice import RepositoryEDevice as R
+from pybo.repository.bulletin_auto_job_repository import BulletinAutoJobRepository
 
 bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -661,6 +662,20 @@ def upload_selected_list():
 @bp.post("/upload/select")
 @login_required
 def upload_select_doc():
+    """
+    수동 업로드/선택 후 특정 디바이스에 게시물 등록.
+
+    ------------------------------------------------------------------
+    [이번 수정의 핵심]
+    ------------------------------------------------------------------
+    자동 게시 관리 중이며 lock_manual_upload=True 인 device는
+    수동 업로드를 서버에서 최종 차단해야 한다.
+
+    이유:
+    - 프론트에서 버튼 disabled 처리만으로는 우회 가능
+    - 사용자가 직접 fetch / API 호출하면 등록될 수 있음
+    - 따라서 서버가 최종 정책 강제 지점이어야 함
+    """
     t0 = time.perf_counter()
     data = request.get_json(silent=True) or {}
 
@@ -668,6 +683,11 @@ def upload_select_doc():
     doc_id = data.get("doc_id")
     channel = (data.get("channel") or "approved").strip().lower()
 
+    # --------------------------------------------------------------
+    # 0) channel 정규화
+    #    - bulletin 이면 bulletin_files 문서를 사용
+    #    - 그 외는 approved 로 간주
+    # --------------------------------------------------------------
     if channel == "bulletin":
         want_status = "bulletin_files"
     else:
@@ -676,27 +696,79 @@ def upload_select_doc():
 
     _dbg("upload_select:start", device_id=device_id, doc_id=doc_id, channel=channel)
 
+    # --------------------------------------------------------------
+    # 1) 기본 입력값 검증
+    # --------------------------------------------------------------
     if not device_id or not isinstance(doc_id, int):
         return jsonify({"ok": False, "reason": "bad_request"}), 400
 
-    dev = EInkDevice.query.filter_by(user_no=current_user.no, device_id=device_id).first()
+    # --------------------------------------------------------------
+    # 2) 자동관리 + 수동잠금 디바이스면 서버에서 즉시 차단
+    #    이 부분이 이번 수정의 가장 중요한 백엔드 정책 강제 지점
+    # --------------------------------------------------------------
+    if BulletinAutoJobRepository.is_manual_upload_locked(
+        device_id=device_id,
+        owner_user_no=current_user.no,
+        use_cache=True,
+    ):
+        _dbg(
+            "upload_select:manual_locked",
+            device_id=device_id,
+            doc_id=doc_id,
+            user_no=current_user.no,
+        )
+        return jsonify({
+            "ok": False,
+            "reason": "manual_upload_locked",
+            "message": f"{device_id} 는 자동 게시 관리 중이므로 수동 업로드가 잠겨 있습니다."
+        }), 409
+
+    # --------------------------------------------------------------
+    # 3) device 소유권 검증
+    # --------------------------------------------------------------
+    dev = EInkDevice.query.filter_by(
+        user_no=current_user.no,
+        device_id=device_id
+    ).first()
+
     if not dev:
         return jsonify({"ok": False, "reason": "device_not_found"}), 404
 
-    doc = (DocumentInfo.query
-        .filter(DocumentInfo.id == doc_id, DocumentInfo.user_id == current_user.no)
-        .first())
+    # --------------------------------------------------------------
+    # 4) 문서 검증
+    #    - 현재 사용자 소유 문서인지
+    #    - 선택 channel에 맞는 status 문서인지
+    # --------------------------------------------------------------
+    doc = (
+        DocumentInfo.query
+        .filter(
+            DocumentInfo.id == doc_id,
+            DocumentInfo.user_id == current_user.no
+        )
+        .first()
+    )
+
     if not doc or getattr(doc, "status", None) != want_status:
         return jsonify({"ok": False, "reason": "doc_not_allowed"}), 403
 
-    # doc payload 위치
+    # --------------------------------------------------------------
+    # 5) 문서 payload(bin/meta) 위치 찾기
+    # --------------------------------------------------------------
     doc_dir = _doc_base_dir_by_status(want_status, doc_id)
     bin_abs, meta_abs = _find_doc_payload_files(doc_dir, device_id)
+
     if not bin_abs or not meta_abs:
-        _dbg("upload_select:payload_missing", doc_dir=doc_dir, bin_abs=bin_abs, meta_abs=meta_abs)
+        _dbg(
+            "upload_select:payload_missing",
+            doc_dir=doc_dir,
+            bin_abs=bin_abs,
+            meta_abs=meta_abs
+        )
         return jsonify({"ok": False, "reason": "payload_missing"}), 404
 
-    # meta 읽기
+    # --------------------------------------------------------------
+    # 6) meta 읽기
+    # --------------------------------------------------------------
     try:
         with open(meta_abs, "r", encoding="utf-8") as f:
             meta = json.load(f)
@@ -704,10 +776,14 @@ def upload_select_doc():
         _dbg("upload_select:meta_read_fail", meta_abs=meta_abs, err=str(e))
         return jsonify({"ok": False, "reason": "meta_read_fail"}), 500
 
+    # --------------------------------------------------------------
+    # 7) meta -> asset 기본값 파싱
+    # --------------------------------------------------------------
     width = int(meta.get("width") or 0)
     height = int(meta.get("height") or 0)
     mode = str(meta.get("mode") or "BWRYBG")
     packing = str(meta.get("packing") or meta.get("packing_mode") or "4bpp")
+
     try:
         bpp = int("".join([c for c in packing if c.isdigit()]) or 4)
     except Exception:
@@ -721,12 +797,22 @@ def upload_select_doc():
     bin_rel = _rel_from_abs(bin_abs)
     meta_rel = _rel_from_abs(meta_abs)
 
-    # 1) Asset upsert (콘텐츠)
-    asset = (EInkAsset.query
-        .filter_by(user_id=current_user.no, device_id=device_id, ver=ver)
-        .first())
-
     now = _kst_now_naive()
+
+    # --------------------------------------------------------------
+    # 8) Asset upsert
+    #    - 같은 user/device/ver 가 있으면 재사용
+    #    - 없으면 새로 생성
+    # --------------------------------------------------------------
+    asset = (
+        EInkAsset.query
+        .filter_by(
+            user_id=current_user.no,
+            device_id=device_id,
+            ver=ver
+        )
+        .first()
+    )
 
     if not asset:
         asset = EInkAsset(
@@ -734,7 +820,11 @@ def upload_select_doc():
             device_id=device_id,
             document_info_id=doc_id,
             channel=channel,
-            width=width, height=height, mode=mode, bpp=bpp, ver=ver,
+            width=width,
+            height=height,
+            mode=mode,
+            bpp=bpp,
+            ver=ver,
             uuid=str(uuid.uuid4()),
             bin_relpath=bin_rel,
             meta_relpath=meta_rel,
@@ -744,12 +834,13 @@ def upload_select_doc():
             meta_json=meta,
             need_approval=(want_status == "approved"),
             final_approval=True,
-            approval_snapshot_json=getattr(doc, "approval_snapshot_json", None) if hasattr(doc, "approval_snapshot_json") else None,
+            approval_snapshot_json=getattr(doc, "approval_snapshot_json", None)
+            if hasattr(doc, "approval_snapshot_json") else None,
         )
         db.session.add(asset)
         db.session.flush()
     else:
-        # 최신 문서/경로/메타만 갱신
+        # 기존 asset이면 최신 문서/메타/경로로 갱신
         asset.document_info_id = doc_id
         asset.channel = channel
         asset.meta_json = meta
@@ -757,39 +848,61 @@ def upload_select_doc():
         asset.meta_relpath = meta_rel
         asset.updated_at = now
 
-    # 2) Schedule 파싱 → Posting wait enqueue
+    # --------------------------------------------------------------
+    # 9) schedule 파싱
+    #    enabled=false 이면 즉시 게시 / 무기한(end_time=None)
+    # --------------------------------------------------------------
     schedule = data.get("schedule") or {}
     enabled = bool(schedule.get("enabled"))
 
     start_mode = (schedule.get("start_mode") or "now").strip().lower()
     period_sec = int(schedule.get("posting_period_time") or 0) if enabled else 0
+
     if enabled:
         period_sec = max(60, period_sec)
     else:
-        # 스케줄 OFF 정책: "즉시 게시, 무기한" (end_time=None)
+        # 스케줄 OFF 정책:
+        # 즉시 게시 / end_time 없음
         period_sec = 0
 
-    # tail = max(active end_time, wait end_time). active end_time이 None이면 tail로 막지 않음(= preempt 허용)
-    mx_wait = (db.session.query(func.max(EInkPosting.end_time))
-        .filter(EInkPosting.user_id == current_user.no,
-                EInkPosting.device_id == device_id,
-                EInkPosting.status == "wait",
-                EInkPosting.end_time.isnot(None),
-                EInkPosting.end_time > now)
-        .scalar())
-    mx_active = (db.session.query(func.max(EInkPosting.end_time))
-        .filter(EInkPosting.user_id == current_user.no,
-                EInkPosting.device_id == device_id,
-                EInkPosting.status == "active",
-                EInkPosting.end_time.isnot(None),
-                EInkPosting.end_time > now)
-        .scalar())
+    # --------------------------------------------------------------
+    # 10) 현재 wait/active tail 계산
+    #     - 새 스케줄이 겹치면 자동으로 뒤로 민다
+    #     - active가 end_time=None 이면 tail로 막지 않음 (= 선점 허용)
+    # --------------------------------------------------------------
+    mx_wait = (
+        db.session.query(func.max(EInkPosting.end_time))
+        .filter(
+            EInkPosting.user_id == current_user.no,
+            EInkPosting.device_id == device_id,
+            EInkPosting.status == "wait",
+            EInkPosting.end_time.isnot(None),
+            EInkPosting.end_time > now
+        )
+        .scalar()
+    )
+
+    mx_active = (
+        db.session.query(func.max(EInkPosting.end_time))
+        .filter(
+            EInkPosting.user_id == current_user.no,
+            EInkPosting.device_id == device_id,
+            EInkPosting.status == "active",
+            EInkPosting.end_time.isnot(None),
+            EInkPosting.end_time > now
+        )
+        .scalar()
+    )
+
     tail = mx_wait
     if mx_active and (tail is None or mx_active > tail):
         tail = mx_active
 
-    # expect 계산
+    # --------------------------------------------------------------
+    # 11) expect_post_time 계산
+    # --------------------------------------------------------------
     expect = None
+
     if not enabled:
         expect = now
     else:
@@ -801,7 +914,7 @@ def upload_select_doc():
         else:
             expect = now
 
-        # ✅ 겹치면 자동으로 뒤로 밀기(shift)
+        # 기존 예약과 겹치면 자동 shift
         if tail and expect < tail:
             expect = tail
 
@@ -809,12 +922,17 @@ def upload_select_doc():
     if enabled:
         expire = expect + timedelta(seconds=period_sec)
 
-    # (옵션) asset에도 snapshot로 남겨두기(디버그/추적)
+    # --------------------------------------------------------------
+    # 12) asset에도 스케줄 스냅샷 반영
+    # --------------------------------------------------------------
     asset.expect_post_time = expect
     asset.posting_period_sec = period_sec if enabled else None
     asset.expire_time = expire
 
-    # Posting enqueue (wait)
+    # --------------------------------------------------------------
+    # 13) Posting enqueue
+    #     수동 업로드는 wait 로 큐 적재
+    # --------------------------------------------------------------
     p = EInkPosting(
         user_id=current_user.no,
         device_id=device_id,
@@ -825,13 +943,22 @@ def upload_select_doc():
         priority=10,
         reason=f"upload_select:{channel}:{'off' if not enabled else start_mode}",
     )
+
     db.session.add(p)
     db.session.commit()
 
     elapsed_ms = int((time.perf_counter() - t0) * 1000)
-    _dbg("upload_select:done",
-         device_id=device_id, doc_id=doc_id, asset_id=asset.id, posting_id=p.id,
-         expect=_fmt_dt(expect), expire=_fmt_dt(expire), elapsed_ms=elapsed_ms)
+
+    _dbg(
+        "upload_select:done",
+        device_id=device_id,
+        doc_id=doc_id,
+        asset_id=asset.id,
+        posting_id=p.id,
+        expect=_fmt_dt(expect),
+        expire=_fmt_dt(expire),
+        elapsed_ms=elapsed_ms
+    )
 
     return jsonify({
         "ok": True,
@@ -883,19 +1010,88 @@ def api_boards():
 def api_board_devices():
     """
     GET /dashboard/board_devices?building_id=2&floor_no=2&board_no=1
-    -> {items:[{device_id,panel_res,device_name}]}
+
+    반환 형식:
+    {
+      "items": [
+        {
+          "device_id": "E06",
+          "panel_res": "1200x1600",
+          "device_name": "Board 6",
+          "auto_managed": true,
+          "lock_manual_upload": true
+        }
+      ]
+    }
+
+    ------------------------------------------------------------------
+    [이번 수정의 목적]
+    ------------------------------------------------------------------
+    e_file_upload.html 에서 자동 관리 디바이스를 disabled 처리하려면,
+    프론트가 "어떤 device가 자동관리 + 수동업로드잠금 상태인지"
+    알아야 한다.
+
+    그래서:
+    1) 기존 board_devices 목록은 그대로 가져오고
+    2) BulletinAutoJobRepository 에서 잠금 대상 device 집합을 구한 뒤
+    3) 각 item에 auto_managed / lock_manual_upload 플래그를 붙여서 내려준다.
+
+    주의:
+    - 이 함수는 "표시용 정보 제공"이다.
+    - 실제 정책 차단은 upload/select 에서 한 번 더 막아야 한다.
     """
     building_id = int(request.args.get("building_id") or 0)
     floor_no = int(request.args.get("floor_no") or 0)
     board_no = int(request.args.get("board_no") or 0)
 
+    # --------------------------------------------------------------
+    # 1) 기존 보드-디바이스 목록 조회
+    # --------------------------------------------------------------
     items = R.list_devices_by_board(
         user_id=current_user.no,
         building_id=building_id,
         floor_no=floor_no,
         board_no=board_no
+    ) or []
+
+    # --------------------------------------------------------------
+    # 2) 현재 로그인 사용자 기준 "수동 업로드 잠금" device_id 목록 조회
+    #    조건:
+    #      - is_enabled = True
+    #      - auto_post_enabled = True
+    #      - lock_manual_upload = True
+    # --------------------------------------------------------------
+    locked_devices = BulletinAutoJobRepository.list_locked_device_ids(
+        owner_user_no=current_user.no,
+        use_cache=True,
     )
-    return jsonify({"items": items})
+
+    # --------------------------------------------------------------
+    # 3) 프론트에서 바로 사용할 수 있도록 device item에 잠금 플래그 추가
+    # --------------------------------------------------------------
+    enriched_items = []
+    for item in items:
+        row = dict(item or {})
+        did = str(row.get("device_id") or "").strip()
+        is_locked = did in locked_devices
+
+        row["auto_managed"] = bool(is_locked)
+        row["lock_manual_upload"] = bool(is_locked)
+
+        enriched_items.append(row)
+
+    _dbg(
+        "board_devices:done",
+        building_id=building_id,
+        floor_no=floor_no,
+        board_no=board_no,
+        total_devices=len(enriched_items),
+        locked_devices=sorted(list(locked_devices)),
+    )
+
+    return jsonify({
+        "items": enriched_items
+    })
 
 
 

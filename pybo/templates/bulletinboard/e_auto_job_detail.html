@@ -1,0 +1,525 @@
+﻿{% extends 'e_base.html' %}
+{% block content %}
+<div class="container py-4">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h4 class="mb-1">자동 게시 Job 상세</h4>
+        <div class="text-secondary small">종류에 따라 입력 항목이 자동으로 바뀝니다. 저장 후 다음 스케줄부터 반영됩니다.</div>
+        {% if job and job.latest_history %}
+        <div class="small mt-2 text-secondary">
+          최근 렌더: {{ job.latest_history.render_date }} / {{ job.latest_history.send_status }} / {{ job.latest_history.revision_name or '-' }}
+        </div>
+        {% endif %}
+      </div>
+      <a class="btn btn-outline-secondary" href="{{ url_for('bulletin.auto_job_manage_page') }}">목록으로</a>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <form id="jobForm" class="row g-3" novalidate>
+        <input type="hidden" id="jobId" value="{{ job.id if job else '' }}">
+
+        <div class="col-md-4">
+          <label class="form-label">Job 이름</label>
+          <input id="jobName" class="form-control" value="{{ job.job_name if job else '' }}" required>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">종류</label>
+          <select id="jobType" class="form-select">
+            <option value="groupware" {% if job and job.job_type == 'groupware' %}selected{% endif %}>groupware</option>
+            <option value="news" {% if job and job.job_type == 'news' %}selected{% endif %}>news</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">디바이스 ID</label>
+          <input id="targetDeviceId" class="form-control" value="{{ job.target_device_id if job else '' }}" placeholder="E06">
+        </div>
+
+        <div class="col-md-2 d-none">
+          <label class="form-label">우선순위</label>
+          <input id="priority" type="number" min="1" class="form-control" value="{{ job.priority if job else 10 }}" disabled>
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">템플릿 코드</label>
+          <input id="templateCode" class="form-control" value="{{ job.template_code if job else '' }}" placeholder="groupware_e06_v1">
+        </div>
+
+        <div id="newsArticleCountSection" class="col-md-4">
+          <label class="form-label">기사 개수(news)</label>
+          <input id="articleCount" type="number" min="1" max="10" class="form-control" value="{{ job.article_count if job else 3 }}">
+          <div class="form-text">기본 3개</div>
+        </div>
+
+        <div id="newsOptionSection" class="col-md-4">
+          <label class="form-label">요약 길이(news)</label>
+          <input id="summaryLength" type="number" min="50" max="500" class="form-control" value="{{ job.summary_length if job else 200 }}">
+          <div class="form-text">기본 200자, 최대 500자</div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" id="isEnabled" {% if not job or job.is_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="isEnabled">Job 활성화</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="autoPostEnabled" {% if not job or job.auto_post_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="autoPostEnabled">자동 게시 동작</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="lockManualUpload" {% if not job or job.lock_manual_upload %}checked{% endif %}>
+            <label class="form-check-label" for="lockManualUpload">수동 업로드 잠금</label>
+          </div>
+        </div>
+
+        <!-- groupware 전용 -->
+        <div id="groupwareSection" class="col-12">
+          <div class="border rounded-3 p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <h6 class="mb-0">Groupware 설정</h6>
+              <button type="button" id="btnAddGroupwareRow" class="btn btn-sm btn-outline-primary">+ 시간 추가</button>
+            </div>
+
+            <div class="table-responsive mb-3">
+              <table class="table align-middle mb-0" id="groupwareTable">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width: 220px;">업데이트 시간 (HH:MM)</th>
+                    <th style="width: 120px;">삭제</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label">Upcoming 시작 날짜</label>
+                <input id="upcomingStartDate" type="date" class="form-control" value="{{ job.upcoming_start_date if job and job.upcoming_start_date else '' }}">
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Upcoming 종료 날짜</label>
+                <input id="upcomingEndDate" type="date" class="form-control" value="{{ job.upcoming_end_date if job and job.upcoming_end_date else '' }}">
+              </div>
+
+              <div class="col-md-6 d-flex align-items-end">
+                <div class="form-text mb-0">상단 오늘 일정은 항상 표시되며, 하단 Upcoming Schedule만 위 기간으로 구성됩니다.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- news 전용 -->
+        <div id="newsSection" class="col-12">
+          <div class="border rounded-3 p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+              <h6 class="mb-0">News 설정 (시간-키워드 1:1)</h6>
+              <button type="button" id="btnAddNewsRow" class="btn btn-sm btn-outline-primary">+ 행 추가</button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table align-middle mb-0" id="newsTable">
+                <thead class="table-light">
+                  <tr>
+                    <th style="width: 220px;">업데이트 시간 (HH:MM)</th>
+                    <th>키워드</th>
+                    <th style="width: 120px;">삭제</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+          <button id="btnSave" type="button" class="btn btn-primary">저장</button>
+          {% if job and job.id %}
+          <button id="btnDelete" type="button" class="btn btn-outline-danger">삭제</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script id="jobData" type="application/json">{{ job|tojson if job else 'null' }}</script>
+{% endblock %}
+
+{% block script %}
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  const MAX_ROWS = 7;
+  const existingJob = JSON.parse(($('jobData')?.textContent || 'null'));
+
+  function toast(msg) {
+    alert(msg);
+  }
+
+  function todayISO(offsetDays = 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function createCellInput(value = '', placeholder = '') {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control form-control-sm';
+    input.value = value || '';
+    input.placeholder = placeholder;
+    return input;
+  }
+
+  function createDeleteButton(onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-outline-danger';
+    btn.textContent = '삭제';
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  function countRows(tbody) {
+    return tbody.querySelectorAll('tr').length;
+  }
+
+  function clearTable(tableId) {
+    const tbody = $(tableId).querySelector('tbody');
+    tbody.innerHTML = '';
+  }
+
+  function addGroupwareRow(runTime = '') {
+    const tbody = $('groupwareTable').querySelector('tbody');
+    if (countRows(tbody) >= MAX_ROWS) {
+      toast('실행 시간은 최대 7개까지 등록할 수 있습니다.');
+      return;
+    }
+
+    const tr = document.createElement('tr');
+
+    const tdTime = document.createElement('td');
+    const timeInput = createCellInput(runTime, '07:00');
+    timeInput.classList.add('js-groupware-time');
+    tdTime.appendChild(timeInput);
+
+    const tdDel = document.createElement('td');
+    tdDel.appendChild(createDeleteButton(() => tr.remove()));
+
+    tr.appendChild(tdTime);
+    tr.appendChild(tdDel);
+    tbody.appendChild(tr);
+  }
+
+  function addNewsRow(runTime = '', keyword = '') {
+    const tbody = $('newsTable').querySelector('tbody');
+    if (countRows(tbody) >= MAX_ROWS) {
+      toast('행은 최대 7개까지 등록할 수 있습니다.');
+      return;
+    }
+
+    const tr = document.createElement('tr');
+
+    const tdTime = document.createElement('td');
+    const timeInput = createCellInput(runTime, '07:00');
+    timeInput.classList.add('js-news-time');
+    tdTime.appendChild(timeInput);
+
+    const tdKeyword = document.createElement('td');
+    const keywordInput = createCellInput(keyword, '예: 나스닥 다우 엔비디아');
+    keywordInput.classList.add('js-news-keyword');
+    tdKeyword.appendChild(keywordInput);
+
+    const tdDel = document.createElement('td');
+    tdDel.appendChild(createDeleteButton(() => tr.remove()));
+
+    tr.appendChild(tdTime);
+    tr.appendChild(tdKeyword);
+    tr.appendChild(tdDel);
+    tbody.appendChild(tr);
+  }
+
+  function applyTypeVisibility() {
+    const type = $('jobType').value;
+    const isNews = type === 'news';
+
+    $('groupwareSection').classList.toggle('d-none', isNews);
+    $('newsSection').classList.toggle('d-none', !isNews);
+    $('newsOptionSection').classList.toggle('d-none', !isNews);
+    $('newsArticleCountSection').classList.toggle('d-none', !isNews);
+
+    if (!$('templateCode').value.trim()) {
+      $('templateCode').value = isNews ? 'news_e07_v1' : 'groupware_e06_v1';
+    }
+  }
+
+  function normalizeSummaryLength() {
+    const raw = Number($('summaryLength').value || 200);
+    if (!Number.isFinite(raw)) return 200;
+    return Math.max(50, Math.min(500, Math.floor(raw)));
+  }
+
+  function normalizeArticleCount() {
+    const raw = Number($('articleCount').value || 3);
+    if (!Number.isFinite(raw)) return 3;
+    return Math.max(1, Math.min(10, Math.floor(raw)));
+  }
+
+  function validateAndCollectSchedules(jobType) {
+    const rows = [];
+    const seen = new Set();
+
+    if (jobType === 'groupware') {
+      const times = Array
+        .from(document.querySelectorAll('.js-groupware-time'))
+        .map((el) => String(el.value || '').trim())
+        .filter(Boolean);
+
+      if (times.length === 0) {
+        throw new Error('groupware 업데이트 시간을 1개 이상 입력해 주세요.');
+      }
+      if (times.length > MAX_ROWS) {
+        throw new Error('업데이트 시간은 최대 7개까지 등록할 수 있습니다.');
+      }
+
+      times.forEach((t, idx) => {
+        if (!HHMM.test(t)) {
+          throw new Error(`시간 형식이 올바르지 않습니다: ${t}`);
+        }
+        if (seen.has(t)) {
+          throw new Error(`중복 시간입니다: ${t}`);
+        }
+        seen.add(t);
+        rows.push({
+          run_time: t,
+          keyword_text: null,
+          sort_order: idx,
+        });
+      });
+
+      return rows;
+    }
+
+    const trList = Array.from($('newsTable').querySelectorAll('tbody tr'));
+    if (trList.length === 0) {
+      throw new Error('news 시간/키워드를 1개 이상 입력해 주세요.');
+    }
+    if (trList.length > MAX_ROWS) {
+      throw new Error('행은 최대 7개까지 등록할 수 있습니다.');
+    }
+
+    trList.forEach((tr, idx) => {
+      const t = String(tr.querySelector('.js-news-time')?.value || '').trim();
+      const kw = String(tr.querySelector('.js-news-keyword')?.value || '').trim();
+
+      if (!HHMM.test(t)) {
+        throw new Error(`시간 형식이 올바르지 않습니다: ${t || '(빈값)'}`);
+      }
+      if (!kw) {
+        throw new Error(`키워드가 비어 있습니다: ${t}`);
+      }
+      if (seen.has(t)) {
+        throw new Error(`중복 시간입니다: ${t}`);
+      }
+
+      seen.add(t);
+      rows.push({
+        run_time: t,
+        keyword_text: kw,
+        sort_order: idx,
+      });
+    });
+
+    return rows;
+  }
+
+  function hydrateFromExisting(resetRows = true) {
+    const type = $('jobType').value;
+    const schedules = Array.isArray(existingJob?.schedules) ? existingJob.schedules : [];
+
+    if (resetRows) {
+      clearTable('groupwareTable');
+      clearTable('newsTable');
+    }
+
+    if (type === 'groupware') {
+      if (resetRows) {
+        if (existingJob && existingJob.job_type === 'groupware' && schedules.length > 0) {
+          schedules.forEach((s) => addGroupwareRow(s.run_time || ''));
+        } else {
+          ['07:00', '10:00', '14:00', '17:00'].forEach((t) => addGroupwareRow(t));
+        }
+      }
+
+      if (!$('upcomingStartDate').value) {
+        $('upcomingStartDate').value =
+          (existingJob && existingJob.job_type === 'groupware' && existingJob.upcoming_start_date)
+            ? existingJob.upcoming_start_date
+            : todayISO(1);
+      }
+
+      if (!$('upcomingEndDate').value) {
+        $('upcomingEndDate').value =
+          (existingJob && existingJob.job_type === 'groupware' && existingJob.upcoming_end_date)
+            ? existingJob.upcoming_end_date
+            : todayISO(8);
+      }
+
+      return;
+    }
+
+    if (resetRows) {
+      if (existingJob && existingJob.job_type === 'news' && schedules.length > 0) {
+        schedules.forEach((s) => addNewsRow(s.run_time || '', s.keyword_text || ''));
+      } else {
+        [
+          ['07:00', '나스닥 다우 엔비디아'],
+          ['09:05', '코스피 코스닥 삼성전자 하이닉스'],
+          ['14:00', '이란 미국'],
+          ['17:00', '환율 금'],
+        ].forEach(([t, kw]) => addNewsRow(t, kw));
+      }
+    }
+  }
+
+  async function saveJob() {
+    try {
+      const jobType = $('jobType').value;
+      const schedules = validateAndCollectSchedules(jobType);
+
+      const payload = {
+        id: $('jobId').value ? Number($('jobId').value) : null,
+        job_name: String($('jobName').value || '').trim(),
+        job_type: jobType,
+        target_device_id: String($('targetDeviceId').value || '').trim(),
+        template_code: String($('templateCode').value || '').trim(),
+        article_count: jobType === 'news' ? normalizeArticleCount() : 3,
+        summary_length: jobType === 'news' ? normalizeSummaryLength() : 200,
+        priority: Number($('priority').value || 10),
+        is_enabled: $('isEnabled').checked,
+        auto_post_enabled: $('autoPostEnabled').checked,
+        lock_manual_upload: $('lockManualUpload').checked,
+        upcoming_start_date: jobType === 'groupware' ? String($('upcomingStartDate').value || '').trim() : null,
+        upcoming_end_date: jobType === 'groupware' ? String($('upcomingEndDate').value || '').trim() : null,
+        schedules,
+      };
+
+      if (!payload.job_name) {
+        throw new Error('Job 이름을 입력해 주세요.');
+      }
+      if (!payload.target_device_id) {
+        throw new Error('디바이스 ID를 입력해 주세요.');
+      }
+      if (!payload.template_code) {
+        throw new Error('템플릿 코드를 입력해 주세요.');
+      }
+
+      if (jobType === 'groupware') {
+        if (!payload.upcoming_start_date || !payload.upcoming_end_date) {
+          throw new Error('Upcoming 시작/종료 날짜를 입력해 주세요.');
+        }
+        if (payload.upcoming_start_date > payload.upcoming_end_date) {
+          throw new Error('Upcoming 시작 날짜는 종료 날짜보다 늦을 수 없습니다.');
+        }
+      }
+
+      const res = await fetch('{{ url_for("bulletin.api_auto_job_save") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.reason || '저장에 실패했습니다.');
+      }
+
+      toast('저장되었습니다.');
+      if (data.item && data.item.id) {
+        window.location.href = `{{ url_for("bulletin.auto_job_detail_page", job_id=0) }}`.replace('/0', `/${data.item.id}`);
+        return;
+      }
+      window.location.reload();
+    } catch (err) {
+      toast(err.message || '저장 중 오류가 발생했습니다.');
+    }
+  }
+
+  async function deleteJob() {
+    const jobId = $('jobId').value;
+    if (!jobId) {
+      toast('삭제할 Job ID가 없습니다.');
+      return;
+    }
+
+    if (!confirm('정말 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`{{ url_for("bulletin.api_auto_job_delete", job_id=0) }}`.replace('/0', `/${jobId}`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.reason || '삭제에 실패했습니다.');
+      }
+
+      toast('삭제되었습니다.');
+      window.location.href = '{{ url_for("bulletin.auto_job_manage_page") }}';
+    } catch (err) {
+      toast(err.message || '삭제 중 오류가 발생했습니다.');
+    }
+  }
+
+  function handleJobTypeChange() {
+    applyTypeVisibility();
+    clearTable('groupwareTable');
+    clearTable('newsTable');
+
+    if ($('jobType').value === 'groupware') {
+      $('summaryLength').value = 200;
+      $('articleCount').value = 3;
+    }
+    hydrateFromExisting(true);
+  }
+
+  function bindEvents() {
+    $('jobType').addEventListener('change', handleJobTypeChange);
+
+    $('btnAddGroupwareRow').addEventListener('click', () => addGroupwareRow(''));
+    $('btnAddNewsRow').addEventListener('click', () => addNewsRow('', ''));
+
+    $('btnSave').addEventListener('click', saveJob);
+
+    if ($('btnDelete')) {
+      $('btnDelete').addEventListener('click', deleteJob);
+    }
+  }
+
+  function init() {
+    applyTypeVisibility();
+    hydrateFromExisting(true);
+    bindEvents();
+  }
+
+  init();
+})();
+</script>
+{% endblock %}

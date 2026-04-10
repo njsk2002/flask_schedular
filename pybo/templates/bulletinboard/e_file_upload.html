@@ -120,6 +120,18 @@
   color:#fff;
 }
 
+/* 자동 관리 device chip 표시 */
+.e-upload-page .device-chip.locked{
+  background:#f3f4f6;
+  border-color:#d1d5db;
+  color:#6b7280;
+}
+
+.e-upload-page .device-chip.locked:hover{
+  transform:none;
+  box-shadow:none;
+}
+
 .e-upload-page .summary-bar{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
@@ -248,6 +260,28 @@
 .e-upload-page .slot-card.add-card:hover,
 .e-upload-page .slot-card.empty:hover{
   background:#f3f6ff;
+}
+
+/* 자동 관리 device slot 표시 */
+.e-upload-page .locked-row{
+  opacity:.96;
+}
+
+.e-upload-page .slot-card.locked{
+  border:2px dashed #fca5a5;
+  background:linear-gradient(180deg,#fff7f7 0%,#fff1f1 100%);
+  cursor:not-allowed;
+  justify-content:center;
+  text-align:center;
+}
+
+.e-upload-page .slot-card.locked:hover{
+  background:linear-gradient(180deg,#fff7f7 0%,#fff1f1 100%);
+}
+
+.e-upload-page .slot-card.locked .slot-add-icon,
+.e-upload-page .slot-card.locked .slot-empty-icon{
+  color:#dc2626;
 }
 
 .e-upload-page .slot-preview{
@@ -730,7 +764,6 @@
           </div>
         </div>
 
-        <!-- 상단: 슬라이드 전용 영역 -->
         <div class="planner-gallery-section">
           <div class="planner-gallery-panel">
             <div class="planner-gallery-head">
@@ -741,9 +774,7 @@
           </div>
         </div>
 
-        <!-- 하단: 완전 별도 영역 -->
         <div class="planner-bottom-section">
-          <!-- 좌측 -->
           <div class="planner-preview-panel">
             <div class="editor-card planner-preview-card">
               <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
@@ -766,7 +797,6 @@
             </div>
           </div>
 
-          <!-- 우측 -->
           <div class="planner-config-panel">
             <div class="editor-card planner-config-card">
               <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -832,7 +862,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </div> <!-- planner-bottom-section -->
       </div>
     </div>
   </div>
@@ -851,6 +881,7 @@
     board_no: 1,
     board_code: '',
     devices: [],
+    deviceLockMap: {},   // device_id -> true/false
     schedulesByDevice: {},
     summary: {wait:0, active:0},
     docs: [],
@@ -924,6 +955,14 @@
 
   function toast(msg){
     alert(msg);
+  }
+
+  function isLockedDevice(deviceId){
+    return !!state.deviceLockMap[String(deviceId || '')];
+  }
+
+  function lockedReason(deviceId){
+    return `${deviceId} 는 자동 게시 관리 중이므로 수동 업로드가 잠겨 있습니다.`;
   }
 
   async function api(url, opt){
@@ -1034,10 +1073,14 @@
     wrap.innerHTML = state.devices.map(d => {
       const did = String(d.device_id || '');
       const active = did === DEVICE_ID ? 'active' : '';
+      const locked = !!(d.lock_manual_upload || d.auto_managed);
+
       return `
-        <a class="device-chip ${active}" href="/dashboard/device/${encodeURIComponent(did)}?board_no=${encodeURIComponent(state.board_no)}">
+        <a class="device-chip ${active} ${locked ? 'locked' : ''}"
+           href="/dashboard/device/${encodeURIComponent(did)}?board_no=${encodeURIComponent(state.board_no)}"
+           title="${locked ? esc(lockedReason(did)) : ''}">
           <div class="fw-bold">${esc(did)}</div>
-          <div class="small opacity-75">schedule board</div>
+          <div class="small opacity-75">${locked ? '자동 관리중 / 수동잠금' : 'schedule board'}</div>
         </a>
       `;
     }).join('');
@@ -1086,6 +1129,7 @@
   function renderSlotCard(deviceId, item, index){
     const status = String(item.status || 'wait');
     const statusClass = status === 'active' ? 'active' : (status === 'wait' ? 'wait' : 'expired');
+    const locked = isLockedDevice(deviceId);
 
     return `
       <article class="slot-card">
@@ -1106,8 +1150,19 @@
             기간: ${esc(fmtPeriod(item.posting_period_time || 60))}
           </div>
           <div class="slot-actions">
-            <button class="btn btn-outline-secondary btn-sm" data-action="edit" data-device="${esc(deviceId)}" data-index="${index}">변경</button>
-            <button class="btn btn-outline-danger btn-sm" data-action="delete" data-device="${esc(deviceId)}" data-index="${index}">삭제</button>
+            <button class="btn btn-outline-secondary btn-sm"
+                    data-action="edit"
+                    data-device="${esc(deviceId)}"
+                    data-index="${index}"
+                    ${locked ? 'disabled' : ''}>
+              변경
+            </button>
+            <button class="btn btn-outline-danger btn-sm"
+                    data-action="delete"
+                    data-device="${esc(deviceId)}"
+                    data-index="${index}">
+              삭제
+            </button>
           </div>
         </div>
       </article>
@@ -1124,6 +1179,16 @@
     `;
   }
 
+  function renderLockedEmptyCard(deviceId){
+    return `
+      <article class="slot-card locked">
+        <div class="slot-empty-icon">🔒</div>
+        <div class="slot-empty-title">자동 관리중</div>
+        <div class="slot-empty-sub mt-2">${esc(lockedReason(deviceId))}</div>
+      </article>
+    `;
+  }
+
   function renderAddCard(deviceId, nextIndex){
     return `
       <article class="slot-card add-card" data-action="append" data-device="${esc(deviceId)}" data-index="${nextIndex}">
@@ -1136,22 +1201,49 @@
     `;
   }
 
+  function renderLockedAddCard(deviceId){
+    return `
+      <article class="slot-card locked">
+        <div class="text-center px-4">
+          <div class="slot-add-icon">🔒</div>
+          <div class="slot-add-title">수동 업로드 잠금</div>
+          <div class="slot-add-sub mt-2">${esc(lockedReason(deviceId))}</div>
+        </div>
+      </article>
+    `;
+  }
+
   function renderDeviceRow(device){
     const deviceId = String(device.device_id || '');
     const items = scheduleItemsFor(deviceId);
     const activeCount = items.filter(x => x.status === 'active').length;
     const waitCount = items.filter(x => x.status === 'wait').length;
+    const locked = isLockedDevice(deviceId);
 
-    const cards = items.length
-      ? items.map((item, idx) => renderSlotCard(deviceId, item, idx)).join('') + renderAddCard(deviceId, items.length)
-      : renderEmptyCard(deviceId) + renderAddCard(deviceId, 0);
+    let cards = '';
+    if(items.length){
+      cards = items.map((item, idx) => renderSlotCard(deviceId, item, idx)).join('');
+      cards += locked ? renderLockedAddCard(deviceId) : renderAddCard(deviceId, items.length);
+    }else{
+      cards = locked ? renderLockedEmptyCard(deviceId) : renderEmptyCard(deviceId);
+      cards += locked ? '' : renderAddCard(deviceId, 0);
+    }
 
     return `
-      <section class="device-row">
+      <section class="device-row ${locked ? 'locked-row' : ''}">
         <div class="device-meta">
           <div class="device-badge">${esc(deviceId)}</div>
-          <div class="device-sub">active ${activeCount} / wait ${waitCount}</div>
-          <button class="btn btn-outline-dark btn-sm w-100" data-action="append" data-device="${esc(deviceId)}" data-index="${items.length}">+ 게시물 추가</button>
+          <div class="device-sub">
+            active ${activeCount} / wait ${waitCount}
+            ${locked ? '<br><span class="text-danger fw-bold">자동 게시 관리중</span>' : ''}
+          </div>
+          <button class="btn btn-outline-dark btn-sm w-100"
+                  data-action="append"
+                  data-device="${esc(deviceId)}"
+                  data-index="${items.length}"
+                  ${locked ? 'disabled' : ''}>
+            ${locked ? '수동 업로드 잠금' : '+ 게시물 추가'}
+          </button>
         </div>
         <div class="slot-scroller">${cards}</div>
       </section>
@@ -1183,6 +1275,11 @@
         const action = event.currentTarget.dataset.action;
         const deviceId = event.currentTarget.dataset.device;
         const index = Number(event.currentTarget.dataset.index || 0);
+
+        if (isLockedDevice(deviceId) && action !== 'delete') {
+          toast(lockedReason(deviceId));
+          return;
+        }
 
         if(action === 'delete'){
           await deleteScheduleItem(deviceId, index);
@@ -1366,6 +1463,11 @@
   }
 
   async function openPlannerModal(deviceId, mode, index){
+    if (isLockedDevice(deviceId)) {
+      toast(lockedReason(deviceId));
+      return;
+    }
+
     state.modalDeviceId = deviceId;
     state.modalMode = mode;
     state.modalSlotIndex = index;
@@ -1456,6 +1558,11 @@
   }
 
   async function saveModal(){
+    if (isLockedDevice(state.modalDeviceId)) {
+      toast(lockedReason(state.modalDeviceId));
+      return;
+    }
+
     const doc = state.modalSelectedDoc;
 
     if(!doc || !doc.id){
@@ -1549,6 +1656,15 @@
 
     const deviceData = await loadBoardDevices();
     state.devices = sortDeviceIds(deviceData.items || []);
+
+    // 백엔드에서 내려준 lock 상태를 device_id 기준 map으로 변환
+    state.deviceLockMap = Object.fromEntries(
+      state.devices.map(d => [
+        String(d.device_id || ''),
+        !!(d.lock_manual_upload || d.auto_managed)
+      ])
+    );
+
     renderDeviceStrip();
     await refreshSchedulesOnly();
   }

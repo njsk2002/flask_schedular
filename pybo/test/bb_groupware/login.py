@@ -80,8 +80,8 @@ def run_calendar_example(sess):
     cal = BBCalendarFetcher(sess)
 
     YEAR = 2026
-    MONTH = 1
-    BASE_DATE = "2026-01-01"
+    MONTH = 4
+    BASE_DATE = "2026-04-01"
 
     cal.fetch_month(YEAR, MONTH)
     cal.parse_yL_from_html()

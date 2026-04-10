@@ -1,0 +1,72 @@
+﻿{% extends 'e_base.html' %}
+{% block content %}
+<div class="container py-4">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body d-flex flex-wrap gap-2 justify-content-between align-items-center">
+      <div>
+        <h4 class="mb-1">자동 게시 Job 관리</h4>
+        <div class="text-secondary small">Groupware / News 자동 생성 스케줄과 디바이스를 관리합니다.</div>
+      </div>
+      <a class="btn btn-dark" href="{{ url_for('bulletin.auto_job_detail_page', job_id=0) }}">새 Job 만들기</a>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Job 이름</th>
+            <th>종류</th>
+            <th>디바이스</th>
+            <th>실행 시간</th>
+            <th>상태</th>
+            <th>최근 실행</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if jobs %}
+            {% for j in jobs %}
+            <tr>
+              <td>{{ j.id }}</td>
+              <td class="fw-semibold">{{ j.job_name }}</td>
+              <td>{{ j.job_type }}</td>
+              <td>{{ j.target_device_id }}</td>
+              <td>
+                {% if j.schedules %}
+                  {% for s in j.schedules %}
+                    <span class="badge text-bg-secondary me-1">{{ s.run_time }}</span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-secondary">없음</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if j.is_enabled %}
+                  <span class="badge text-bg-success">활성</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">비활성</span>
+                {% endif %}
+                {% if j.lock_manual_upload %}
+                  <span class="badge text-bg-warning">수동잠금</span>
+                {% endif %}
+              </td>
+              <td>{{ j.last_run_at or '-' }}</td>
+              <td>
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('bulletin.auto_job_detail_page', job_id=j.id) }}">상세</a>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-secondary py-5">등록된 자동 Job이 없습니다.</td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

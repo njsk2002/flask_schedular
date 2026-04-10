@@ -1,0 +1,26 @@
+﻿{
+  "canvas": {
+    "width": 1200,
+    "height": 1600,
+    "bpp": 4,
+    "background": "#F6F7F9"
+  },
+  "sections": {
+    "header": { "x": 32, "y": 24, "w": 1136, "h": 120 },
+    "today_panel": { "x": 32, "y": 164, "w": 1136, "h": 630 },
+    "week_panel": { "x": 32, "y": 816, "w": 1136, "h": 700 },
+    "footer": { "x": 32, "y": 1532, "w": 1136, "h": 44 }
+  },
+  "styles": {
+    "header_title_size": 46,
+    "header_sub_size": 22,
+    "section_title_size": 34,
+    "today_item_size": 26,
+    "week_day_size": 22,
+    "week_item_size": 19,
+    "week_cols": 2,
+    "week_gap": 12,
+    "week_card_height": 146,
+    "footer_size": 18
+  }
+}

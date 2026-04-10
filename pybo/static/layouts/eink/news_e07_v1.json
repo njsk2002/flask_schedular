@@ -1,0 +1,25 @@
+﻿{
+  "canvas": {
+    "width": 1200,
+    "height": 1600,
+    "bpp": 4,
+    "background": "#F5F6F8"
+  },
+  "sections": {
+    "header": { "x": 32, "y": 24, "w": 1136, "h": 116 },
+    "article_blocks": [
+      { "x": 32, "y": 160, "w": 1136, "h": 430 },
+      { "x": 32, "y": 610, "w": 1136, "h": 430 },
+      { "x": 32, "y": 1060, "w": 1136, "h": 430 }
+    ],
+    "footer": { "x": 32, "y": 1536, "w": 1136, "h": 40 }
+  },
+  "styles": {
+    "header_title_size": 40,
+    "header_sub_size": 20,
+    "article_title_size": 24,
+    "article_summary_size": 18,
+    "keyword_size": 28,
+    "footer_size": 18
+  }
+}

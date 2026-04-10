@@ -1759,3 +1759,185 @@ class EInkBoardBinding(db.Model):
     created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
 
     bound_by_user = db.relationship("User", foreign_keys=[bound_by_user_no], lazy=True)
+# ------------------------------------------------------------
+# Bulletin Auto Job (EINK 자동 게시)
+# ------------------------------------------------------------
+class BulletinAutoJob(db.Model):
+    __tablename__ = "bulletin_auto_job"
+    __table_args__ = (
+        db.Index("idx_baj_enabled_type", "is_enabled", "job_type"),
+        db.Index("idx_baj_target_device", "target_device_id"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    owner_user_no = db.Column(
+        db.Integer,
+        db.ForeignKey("user.no", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    job_name = db.Column(db.String(120), nullable=False)
+    job_type = db.Column(
+        db.Enum("groupware", "news", name="bulletin_auto_job_type"),
+        nullable=False,
+    )
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    target_device_id = db.Column(db.String(64), nullable=False)
+    template_code = db.Column(db.String(64), nullable=False, default="default")
+
+    article_count = db.Column(db.Integer, nullable=False, default=3)
+    summary_length = db.Column(db.Integer, nullable=False, default=200)
+    upcoming_start_date = db.Column(db.Date, nullable=True)
+    upcoming_end_date = db.Column(db.Date, nullable=True)
+    priority = db.Column(db.Integer, nullable=False, default=10)
+
+    auto_post_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    lock_manual_upload = db.Column(db.Boolean, nullable=False, default=True)
+
+    last_run_at = db.Column(MySQLDateTime(fsp=0))
+    last_success_at = db.Column(MySQLDateTime(fsp=0))
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+    owner_user = db.relationship("User", foreign_keys=[owner_user_no], lazy=True)
+    schedules = db.relationship(
+        "BulletinAutoJobSchedule",
+        backref=db.backref("job", lazy=True),
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    keywords = db.relationship(
+        "BulletinAutoJobKeyword",
+        backref=db.backref("job", lazy=True),
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    render_histories = db.relationship(
+        "BulletinRenderHistory",
+        backref=db.backref("job", lazy=True),
+        lazy=True,
+        cascade="all",
+        passive_deletes=True,
+    )
+
+
+class BulletinAutoJobSchedule(db.Model):
+    __tablename__ = "bulletin_auto_job_schedule"
+    __table_args__ = (
+        UniqueConstraint("job_id", "run_time", name="uq_bajs_job_run_time"),
+        db.Index("idx_bajs_enabled_runtime", "is_enabled", "run_time"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    job_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("bulletin_auto_job.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    run_time = db.Column(db.String(5), nullable=False)  # HH:MM
+    keyword_text = db.Column(db.String(255), nullable=True)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+    keywords = db.relationship(
+        "BulletinAutoJobKeyword",
+        backref=db.backref("schedule", lazy=True),
+        lazy=True,
+        cascade="all",
+        passive_deletes=True,
+    )
+
+
+class BulletinAutoJobKeyword(db.Model):
+    __tablename__ = "bulletin_auto_job_keyword"
+    __table_args__ = (
+        db.Index("idx_bajk_job_schedule_order", "job_id", "schedule_id", "sort_order"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    job_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("bulletin_auto_job.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    schedule_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("bulletin_auto_job_schedule.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    keyword_group_name = db.Column(db.String(64))
+    keyword_text = db.Column(db.String(255), nullable=False)
+    sort_order = db.Column(db.Integer, nullable=False, default=0)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+
+
+class BulletinRenderHistory(db.Model):
+    __tablename__ = "bulletin_render_history"
+    __table_args__ = (
+        UniqueConstraint("job_id", "device_id", "content_hash", "render_date", name="uq_brh_job_device_hash_date"),
+        db.Index("idx_brh_job_device_created", "job_id", "device_id", "created_at"),
+        db.Index("idx_brh_hash", "content_hash"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    job_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("bulletin_auto_job.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    device_id = db.Column(db.String(64), nullable=False, index=True)
+    content_hash = db.Column(db.String(64), nullable=False)
+    render_date = db.Column(db.Date, nullable=False)
+
+    png_path = db.Column(db.String(700), nullable=False)
+    bin_path = db.Column(db.String(700), nullable=False)
+    meta_path = db.Column(db.String(700), nullable=False)
+    revision_name = db.Column(db.String(128))
+
+    send_status = db.Column(db.String(32), nullable=False, default="pending")
+    send_message = db.Column(db.String(255))
+    source_summary = db.Column(db.JSON)
+
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)
+
+
+class BulletinDeviceAutoLock(db.Model):
+    __tablename__ = "bulletin_device_auto_lock"
+    __table_args__ = (
+        UniqueConstraint("device_id", name="uq_bdal_device"),
+        db.Index("idx_bdal_auto_job", "auto_job_id"),
+        TABLE_ARGS,
+    )
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    device_id = db.Column(db.String(64), nullable=False)
+    auto_job_id = db.Column(
+        db.BigInteger,
+        db.ForeignKey("bulletin_auto_job.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    is_manual_locked = db.Column(db.Boolean, nullable=False, default=False)
+    reason = db.Column(db.String(255))
+
+    updated_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive, onupdate=kst_now_naive)
+    created_at = db.Column(MySQLDateTime(fsp=0), nullable=False, default=kst_now_naive)

@@ -1,0 +1,102 @@
+{
+  "type": "groupware",
+  "title": "그룹웨어 일정",
+  "base_date": "2026-04-10",
+  "generated_at": "2026-04-10 20:05:00",
+  "today_events": [
+    {
+      "title": "강한 과장 / 태안화력"
+    },
+    {
+      "title": "김종해 연구소장/태안 #7 호기 Coalfeeder Camera, Furnace Camera 동작 확인 및 System 연동"
+    },
+    {
+      "title": "이종우 부장/태안 #7호기 CCTV 설치 공사 감리 출장"
+    }
+  ],
+  "upcoming_events": [
+    {
+      "date": "2026-04-11",
+      "weekday": "토",
+      "events": []
+    },
+    {
+      "date": "2026-04-12",
+      "weekday": "일",
+      "events": []
+    },
+    {
+      "date": "2026-04-13",
+      "weekday": "월",
+      "events": []
+    },
+    {
+      "date": "2026-04-14",
+      "weekday": "화",
+      "events": []
+    },
+    {
+      "date": "2026-04-15",
+      "weekday": "수",
+      "events": []
+    },
+    {
+      "date": "2026-04-16",
+      "weekday": "목",
+      "events": []
+    },
+    {
+      "date": "2026-04-17",
+      "weekday": "금",
+      "events": []
+    },
+    {
+      "date": "2026-04-18",
+      "weekday": "토",
+      "events": []
+    }
+  ],
+  "week_events": [
+    {
+      "date": "2026-04-11",
+      "weekday": "토",
+      "events": []
+    },
+    {
+      "date": "2026-04-12",
+      "weekday": "일",
+      "events": []
+    },
+    {
+      "date": "2026-04-13",
+      "weekday": "월",
+      "events": []
+    },
+    {
+      "date": "2026-04-14",
+      "weekday": "화",
+      "events": []
+    },
+    {
+      "date": "2026-04-15",
+      "weekday": "수",
+      "events": []
+    },
+    {
+      "date": "2026-04-16",
+      "weekday": "목",
+      "events": []
+    },
+    {
+      "date": "2026-04-17",
+      "weekday": "금",
+      "events": []
+    },
+    {
+      "date": "2026-04-18",
+      "weekday": "토",
+      "events": []
+    }
+  ],
+  "footer": "장치 E06 | Revision V01.00"
+}

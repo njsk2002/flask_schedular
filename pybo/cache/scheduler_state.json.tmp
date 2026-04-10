@@ -1,0 +1,12 @@
+{
+  "hashes": {},
+  "runs": {
+    "auto_scheduler_tick": {
+      "status": "failed",
+      "updated_at": "2026-04-10 14:32:46",
+      "detail": {
+        "error": "[WinError 5] 액세스가 거부되었습니다: 'C:\\\\DavidProject\\\\flask_project\\\\flask_scheduler\\\\pybo\\\\cache\\\\scheduler_state.json.tmp' -> 'C:\\\\DavidProject\\\\flask_project\\\\flask_scheduler\\\\pybo\\\\cache\\\\scheduler_state.json'"
+      }
+    }
+  }
+}

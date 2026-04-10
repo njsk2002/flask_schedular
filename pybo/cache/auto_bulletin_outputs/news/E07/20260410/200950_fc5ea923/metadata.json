@@ -1,0 +1,23 @@
+{
+  "width": 1200,
+  "height": 1600,
+  "bpp": 4,
+  "byte_size": 960000,
+  "device_id": "E07",
+  "job_type": "news",
+  "template_code": "news_e07_v1",
+  "created_at": "2026-04-10 20:09:50",
+  "content_hash": "dfae806b6f8a6ab986a973555f96d9fc2d71a1f45f3b48312b791864a95498df",
+  "revision_name": "V01.00",
+  "source_summary": {
+    "slot": "20:09",
+    "keywords": [
+      "환율 금"
+    ],
+    "article_count": 3
+  },
+  "pixel_order": "left_to_right_top_to_bottom",
+  "nibble_order": "high_nibble_first",
+  "palette": "grayscale_16",
+  "packing": "4bpp"
+}

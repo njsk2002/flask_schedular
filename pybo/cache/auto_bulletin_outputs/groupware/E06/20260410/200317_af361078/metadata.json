@@ -1,0 +1,21 @@
+{
+  "width": 1200,
+  "height": 1600,
+  "bpp": 4,
+  "byte_size": 960000,
+  "device_id": "E06",
+  "job_type": "groupware",
+  "template_code": "groupware_e06_v1",
+  "created_at": "2026-04-10 20:03:17",
+  "content_hash": "1497b05637d0f1a844785fdc0660a24ba7d23478041a647b6306690be7f119ef",
+  "revision_name": "V01.00",
+  "source_summary": {
+    "base_date": "2026-04-10",
+    "today_count": 3,
+    "upcoming_days": 8
+  },
+  "pixel_order": "left_to_right_top_to_bottom",
+  "nibble_order": "high_nibble_first",
+  "palette": "grayscale_16",
+  "packing": "4bpp"
+}
